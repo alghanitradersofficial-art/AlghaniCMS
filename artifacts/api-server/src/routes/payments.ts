@@ -70,13 +70,14 @@ router.post("/", async (req, res): Promise<any> => {
         explicitAllocations: body.allocations,
       });
 
-      // Completely detach and force structural bypass using absolute types
+      // Completely detach references using an intermediate array mapping
       const parsedAllocations = (rawAllocations ?? []) as any[];
       
-      const cleanAllocations: any = parsedAllocations.map(a => ({
+      // Directly matching Drizzle's absolute table insert expectations
+      const cleanAllocations = parsedAllocations.map(a => ({
         saleId: Number(a?.saleId ?? a?.["saleId"]),
         amount: Number(a?.amount ?? a?.["amount"])
-      }));
+      })) as typeof paymentsTable.$inferInsert["allocations"];
 
       const insertValues = {
         customerId: body.customerId,
