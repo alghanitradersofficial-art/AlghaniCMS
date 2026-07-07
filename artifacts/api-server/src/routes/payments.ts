@@ -70,16 +70,17 @@ router.post("/", async (req, res): Promise<any> => {
         explicitAllocations: body.allocations,
       });
 
-      // Completely detach references using an intermediate array mapping
+      // 1. Force array to be untyped completely during evaluation
       const parsedAllocations = (rawAllocations ?? []) as any[];
       
-      // Directly matching Drizzle's absolute table insert expectations
+      // 2. Map structure cleanly using safe primitives
       const cleanAllocations = parsedAllocations.map(a => ({
         saleId: Number(a?.saleId ?? a?.["saleId"]),
         amount: Number(a?.amount ?? a?.["amount"])
-      })) as typeof paymentsTable.$inferInsert["allocations"];
+      }));
 
-      const insertValues = {
+      // 3. Assemble and apply direct 'any' block signature to eliminate contextual type leakage completely
+      const insertValues: any = {
         customerId: body.customerId,
         amount: String(body.amount),
         method: body.method,
@@ -96,7 +97,7 @@ router.post("/", async (req, res): Promise<any> => {
 
       const [inserted] = await tx
         .insert(paymentsTable)
-        .values(insertValues as any)
+        .values(insertValues)
         .returning();
 
       await tx.update(ledgerEntriesTable)
