@@ -6,7 +6,7 @@ import { CreateSupplierBody, UpdateSupplierBody } from "@workspace/api-zod";
 
 const router = Router();
 
-router.get("/", async (req, res) => {
+router.get("/", async (req, res): Promise<any> => {
   try {
     const search = req.query.search as string;
     const rows = await db.select().from(suppliersTable)
@@ -17,17 +17,18 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", async (req, res): Promise<any> => {
   try {
     const body = CreateSupplierBody.parse(req.body);
-    const [supplier] = await db.insert(suppliersTable).values(body).returning();
+    // Cast to any to align loose validation inferences with strict database insert constraints
+    const [supplier] = await db.insert(suppliersTable).values(body as any).returning();
     return res.status(201).json({ ...supplier, createdAt: supplier.createdAt.toISOString() });
   } catch (error) {
     return res.status(500).json({ error: "Failed to create supplier" });
   }
 });
 
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
     const body = UpdateSupplierBody.parse(req.body);
@@ -39,11 +40,11 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
     await db.delete(suppliersTable).where(eq(suppliersTable.id, id));
-    res.status(204).send();
+    return res.status(204).send();
   } catch (error) {
     return res.status(500).json({ error: "Failed to delete supplier" });
   }
