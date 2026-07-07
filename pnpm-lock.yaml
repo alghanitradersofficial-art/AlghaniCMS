@@ -222,6 +222,9 @@ importers:
       xlsx:
         specifier: ^0.18.5
         version: 0.18.5
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       '@types/archiver':
         specifier: ^8.0.0
