@@ -6,7 +6,7 @@ import { CreateCategoryBody, UpdateCategoryBody } from "@workspace/api-zod";
 
 const router = Router();
 
-router.get("/", async (req, res) => {
+router.get("/", async (req, res): Promise<any> => {
   try {
     const rows = await db.select({
       id: categoriesTable.id,
@@ -24,17 +24,18 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", async (req, res): Promise<any> => {
   try {
     const body = CreateCategoryBody.parse(req.body);
-    const [category] = await db.insert(categoriesTable).values(body).returning();
+    // Cast to any to align loose validation inferences with strict database insert constraints
+    const [category] = await db.insert(categoriesTable).values(body as any).returning();
     return res.status(201).json({ ...category, productCount: 0 });
   } catch (error) {
     return res.status(500).json({ error: "Failed to create category" });
   }
 });
 
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
     const body = UpdateCategoryBody.parse(req.body);
@@ -46,11 +47,11 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
     await db.delete(categoriesTable).where(eq(categoriesTable.id, id));
-    res.status(204).send();
+    return res.status(204).send();
   } catch (error) {
     return res.status(500).json({ error: "Failed to delete category" });
   }
