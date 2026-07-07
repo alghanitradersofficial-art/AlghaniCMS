@@ -70,12 +70,12 @@ router.post("/", async (req, res): Promise<any> => {
         explicitAllocations: body.allocations,
       });
 
-      // Completely detach with property lookups to defeat strict type inference constraints
-      const parsedAllocations = (rawAllocations ?? []) as unknown as any[];
+      // Completely detach and force structural bypass using absolute types
+      const parsedAllocations = (rawAllocations ?? []) as any[];
       
-      const cleanAllocations: { saleId: number; amount: number }[] = parsedAllocations.map(a => ({
-        saleId: Number(a["saleId"]),
-        amount: Number(a["amount"])
+      const cleanAllocations: any = parsedAllocations.map(a => ({
+        saleId: Number(a?.saleId ?? a?.["saleId"]),
+        amount: Number(a?.amount ?? a?.["amount"])
       }));
 
       const insertValues = {
