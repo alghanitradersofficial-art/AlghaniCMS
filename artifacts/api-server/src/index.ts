@@ -16,14 +16,21 @@ initializeDatabase()
 // ONLY call app.listen if we are NOT running on Vercel (local development)
 if (!process.env["VERCEL"]) {
   if (!rawPort) {
-    throw new Error("PORT environment variable is required but was not provided.");
+    throw new Error(
+      "PORT environment variable is required but was not provided.",
+    );
   }
+
   const port = Number(rawPort);
-  
+
+  if (Number.isNaN(port) || port <= 0) {
+    throw new Error(`Invalid PORT value: "${rawPort}"`);
+  }
+
   app.listen(port, () => {
     logger.info({ port }, "Server listening locally");
   });
 }
 
-// CRITICAL: Vercel needs the express app exported
+// CRITICAL: Vercel needs the express app exported as default
 export default app;
