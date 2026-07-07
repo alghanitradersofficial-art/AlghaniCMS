@@ -67,7 +67,7 @@ router.post("/", async (req, res): Promise<any> => {
       const rawAllocations = await allocatePayment(tx, {
         customerId: body.customerId,
         amount: body.amount,
-        explicitAllocations: body.allocations,
+        explicitAllocations: body.allocations as { saleId: number; amount: number }[] | undefined,
       });
 
       // MAXIMUM BYPASS: Force absolute structural bypass at the variable level
