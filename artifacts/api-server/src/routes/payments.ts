@@ -70,13 +70,13 @@ router.post("/", async (req, res): Promise<any> => {
         explicitAllocations: body.allocations,
       });
 
-      // Strongly structure mapped object definition array context configuration mapping
-      const cleanAllocations: { saleId: number; amount: number }[] = Array.isArray(rawAllocations)
-        ? rawAllocations.map(a => ({
-            saleId: Number(a.saleId!),
-            amount: Number(a.amount!)
-          }))
-        : [];
+      // Break reference & completely cast through unknown to eliminate loose or optional structural leakage
+      const parsedAllocations = (rawAllocations ?? []) as unknown as Array<Record<string, any>>;
+      
+      const cleanAllocations: { saleId: number; amount: number }[] = parsedAllocations.map(a => ({
+        saleId: Number(a.saleId),
+        amount: Number(a.amount)
+      }));
 
       const insertValues = {
         customerId: body.customerId,
@@ -89,7 +89,7 @@ router.post("/", async (req, res): Promise<any> => {
         notes: body.notes ?? null,
         receivedByUserId,
         attachmentUrl: body.attachmentUrl ?? null,
-        allocations: cleanAllocations, // Explicit typed array satisfies constraints perfectly
+        allocations: cleanAllocations,
         paymentDate,
       };
 
