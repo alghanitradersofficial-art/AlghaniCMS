@@ -20,8 +20,6 @@ const CreatePaymentBody = z.object({
   notes: z.string().optional(),
   attachmentUrl: z.string().optional(),
   paymentDate: z.string().datetime().optional(),
-  // Optional explicit allocation against specific invoices. If omitted,
-  // the payment is applied FIFO to the oldest unpaid invoices.
   allocations: z.array(z.object({ saleId: z.number().int().positive(), amount: z.number().positive() })).optional(),
 });
 
@@ -57,9 +55,6 @@ router.post("/", async (req, res): Promise<any> => {
     if (!customer) return res.status(404).json({ error: "Customer not found" });
 
     const payment = await db.transaction(async (tx) => {
-      // Lock the customer + append the ledger entry FIRST — this is what
-      // serializes concurrent payments/sales for this customer and makes
-      // the FIFO allocation below race-free.
       const ledgerEntry = await appendLedgerEntry(tx, {
         customerId: body.customerId,
         type: "payment",
@@ -75,30 +70,34 @@ router.post("/", async (req, res): Promise<any> => {
         explicitAllocations: body.allocations,
       });
 
-      // Map strictly to satisfy database type definition constraints safely
-      const cleanAllocations = Array.isArray(rawAllocations) 
-        ? rawAllocations.map(a => ({ saleId: Number(a.saleId), amount: Number(a.amount) }))
+      // Strongly structure mapped object definition array context configuration mapping
+      const cleanAllocations: { saleId: number; amount: number }[] = Array.isArray(rawAllocations)
+        ? rawAllocations.map(a => ({
+            saleId: Number(a.saleId!),
+            amount: Number(a.amount!)
+          }))
         : [];
+
+      const insertValues = {
+        customerId: body.customerId,
+        amount: String(body.amount),
+        method: body.method,
+        bankName: body.bankName ?? null,
+        chequeNumber: body.chequeNumber ?? null,
+        transactionId: body.transactionId ?? null,
+        reference: body.reference ?? null,
+        notes: body.notes ?? null,
+        receivedByUserId,
+        attachmentUrl: body.attachmentUrl ?? null,
+        allocations: cleanAllocations, // Explicit typed array satisfies constraints perfectly
+        paymentDate,
+      };
 
       const [inserted] = await tx
         .insert(paymentsTable)
-        .values({
-          customerId: body.customerId,
-          amount: String(body.amount),
-          method: body.method,
-          bankName: body.bankName ?? null,
-          chequeNumber: body.chequeNumber ?? null,
-          transactionId: body.transactionId ?? null,
-          reference: body.reference ?? null,
-          notes: body.notes ?? null,
-          receivedByUserId,
-          attachmentUrl: body.attachmentUrl ?? null,
-          allocations: cleanAllocations,
-          paymentDate,
-        } as any)
+        .values(insertValues as any)
         .returning();
 
-      // Backfill the ledger entry with the payment id now that we have it.
       await tx.update(ledgerEntriesTable)
         .set({ paymentId: inserted.id })
         .where(eq(ledgerEntriesTable.id, ledgerEntry.id));
@@ -195,7 +194,6 @@ router.post("/:id/void", async (req, res): Promise<any> => {
     await db.transaction(async (tx) => {
       await tx.update(paymentsTable).set({ isVoided: true, voidReason: reason }).where(eq(paymentsTable.id, id));
 
-      // Reverse the invoice allocations this payment made.
       const allocations = (payment.allocations as Array<{ saleId: number; amount: number }>) || [];
       for (const alloc of allocations) {
         await tx.execute(
@@ -206,7 +204,7 @@ router.post("/:id/void", async (req, res): Promise<any> => {
       await appendLedgerEntry(tx, {
         customerId: payment.customerId,
         type: "adjustment",
-        amount: parseFloat(payment.amount as string), // reverse the original negative payment entry
+        amount: parseFloat(payment.amount as string),
         paymentId: payment.id,
         description: `Payment voided: ${reason}`,
         createdByUserId,
