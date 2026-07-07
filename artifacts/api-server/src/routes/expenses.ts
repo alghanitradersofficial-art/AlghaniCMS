@@ -6,7 +6,7 @@ import { CreateExpenseBody, UpdateExpenseBody } from "@workspace/api-zod";
 
 const router = Router();
 
-router.get("/", async (req, res) => {
+router.get("/", async (req, res): Promise<any> => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
@@ -31,13 +31,14 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", async (req, res): Promise<any> => {
   try {
     const body = CreateExpenseBody.parse(req.body);
+    // Loose inference alignment ke liye 'as any' use kiya
     const [expense] = await db.insert(expensesTable).values({
       ...body,
       amount: String(body.amount),
-    }).returning();
+    } as any).returning();
     return res.status(201).json({
       ...expense,
       amount: parseFloat(expense.amount as string),
@@ -48,7 +49,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
     const body = UpdateExpenseBody.parse(req.body);
@@ -66,11 +67,11 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
     await db.delete(expensesTable).where(eq(expensesTable.id, id));
-    res.status(204).send();
+    return res.status(204).send();
   } catch (error) {
     return res.status(500).json({ error: "Failed to delete expense" });
   }
