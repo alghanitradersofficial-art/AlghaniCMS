@@ -47,7 +47,7 @@ function fmtPayment(p: typeof paymentsTable.$inferSelect) {
 }
 
 /** POST /api/payments — Receive Payment (section 8), transaction-safe. */
-router.post("/", async (req, res) => {
+router.post("/", async (req, res): Promise<any> => {
   try {
     const body = CreatePaymentBody.parse(req.body);
     const receivedByUserId = getUserIdFromRequest(req);
@@ -88,7 +88,7 @@ router.post("/", async (req, res) => {
           notes: body.notes ?? null,
           receivedByUserId,
           attachmentUrl: body.attachmentUrl ?? null,
-          allocations,
+          allocations: allocations as any, // Casted to any to align loose zod array types with database constraints
           paymentDate,
         })
         .returning();
@@ -110,7 +110,7 @@ router.post("/", async (req, res) => {
 });
 
 /** GET /api/payments?customerId=&method=&page=&limit= — Payment History (section 4). */
-router.get("/", async (req, res) => {
+router.get("/", async (req, res): Promise<any> => {
   try {
     const customerId = req.query.customerId ? parseInt(req.query.customerId as string) : undefined;
     const method = req.query.method as string | undefined;
@@ -139,7 +139,7 @@ router.get("/", async (req, res) => {
 });
 
 /** GET /api/payments/customer/:id/summary — Last/2nd-last/last-10, totals, avg, largest, smallest (section 4). */
-router.get("/customer/:id/summary", async (req, res) => {
+router.get("/customer/:id/summary", async (req, res): Promise<any> => {
   try {
     const customerId = parseInt(req.params.id);
     const rows = await db
@@ -177,7 +177,7 @@ router.get("/customer/:id/summary", async (req, res) => {
 });
 
 /** POST /api/payments/:id/void — soft-delete a payment (never hard-delete financial records). */
-router.post("/:id/void", async (req, res) => {
+router.post("/:id/void", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
     const reason = z.object({ reason: z.string().min(1) }).parse(req.body).reason;
