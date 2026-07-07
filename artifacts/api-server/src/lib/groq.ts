@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import { OpenAI } from "openai";
 
 let groqClient: OpenAI | null = null;
 
@@ -38,7 +38,7 @@ export async function groqVision(base64Image: string, mimeType: string, prompt: 
         content: [
           { type: "text", text: prompt },
           { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Image}` } },
-        ] as OpenAI.ChatCompletionContentPart[],
+        ],
       },
     ],
     max_tokens: 2048,

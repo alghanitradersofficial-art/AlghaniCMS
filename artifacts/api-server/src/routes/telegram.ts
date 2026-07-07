@@ -1,10 +1,13 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
-import TelegramBot from "node-telegram-bot-api";
+import * as TelegramBotImport from "node-telegram-bot-api";
+
+// Under NodeNext, handle both the default constructor mapping and namespace mapping safely
+const TelegramBot = (TelegramBotImport as any).default || TelegramBotImport;
 
 const router = Router();
 
-let bot: TelegramBot | null = null;
+let bot: any = null;
 let botInitialized = false;
 
 export function initTelegramBot() {
@@ -61,21 +64,21 @@ export function initTelegramBot() {
       await bot!.sendMessage(chatId, msg, { parse_mode: "Markdown" });
     };
 
-    bot.onText(/\/start/, (msg) => {
+    bot.onText(/\/start/, (msg: any) => {
       bot!.sendMessage(msg.chat.id, `👋 Welcome to *Al Ghani ERP Bot*!\n\nYour Chat ID: \`${msg.chat.id}\`\n\nCommands:\n/report — Full summary\n/sales — Recent sales\n/inventory — Stock alerts\n/customers — Customer count\n/today — Today's summary`, { parse_mode: "Markdown" });
     });
 
-    bot.onText(/\/report/, async (msg) => { await sendSummary(String(msg.chat.id)); });
-    bot.onText(/\/sales/, async (msg) => { await sendSalesReport(String(msg.chat.id)); });
-    bot.onText(/\/inventory/, async (msg) => { await sendInventoryAlert(String(msg.chat.id)); });
-    bot.onText(/\/chatid/, async (msg) => { await bot!.sendMessage(msg.chat.id, `Your Chat ID: \`${msg.chat.id}\``, { parse_mode: "Markdown" }); });
-    bot.onText(/\/today/, async (msg) => {
+    bot.onText(/\/report/, async (msg: any) => { await sendSummary(String(msg.chat.id)); });
+    bot.onText(/\/sales/, async (msg: any) => { await sendSalesReport(String(msg.chat.id)); });
+    bot.onText(/\/inventory/, async (msg: any) => { await sendInventoryAlert(String(msg.chat.id)); });
+    bot.onText(/\/chatid/, async (msg: any) => { await bot!.sendMessage(msg.chat.id, `Your Chat ID: \`${msg.chat.id}\``, { parse_mode: "Markdown" }); });
+    bot.onText(/\/today/, async (msg: any) => {
       const result = await pool.query(`SELECT COALESCE(SUM(total::numeric),0) as total, COUNT(*) as count FROM sales WHERE status!='cancelled' AND created_at >= NOW() - INTERVAL '1 day'`);
       const sales = parseFloat(result.rows[0].total);
       await bot!.sendMessage(msg.chat.id, `📊 *Today's Sales*\nOrders: ${result.rows[0].count}\nRevenue: Rs. ${sales.toLocaleString()}`, { parse_mode: "Markdown" });
     });
 
-    bot.on("polling_error", (err) => { console.error("[Telegram] Polling error:", err.message); });
+    bot.on("polling_error", (err: any) => { console.error("[Telegram] Polling error:", err.message); });
   } catch (e) {
     console.error("[Telegram] Failed to init bot:", e);
   }
