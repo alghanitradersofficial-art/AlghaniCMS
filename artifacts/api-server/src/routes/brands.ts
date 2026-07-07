@@ -6,7 +6,7 @@ import { CreateBrandBody, UpdateBrandBody } from "@workspace/api-zod";
 
 const router = Router();
 
-router.get("/", async (req, res) => {
+router.get("/", async (req, res): Promise<any> => {
   try {
     const rows = await db.select({
       id: brandsTable.id,
@@ -24,17 +24,18 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", async (req, res): Promise<any> => {
   try {
     const body = CreateBrandBody.parse(req.body);
-    const [brand] = await db.insert(brandsTable).values(body).returning();
+    // Cast to any to reconcile inferred validation types with strict Drizzle schemas
+    const [brand] = await db.insert(brandsTable).values(body as any).returning();
     return res.status(201).json({ ...brand, productCount: 0 });
   } catch (error) {
     return res.status(500).json({ error: "Failed to create brand" });
   }
 });
 
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
     const body = UpdateBrandBody.parse(req.body);
@@ -46,11 +47,11 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
     await db.delete(brandsTable).where(eq(brandsTable.id, id));
-    res.status(204).send();
+    return res.status(204).send();
   } catch (error) {
     return res.status(500).json({ error: "Failed to delete brand" });
   }
