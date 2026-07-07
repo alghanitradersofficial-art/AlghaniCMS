@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { z } from "zod/v4";
+import { z } from "zod";
 import { db, paymentsTable, customersTable, ledgerEntriesTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { appendLedgerEntry, allocatePayment, round2 } from "../lib/ledger";
