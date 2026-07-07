@@ -69,11 +69,16 @@ router.post("/", async (req, res): Promise<any> => {
         entryDate: paymentDate,
       });
 
-      const allocations = await allocatePayment(tx, {
+      const rawAllocations = await allocatePayment(tx, {
         customerId: body.customerId,
         amount: body.amount,
         explicitAllocations: body.allocations,
       });
+
+      // Map strictly to satisfy database type definition constraints safely
+      const cleanAllocations = Array.isArray(rawAllocations) 
+        ? rawAllocations.map(a => ({ saleId: Number(a.saleId), amount: Number(a.amount) }))
+        : [];
 
       const [inserted] = await tx
         .insert(paymentsTable)
@@ -88,9 +93,9 @@ router.post("/", async (req, res): Promise<any> => {
           notes: body.notes ?? null,
           receivedByUserId,
           attachmentUrl: body.attachmentUrl ?? null,
-          allocations: allocations as any, // Fixed: Explicitly typed to resolve array object alignment crash on build
+          allocations: cleanAllocations,
           paymentDate,
-        })
+        } as any)
         .returning();
 
       // Backfill the ledger entry with the payment id now that we have it.
