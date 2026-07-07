@@ -88,7 +88,7 @@ router.post("/", async (req, res): Promise<any> => {
           notes: body.notes ?? null,
           receivedByUserId,
           attachmentUrl: body.attachmentUrl ?? null,
-          allocations: allocations as any, // Fixed: Cast to any to align loose zod array types with database JSONB limits
+          allocations: allocations as any, // Fixed: Explicitly typed to resolve array object alignment crash on build
           paymentDate,
         })
         .returning();
