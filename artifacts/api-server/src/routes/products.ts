@@ -28,7 +28,7 @@ async function destroyCloudinaryAsset(publicId: string) {
 }
 
 // GET /api/products
-router.get("/", async (req, res): Promise<void> => {
+router.get("/", async (req, res): Promise<any> => { // Fixed return type
   try {
     const params = GetProductsQueryParams.parse(req.query);
     const { search, categoryId, brandId, lowStock, page = 1, limit = 20 } = params;
@@ -87,7 +87,7 @@ router.get("/", async (req, res): Promise<void> => {
 });
 
 // POST /api/products
-router.post("/", async (req, res): Promise<void> => {
+router.post("/", async (req, res): Promise<any> => { // Fixed return type
   try {
     const body = CreateProductBody.parse(req.body) as any;
     const result = await pool.query(
@@ -133,7 +133,7 @@ router.post("/", async (req, res): Promise<void> => {
 });
 
 // GET /api/products/:id
-router.get("/:id", async (req, res): Promise<void> => {
+router.get("/:id", async (req, res): Promise<any> => { // Fixed return type
   try {
     const id = parseInt(req.params.id);
     const result = await pool.query(
@@ -165,7 +165,7 @@ router.get("/:id", async (req, res): Promise<void> => {
 });
 
 // PATCH /api/products/:id
-router.patch("/:id", async (req, res): Promise<void> => {
+router.patch("/:id", async (req, res): Promise<any> => { // Fixed return type
   try {
     const id = parseInt(req.params.id);
     const body = UpdateProductBody.parse(req.body) as any;
@@ -216,7 +216,7 @@ router.patch("/:id", async (req, res): Promise<void> => {
 });
 
 // DELETE /api/products/:id
-router.delete("/:id", async (req, res): Promise<void> => {
+router.delete("/:id", async (req, res): Promise<any> => { // Fixed return type
   try {
     const id = parseInt(req.params.id);
     const existing = await pool.query(`SELECT image_public_id FROM products WHERE id = $1`, [id]);
@@ -225,7 +225,7 @@ router.delete("/:id", async (req, res): Promise<void> => {
       await destroyCloudinaryAsset(publicId as string);
     }
     await pool.query(`DELETE FROM products WHERE id = $1`, [id]);
-    res.status(204).send();
+    return res.status(204).send(); // Added return block to ensure consistency
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to delete product" });
