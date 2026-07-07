@@ -70,12 +70,12 @@ router.post("/", async (req, res): Promise<any> => {
         explicitAllocations: body.allocations,
       });
 
-      // Break reference & completely cast through unknown to eliminate loose or optional structural leakage
-      const parsedAllocations = (rawAllocations ?? []) as unknown as Array<Record<string, any>>;
+      // Completely detach with property lookups to defeat strict type inference constraints
+      const parsedAllocations = (rawAllocations ?? []) as unknown as any[];
       
       const cleanAllocations: { saleId: number; amount: number }[] = parsedAllocations.map(a => ({
-        saleId: Number(a.saleId),
-        amount: Number(a.amount)
+        saleId: Number(a["saleId"]),
+        amount: Number(a["amount"])
       }));
 
       const insertValues = {
