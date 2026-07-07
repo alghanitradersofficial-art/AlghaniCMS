@@ -70,16 +70,18 @@ router.post("/", async (req, res): Promise<any> => {
         explicitAllocations: body.allocations,
       });
 
-      // Completely detach type tracing by parsing through unknown safely
-      const parsedAllocations = (rawAllocations ?? []) as unknown[];
+      // 1. Force structural untyped conversion to break optional trace chains
+      const parsedAllocations = (rawAllocations ?? []) as any[];
       
-      // Map strictly to guaranteed required non-optional structure
-      const cleanAllocations: { saleId: number; amount: number }[] = parsedAllocations.map((a: any) => ({
-        saleId: Number(a?.saleId ?? 0),
-        amount: Number(a?.amount ?? 0)
-      }));
+      // 2. Strict required non-optional schema properties enforcement
+      const cleanAllocations = parsedAllocations.map(a => {
+        return {
+          saleId: Number(a.saleId),
+          amount: Number(a.amount)
+        };
+      }) as any;
 
-      // Set directly using absolute strict mapping values
+      // 3. Directly matching target layout
       const insertValues = {
         customerId: body.customerId,
         amount: String(body.amount),
