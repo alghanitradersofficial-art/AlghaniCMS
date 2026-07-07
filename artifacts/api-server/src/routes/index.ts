@@ -20,6 +20,9 @@ import uploadRouter from "./upload";
 import telegramRouter from "./telegram";
 import emailRouter from "./email";
 import dbbackupRouter from "./dbbackup";
+import ledgerRouter from "./ledger";
+import priceHistoryRouter from "./price-history";
+import paymentsRouter from "./payments";
 
 const router: IRouter = Router();
 
@@ -32,6 +35,9 @@ router.use("/brands", brandsRouter);
 router.use("/sales", salesRouter);
 router.use("/purchases", purchasesRouter);
 router.use("/customers", customersRouter);
+router.use("/customers", ledgerRouter);
+router.use("/customers", priceHistoryRouter);
+router.use("/payments", paymentsRouter);
 router.use("/suppliers", suppliersRouter);
 router.use("/users", usersRouter);
 router.use("/expenses", expensesRouter);

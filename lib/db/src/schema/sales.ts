@@ -11,6 +11,9 @@ export const salesTable = pgTable("sales", {
   subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull(),
   discount: numeric("discount", { precision: 12, scale: 2 }).notNull().default("0"),
   total: numeric("total", { precision: 12, scale: 2 }).notNull(),
+  // Cumulative amount allocated from payments against this invoice (Khata module).
+  // total - amountPaid = outstanding balance for this specific invoice.
+  amountPaid: numeric("amount_paid", { precision: 12, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
   items: jsonb("items").notNull().default([]),
   createdAt: timestamp("created_at").defaultNow().notNull(),

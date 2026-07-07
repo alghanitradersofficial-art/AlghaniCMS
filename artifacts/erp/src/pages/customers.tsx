@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useGetCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer, getGetCustomersQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, Users } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Users, Wallet } from "lucide-react";
+import { CustomerLedgerDialog } from "@/components/customer-ledger-dialog";
 
 type CustForm = { name: string; phone: string; email: string; address: string; city: string; type: string; };
 const emptyForm: CustForm = { name: "", phone: "", email: "", address: "", city: "", type: "retail" };
@@ -21,6 +22,7 @@ export default function Customers() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
   const [form, setForm] = useState<CustForm>(emptyForm);
+  const [ledgerCustomer, setLedgerCustomer] = useState<{ id: number; name: string } | null>(null);
 
   const { data, isLoading } = useGetCustomers({ search: search || undefined, page, limit: 20 });
   const create = useCreateCustomer();
@@ -96,6 +98,7 @@ export default function Customers() {
                         <td className="px-4 py-3 text-right text-secondary font-medium">Rs. {c.totalSpent?.toLocaleString()}</td>
                         <td className="px-4 py-3 text-center">
                           <div className="flex gap-2 justify-center">
+                            <Button size="sm" variant="ghost" onClick={() => setLedgerCustomer({ id: c.id, name: c.name })} className="hover:bg-primary/10 hover:text-primary w-8 h-8 p-0" title="Khata (Ledger)"><Wallet className="w-4 h-4" /></Button>
                             <Button size="sm" variant="ghost" onClick={() => openEdit(c)} className="hover:bg-accent w-8 h-8 p-0"><Edit className="w-4 h-4" /></Button>
                             <Button size="sm" variant="ghost" onClick={() => handleDelete(c.id)} className="hover:bg-destructive/20 hover:text-destructive w-8 h-8 p-0"><Trash2 className="w-4 h-4" /></Button>
                           </div>
@@ -137,6 +140,13 @@ export default function Customers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CustomerLedgerDialog
+        customerId={ledgerCustomer?.id ?? null}
+        customerName={ledgerCustomer?.name ?? ""}
+        open={!!ledgerCustomer}
+        onOpenChange={(o) => { if (!o) setLedgerCustomer(null); }}
+      />
     </Layout>
   );
 }

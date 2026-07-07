@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useGetSales, useCreateSale, useUpdateSale, useDeleteSale, useGetProducts, useGetCustomers, getGetSalesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, ShoppingCart, X } from "lucide-react";
+import { Plus, Search, Edit, Trash2, ShoppingCart, X, Info } from "lucide-react";
+import { PriceHistoryPanel } from "@/components/price-history-panel";
 
 type LineItem = { productId: number; productName: string; quantity: number; unitPrice: number; };
 
@@ -21,9 +22,11 @@ export default function Sales() {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [customerName, setCustomerName] = useState("");
+  const [customerId, setCustomerId] = useState<number | undefined>(undefined);
   const [discount, setDiscount] = useState("0");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<LineItem[]>([]);
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
   const { data, isLoading } = useGetSales({ search: search || undefined, status: statusFilter as "pending" | "completed" | "cancelled" | undefined, page, limit: 20 });
   const { data: products } = useGetProducts({ limit: 100 });
@@ -35,7 +38,7 @@ export default function Sales() {
   const invalidate = () => qc.invalidateQueries({ queryKey: getGetSalesQueryKey() });
 
   const openNew = () => {
-    setCustomerName(""); setDiscount("0"); setNotes(""); setItems([]); setEditingId(null); setOpen(true);
+    setCustomerName(""); setCustomerId(undefined); setDiscount("0"); setNotes(""); setItems([]); setEditingId(null); setExpandedRow(null); setOpen(true);
   };
 
   const addItem = () => {
@@ -66,6 +69,7 @@ export default function Sales() {
   const handleSave = async () => {
     await createSale.mutateAsync({
       data: {
+        customerId,
         customerName,
         discount: parseFloat(discount || "0"),
         notes: notes || undefined,
@@ -174,11 +178,27 @@ export default function Sales() {
           <DialogHeader><DialogTitle>New Sale Order</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Customer Name *</Label>
-              <Input value={customerName} onChange={e => setCustomerName(e.target.value)} className="bg-background/50 border-border" list="customers-list" />
-              <datalist id="customers-list">
-                {customers?.data.map(c => <option key={c.id} value={c.name} />)}
-              </datalist>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Customer *</Label>
+              <Select
+                value={customerId ? String(customerId) : customerName ? "__walkin__" : ""}
+                onValueChange={(v) => {
+                  if (v === "__walkin__") { setCustomerId(undefined); setCustomerName(""); return; }
+                  const c = customers?.data.find(c => c.id === Number(v));
+                  if (c) { setCustomerId(c.id); setCustomerName(c.name); }
+                }}
+              >
+                <SelectTrigger className="bg-background/50 border-border"><SelectValue placeholder="Select a registered customer" /></SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {customers?.data.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name} — {c.phone}</SelectItem>)}
+                  <SelectItem value="__walkin__">Walk-in / Other (no khata tracking)</SelectItem>
+                </SelectContent>
+              </Select>
+              {customerId === undefined && (
+                <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Walk-in customer name" className="bg-background/50 border-border mt-1" />
+              )}
+              {customerId !== undefined && (
+                <p className="text-xs text-muted-foreground">Price history + khata (ledger) will update automatically for this customer.</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -187,17 +207,23 @@ export default function Sales() {
                 <Button size="sm" variant="outline" onClick={addItem} className="border-border gap-1 h-7 text-xs"><Plus className="w-3 h-3" /> Add Item</Button>
               </div>
               {items.map((item, idx) => (
-                <div key={idx} className="flex gap-2 items-center">
-                  <Select value={String(item.productId)} onValueChange={v => updateItem(idx, "productId", v)}>
-                    <SelectTrigger className="flex-1 bg-background/50 border-border text-xs h-9"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-card border-border">
-                      {products?.data.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Input type="number" value={item.quantity} onChange={e => updateItem(idx, "quantity", e.target.value)} className="w-20 bg-background/50 border-border h-9 text-xs" placeholder="Qty" min={1} />
-                  <Input type="number" value={item.unitPrice} onChange={e => updateItem(idx, "unitPrice", e.target.value)} className="w-28 bg-background/50 border-border h-9 text-xs" placeholder="Price" />
-                  <span className="text-xs w-24 text-right text-muted-foreground">Rs. {(item.quantity * item.unitPrice).toLocaleString()}</span>
-                  <Button size="sm" variant="ghost" onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))} className="w-8 h-8 p-0 hover:bg-destructive/20 hover:text-destructive"><X className="w-4 h-4" /></Button>
+                <div key={idx} className="space-y-1.5">
+                  <div className="flex gap-2 items-center">
+                    <Select value={String(item.productId)} onValueChange={v => updateItem(idx, "productId", v)}>
+                      <SelectTrigger className="flex-1 bg-background/50 border-border text-xs h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        {products?.data.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input type="number" value={item.quantity} onChange={e => updateItem(idx, "quantity", e.target.value)} className="w-20 bg-background/50 border-border h-9 text-xs" placeholder="Qty" min={1} />
+                    <Input type="number" value={item.unitPrice} onChange={e => updateItem(idx, "unitPrice", e.target.value)} className="w-28 bg-background/50 border-border h-9 text-xs" placeholder="Price" />
+                    <span className="text-xs w-24 text-right text-muted-foreground">Rs. {(item.quantity * item.unitPrice).toLocaleString()}</span>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setExpandedRow(prev => prev === idx ? null : idx)} className={`w-8 h-8 p-0 ${expandedRow === idx ? "text-primary bg-primary/10" : "hover:bg-accent"}`} title="Price history & suggestion"><Info className="w-4 h-4" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setItems(prev => prev.filter((_, i) => i !== idx)); if (expandedRow === idx) setExpandedRow(null); }} className="w-8 h-8 p-0 hover:bg-destructive/20 hover:text-destructive"><X className="w-4 h-4" /></Button>
+                  </div>
+                  {expandedRow === idx && (
+                    <PriceHistoryPanel customerId={customerId} productId={item.productId} proposedPrice={item.unitPrice} />
+                  )}
                 </div>
               ))}
             </div>
