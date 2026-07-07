@@ -1,36 +1,37 @@
-import app from "./app";
+import express, { type Express } from "express";
+import cors from "cors";
+import pinoHttp from "pino-http";
+import router from "./routes";
 import { logger } from "./lib/logger";
-import { initializeDatabase } from "./lib/init-db";
+import { initTelegramBot } from "./routes/telegram";
 
-const rawPort = process.env["PORT"];
+const app: Express = express();
 
-// Initialize DB immediately for the serverless function environment
-initializeDatabase()
-  .then(() => {
-    logger.info("Database initialized successfully");
-  })
-  .catch((err) => {
-    logger.error({ err }, "Database initialization failed");
-  });
+app.use(
+  pinoHttp({
+    logger,
+    serializers: {
+      req(req) { return { id: req.id, method: req.method, url: req.url?.split("?")[0] }; },
+      res(res) { return { statusCode: res.statusCode }; },
+    },
+  }),
+);
+app.use(cors({ origin: "*", credentials: true }));
+app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
-// ONLY call app.listen if we are NOT running on Vercel (local development)
+app.use("/api", router);
+
+// Only initialize the Telegram bot loop if we are NOT on Vercel.
+// On Vercel, long-polling freezes the function. Use webhooks instead for production.
 if (!process.env["VERCEL"]) {
-  if (!rawPort) {
-    throw new Error(
-      "PORT environment variable is required but was not provided.",
-    );
+  try { 
+    initTelegramBot(); 
+  } catch (e) { 
+    logger.warn("Telegram bot init failed"); 
   }
-
-  const port = Number(rawPort);
-
-  if (Number.isNaN(port) || port <= 0) {
-    throw new Error(`Invalid PORT value: "${rawPort}"`);
-  }
-
-  app.listen(port, () => {
-    logger.info({ port }, "Server listening locally");
-  });
+} else {
+  logger.info("Skipping Telegram long-polling on Vercel environment.");
 }
 
-// CRITICAL: Vercel needs the express app exported as default
 export default app;
