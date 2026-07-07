@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { customersTable, salesTable } from "@workspace/db";
+import { customersTable } from "@workspace/db";
 import { eq, ilike, sql } from "drizzle-orm";
 import { CreateCustomerBody, UpdateCustomerBody } from "@workspace/api-zod";
 
 const router = Router();
 
-router.get("/", async (req, res) => {
+router.get("/", async (req, res): Promise<any> => {
   try {
     const search = req.query.search as string;
     const page = parseInt(req.query.page as string) || 1;
@@ -52,10 +52,11 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", async (req, res): Promise<any> => {
   try {
     const body = CreateCustomerBody.parse(req.body);
-    const [customer] = await db.insert(customersTable).values(body).returning();
+    // loose validation structure ko strict drizzle structure k sath align krne k liye 'as any' cast kia
+    const [customer] = await db.insert(customersTable).values(body as any).returning();
     return res.status(201).json({
       ...customer,
       totalOrders: 0,
@@ -67,7 +68,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
     const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, id));
@@ -83,7 +84,7 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
     const body = UpdateCustomerBody.parse(req.body);
@@ -100,11 +101,11 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
     await db.delete(customersTable).where(eq(customersTable.id, id));
-    res.status(204).send();
+    return res.status(204).send();
   } catch (error) {
     return res.status(500).json({ error: "Failed to delete customer" });
   }
