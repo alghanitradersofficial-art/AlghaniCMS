@@ -2,8 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { db, paymentsTable, customersTable, ledgerEntriesTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { appendLedgerEntry, allocatePayment, round2 } from "../lib/ledger";
-import { getUserIdFromRequest } from "../lib/auth-context";
+import { appendLedgerEntry, allocatePayment, round2 } from "../lib/ledger.js";
+import { getUserIdFromRequest } from "../lib/auth-context.js";
 
 const router = Router();
 

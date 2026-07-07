@@ -5,7 +5,7 @@
  * Al Ghani Wholesale Traders ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { CustomerInputType } from './customerInputType';
+import type { CustomerInputType } from './customerInputType.js';
 
 export interface CustomerInput {
   name: string;

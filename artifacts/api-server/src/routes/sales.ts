@@ -3,8 +3,8 @@ import { db } from "@workspace/db";
 import { salesTable, productsTable, priceHistoryTable } from "@workspace/db";
 import { eq, ilike, and, sql, inArray } from "drizzle-orm";
 import { CreateSaleBody, UpdateSaleBody } from "@workspace/api-zod";
-import { appendLedgerEntry, round2 } from "../lib/ledger";
-import { getUserIdFromRequest } from "../lib/auth-context";
+import { appendLedgerEntry, round2 } from "../lib/ledger.js";
+import { getUserIdFromRequest } from "../lib/auth-context.js";
 
 const router = Router();
 

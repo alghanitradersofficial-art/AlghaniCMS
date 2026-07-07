@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, priceHistoryTable, productsTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { round2 } from "../lib/ledger";
+import { round2 } from "../lib/ledger.js";
 
 const router = Router();
 

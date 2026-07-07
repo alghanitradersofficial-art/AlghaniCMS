@@ -1,6 +1,6 @@
-import app from "./app";
-import { logger } from "./lib/logger";
-import { initializeDatabase } from "./lib/init-db";
+import app from "./app.js";
+import { logger } from "./lib/logger.js";
+import { initializeDatabase } from "./lib/init-db.js";
 
 const rawPort = process.env["PORT"];
 

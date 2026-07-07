@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
 import nodemailer from "nodemailer";
-import { groqChat } from "../lib/groq";
+import { groqChat } from "../lib/groq.js";
 
 const router = Router();
 

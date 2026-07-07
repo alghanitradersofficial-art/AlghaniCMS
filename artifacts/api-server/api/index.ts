@@ -14,9 +14,9 @@
  * itself and automatically traces real runtime dependencies (express,
  * nodemailer, pdfkit, exceljs, etc.) into the deployed function.
  */
-import app from "../src/app";
-import { initializeDatabase } from "../src/lib/init-db";
-import { logger } from "../src/lib/logger";
+import app from "../src/app.js";
+import { initializeDatabase } from "../src/lib/init-db.js";
+import { logger } from "../src/lib/logger.js";
 
 // Kick off DB initialization on cold start. We intentionally do not block
 // module evaluation on this; init-db.ts uses `CREATE TABLE IF NOT EXISTS` /

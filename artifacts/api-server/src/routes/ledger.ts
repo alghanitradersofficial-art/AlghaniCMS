@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, customersTable, ledgerEntriesTable } from "@workspace/db";
 import { eq, and, gte, lte, asc, desc, sql } from "drizzle-orm";
-import { getCustomerLedgerSummary, round2 } from "../lib/ledger";
+import { getCustomerLedgerSummary, round2 } from "../lib/ledger.js";
 
 const router = Router();
 

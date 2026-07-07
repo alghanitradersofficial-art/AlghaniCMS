@@ -3,7 +3,7 @@ import { pool } from "@workspace/db";
 import multer from "multer";
 import ExcelJS from "exceljs";
 import path from "path";
-import { groqVision, groqChat, getGroqClient } from "../lib/groq";
+import { groqVision, groqChat, getGroqClient } from "../lib/groq.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });

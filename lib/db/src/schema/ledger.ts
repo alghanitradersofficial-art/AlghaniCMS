@@ -11,9 +11,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { customersTable } from "./customers";
-import { productsTable } from "./products";
-import { salesTable } from "./sales";
+import { customersTable } from "./customers.js";
+import { productsTable } from "./products.js";
+import { salesTable } from "./sales.js";
 
 // ---------------------------------------------------------------------------
 // Customer Price History
