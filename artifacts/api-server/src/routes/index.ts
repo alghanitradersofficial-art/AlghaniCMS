@@ -1,0 +1,48 @@
+import { Router, type IRouter } from "express";
+import healthRouter from "./health";
+import authRouter from "./auth";
+import dashboardRouter from "./dashboard";
+import productsRouter from "./products";
+import categoriesRouter from "./categories";
+import brandsRouter from "./brands";
+import salesRouter from "./sales";
+import purchasesRouter from "./purchases";
+import customersRouter from "./customers";
+import suppliersRouter from "./suppliers";
+import usersRouter from "./users";
+import expensesRouter from "./expenses";
+import reportsRouter from "./reports";
+import settingsRouter from "./settings";
+import notificationsRouter from "./notifications";
+import exportRouter from "./export";
+import importRouter from "./import";
+import uploadRouter from "./upload";
+import telegramRouter from "./telegram";
+import emailRouter from "./email";
+import dbbackupRouter from "./dbbackup";
+
+const router: IRouter = Router();
+
+router.use(healthRouter);
+router.use("/auth", authRouter);
+router.use("/dashboard", dashboardRouter);
+router.use("/products", productsRouter);
+router.use("/categories", categoriesRouter);
+router.use("/brands", brandsRouter);
+router.use("/sales", salesRouter);
+router.use("/purchases", purchasesRouter);
+router.use("/customers", customersRouter);
+router.use("/suppliers", suppliersRouter);
+router.use("/users", usersRouter);
+router.use("/expenses", expensesRouter);
+router.use("/reports", reportsRouter);
+router.use("/settings", settingsRouter);
+router.use("/notifications", notificationsRouter);
+router.use("/export", exportRouter);
+router.use("/import", importRouter);
+router.use("/upload", uploadRouter);
+router.use("/telegram", telegramRouter);
+router.use("/email", emailRouter);
+router.use("/backup", dbbackupRouter);
+
+export default router;
