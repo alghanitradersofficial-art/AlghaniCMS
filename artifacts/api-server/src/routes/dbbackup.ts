@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
-import archiver from "archiver";
+import { ZipArchive } from "archiver";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -103,7 +103,7 @@ router.get("/project-zip", async (req, res) => {
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="alghani-erp-${new Date().toISOString().slice(0, 10)}.zip"`);
 
-    const archive = archiver("zip", { zlib: { level: 6 } });
+    const archive = new ZipArchive({ zlib: { level: 6 } });
     archive.on("error", (err: any) => { console.error(err); });
     archive.pipe(res);
 
