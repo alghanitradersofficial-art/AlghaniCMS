@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
 import { CreateProductBody, UpdateProductBody, GetProductsQueryParams } from "@workspace/api-zod";
+import crypto from "crypto";
 
 const router = Router();
 
@@ -10,7 +11,6 @@ async function destroyCloudinaryAsset(publicId: string) {
   const apiSecret = process.env.CLOUDINARY_API_SECRET;
   if (!cloudName || !apiKey || !apiSecret) return;
   const timestamp = Math.floor(Date.now() / 1000);
-  const crypto = require("crypto");
   const sha1 = crypto
     .createHash("sha1")
     .update(`public_id=${publicId}&timestamp=${timestamp}${apiSecret}`)

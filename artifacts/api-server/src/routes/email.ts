@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "@workspace/db";
 import nodemailer from "nodemailer";
 import { groqChat } from "../lib/groq.js";
+import { getGroqClient } from "../lib/groq.js";
 
 const router = Router();
 
@@ -45,7 +46,7 @@ TODAY'S NUMBERS:
 `;
 
     let emailBody = dataContext;
-    const groqClient = require("../lib/groq").getGroqClient();
+    const groqClient = getGroqClient();
     if (groqClient) {
       try {
         emailBody = await groqChat([

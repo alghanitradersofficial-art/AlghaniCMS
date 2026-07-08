@@ -1,8 +1,6 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const archiver = require("archiver") as any;
+import archiver from "archiver";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
