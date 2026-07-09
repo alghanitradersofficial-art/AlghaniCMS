@@ -25,6 +25,7 @@ export default function Sales() {
   const [customerId, setCustomerId] = useState<number | undefined>(undefined);
   const [discount, setDiscount] = useState("0");
   const [notes, setNotes] = useState("");
+  const [saleDate, setSaleDate] = useState(new Date().toISOString().slice(0, 10));
   const [items, setItems] = useState<LineItem[]>([]);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
@@ -38,7 +39,7 @@ export default function Sales() {
   const invalidate = () => qc.invalidateQueries({ queryKey: getGetSalesQueryKey() });
 
   const openNew = () => {
-    setCustomerName(""); setCustomerId(undefined); setDiscount("0"); setNotes(""); setItems([]); setEditingId(null); setExpandedRow(null); setOpen(true);
+    setCustomerName(""); setCustomerId(undefined); setDiscount("0"); setNotes(""); setSaleDate(new Date().toISOString().slice(0, 10)); setItems([]); setEditingId(null); setExpandedRow(null); setOpen(true);
   };
 
   const addItem = () => {
@@ -74,6 +75,9 @@ export default function Sales() {
         discount: parseFloat(discount || "0"),
         notes: notes || undefined,
         items: items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
+        // saleDate enables backdated/historical invoice entry — accepted by
+        // the backend but not yet part of the generated CreateSaleBody type.
+        ...({ saleDate: new Date(saleDate).toISOString() } as {}),
       }
     });
     invalidate();
@@ -153,7 +157,7 @@ export default function Sales() {
                             </SelectContent>
                           </Select>
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">{new Date(s.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">{new Date((s as any).saleDate ?? s.createdAt).toLocaleDateString()}</td>
                         <td className="px-4 py-3 text-center">
                           <Button size="sm" variant="ghost" onClick={() => handleDelete(s.id)} className="hover:bg-destructive/20 hover:text-destructive w-8 h-8 p-0"><Trash2 className="w-4 h-4" /></Button>
                         </td>
@@ -234,9 +238,13 @@ export default function Sales() {
                 <Input type="number" value={discount} onChange={e => setDiscount(e.target.value)} className="bg-background/50 border-border" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
-                <Input value={notes} onChange={e => setNotes(e.target.value)} className="bg-background/50 border-border" />
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Invoice Date</Label>
+                <Input type="date" value={saleDate} onChange={e => setSaleDate(e.target.value)} className="bg-background/50 border-border" />
               </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
+              <Input value={notes} onChange={e => setNotes(e.target.value)} className="bg-background/50 border-border" />
             </div>
 
             <div className="border-t border-border pt-3 text-right space-y-1">

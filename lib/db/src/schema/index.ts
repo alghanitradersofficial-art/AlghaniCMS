@@ -8,3 +8,6 @@ export * from "./purchases.js";
 export * from "./users.js";
 export * from "./expenses.js";
 export * from "./ledger.js";
+export * from "./staff.js";
+export * from "./supplier-products.js";
+export * from "./general-ledger.js";

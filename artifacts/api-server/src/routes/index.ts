@@ -23,6 +23,13 @@ import dbbackupRouter from "./dbbackup.js";
 import ledgerRouter from "./ledger.js";
 import priceHistoryRouter from "./price-history.js";
 import paymentsRouter from "./payments.js";
+import staffRouter from "./staff.js";
+import staffLedgerRouter from "./staff-ledger.js";
+import supplierProductsRouter from "./supplier-products.js";
+import supplierLedgerRouter from "./supplier-ledger.js";
+import productSuppliersRouter from "./product-suppliers.js";
+import generalLedgerRouter from "./general-ledger.js";
+import calendarRouter from "./calendar.js";
 
 const router: IRouter = Router();
 
@@ -39,6 +46,13 @@ router.use("/customers", ledgerRouter);
 router.use("/customers", priceHistoryRouter);
 router.use("/payments", paymentsRouter);
 router.use("/suppliers", suppliersRouter);
+router.use("/suppliers", supplierProductsRouter);
+router.use("/suppliers", supplierLedgerRouter);
+router.use("/products", productSuppliersRouter);
+router.use("/staff", staffRouter);
+router.use("/staff", staffLedgerRouter);
+router.use("/general-ledger", generalLedgerRouter);
+router.use("/calendar", calendarRouter);
 router.use("/users", usersRouter);
 router.use("/expenses", expensesRouter);
 router.use("/reports", reportsRouter);

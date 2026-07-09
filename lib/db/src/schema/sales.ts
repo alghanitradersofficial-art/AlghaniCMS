@@ -16,6 +16,10 @@ export const salesTable = pgTable("sales", {
   amountPaid: numeric("amount_paid", { precision: 12, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
   items: jsonb("items").notNull().default([]),
+  // Editable invoice date, defaults to now but can be set to any past date
+  // for backdated/historical entry. createdAt always reflects when the row
+  // was actually inserted and is never user-editable.
+  saleDate: timestamp("sale_date", { withTimezone: true }).defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -12,6 +12,10 @@ export const purchasesTable = pgTable("purchases", {
   total: numeric("total", { precision: 12, scale: 2 }).notNull(),
   notes: text("notes"),
   items: jsonb("items").notNull().default([]),
+  // Editable PO/purchase date for backdated/historical entry (see sales.saleDate).
+  purchaseDate: timestamp("purchase_date", { withTimezone: true }).defaultNow().notNull(),
+  // Cumulative amount paid to the supplier against this purchase order.
+  amountPaid: numeric("amount_paid", { precision: 12, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

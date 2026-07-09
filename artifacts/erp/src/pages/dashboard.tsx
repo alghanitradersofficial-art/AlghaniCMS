@@ -1,35 +1,74 @@
 import { Layout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useGetDashboardSummary, useGetSalesChart, useGetRecentActivity, useGetTopProducts, useGetLowStockAlerts } from "@workspace/api-client-react";
-import { Activity, CreditCard, DollarSign, Package, AlertTriangle, Users, ArrowUpRight, ArrowDownRight, ShoppingCart } from "lucide-react";
+import { useGetDashboardSummary, useGetSalesChart, useGetTopProducts, useGetLowStockAlerts } from "@workspace/api-client-react";
+import { Activity, CreditCard, DollarSign, Package, AlertTriangle, Users, ArrowUpRight, ArrowDownRight, ShoppingCart, Truck, Warehouse } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { DateRangeSelector, dateRangeToParams, type DateRangeValue } from "@/components/date-range-selector";
+import { SectionLoading } from "@/components/loading-state";
+import { apiGet } from "@/lib/api";
+
+type RangeSummary = {
+  range: string; totalRevenue: number; totalPurchases: number; totalExpenses: number; totalSalaries: number;
+  netProfit: number; salesCount: number; totalProducts: number; totalCustomers: number; totalSuppliers: number; inventoryValue: number;
+};
+
+type RecentActivityItem = {
+  id: number; type: string; description: string; amount: number; direction: string; createdAt: string;
+};
 
 export default function Dashboard() {
   const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary();
   const { data: chartData } = useGetSalesChart({ months: 6 });
-  const { data: activity } = useGetRecentActivity();
   const { data: topProducts } = useGetTopProducts();
   const { data: lowStock } = useGetLowStockAlerts();
+
+  const [range, setRange] = useState<DateRangeValue>({ preset: "all" });
+  const params = dateRangeToParams(range);
+
+  const { data: rangeSummary, isLoading: loadingRangeSummary } = useQuery({
+    queryKey: ["dashboard-summary-range", params.toString()],
+    queryFn: () => apiGet<RangeSummary>(`/api/dashboard/summary-range?${params.toString()}`),
+  });
+
+  const { data: activity, isLoading: loadingActivity } = useQuery({
+    queryKey: ["dashboard-activity-range", params.toString()],
+    queryFn: () => apiGet<RecentActivityItem[]>(`/api/dashboard/recent-activity-range?${params.toString()}&limit=8`),
+  });
 
   return (
     <Layout>
       <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Command Center</h1>
-          <p className="text-muted-foreground mt-1">Real-time enterprise overview.</p>
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Command Center</h1>
+            <p className="text-muted-foreground mt-1">Real-time enterprise overview.</p>
+          </div>
+          <DateRangeSelector value={range} onChange={setRange} />
         </div>
 
-        {/* KPIs */}
+        {/* Range-aware KPIs — driven by the selector above */}
+        {loadingRangeSummary ? <SectionLoading label="Crunching the numbers" /> : rangeSummary && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiCard title={`Revenue (${range.preset === "all" ? "All Time" : range.preset})`} value={`Rs. ${rangeSummary.totalRevenue.toLocaleString()}`} icon={DollarSign} highlight />
+            <KpiCard title="Net Profit" value={`Rs. ${rangeSummary.netProfit.toLocaleString()}`} icon={Activity} />
+            <KpiCard title="Purchases" value={`Rs. ${rangeSummary.totalPurchases.toLocaleString()}`} icon={Truck} />
+            <KpiCard title="Expenses" value={`Rs. ${rangeSummary.totalExpenses.toLocaleString()}`} icon={ArrowDownRight} />
+            <KpiCard title="Sales Count" value={rangeSummary.salesCount.toLocaleString()} icon={ShoppingCart} />
+            <KpiCard title="Total Customers" value={rangeSummary.totalCustomers.toLocaleString()} icon={Users} />
+            <KpiCard title="Total Suppliers" value={rangeSummary.totalSuppliers.toLocaleString()} icon={Truck} />
+            <KpiCard title="Inventory Value" value={`Rs. ${rangeSummary.inventoryValue.toLocaleString()}`} icon={Warehouse} />
+          </div>
+        )}
+
+        {/* Legacy lifetime KPIs (kept as-is) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard title="Total Revenue" value={`Rs. ${summary?.totalRevenue?.toLocaleString() || 0}`} icon={DollarSign} trend="+12.5%" />
-          <KpiCard title="Net Profit" value={`Rs. ${summary?.netProfit?.toLocaleString() || 0}`} icon={Activity} trend="+4.2%" trendDown={false} />
           <KpiCard title="Today's Sales" value={`Rs. ${summary?.todaySales?.toLocaleString() || 0}`} icon={CreditCard} />
-          <KpiCard title="Total Customers" value={summary?.totalCustomers?.toLocaleString() || 0} icon={Users} />
           <KpiCard title="Total Products" value={summary?.totalProducts?.toLocaleString() || 0} icon={Package} />
           <KpiCard title="Pending Orders" value={summary?.pendingOrders?.toLocaleString() || 0} icon={ShoppingCart} highlight />
           <KpiCard title="Low Stock Alerts" value={summary?.lowStockCount?.toLocaleString() || 0} icon={AlertTriangle} alert />
-          <KpiCard title="Total Expenses" value={`Rs. ${summary?.totalExpenses?.toLocaleString() || 0}`} icon={ArrowDownRight} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -69,26 +108,31 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Recent Activity */}
+          {/* Recent Activity — respects the selected date range */}
           <Card className="border-border bg-card">
             <CardHeader>
               <CardTitle>System Activity</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-6">
-                {activity?.slice(0, 5).map((item) => (
-                  <div key={item.id} className="flex gap-4">
-                    <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${item.type === 'sale' ? 'bg-primary shadow-[0_0_5px_rgba(220,38,38,0.5)]' : item.type === 'expense' ? 'bg-destructive' : 'bg-secondary'}`} />
-                    <div className="space-y-1 flex-1">
-                      <p className="text-sm font-medium leading-none">{item.description}</p>
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleDateString()}</p>
-                        {item.amount && <span className="text-xs font-medium">Rs. {item.amount.toLocaleString()}</span>}
+              {loadingActivity ? <SectionLoading label="Loading activity" /> : (
+                <div className="space-y-6">
+                  {activity?.slice(0, 8).map((item) => (
+                    <div key={item.id} className="flex gap-4">
+                      <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${item.type === 'sale' ? 'bg-primary shadow-[0_0_5px_rgba(220,38,38,0.5)]' : item.type === 'expense' ? 'bg-destructive' : 'bg-secondary'}`} />
+                      <div className="space-y-1 flex-1">
+                        <p className="text-sm font-medium leading-none">{item.description}</p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleDateString()}</p>
+                          {item.amount != null && <span className="text-xs font-medium">Rs. {item.amount.toLocaleString()}</span>}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                  {(!activity || activity.length === 0) && (
+                    <div className="text-center py-8 text-muted-foreground text-sm">No activity in this range.</div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

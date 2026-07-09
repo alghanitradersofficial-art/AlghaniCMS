@@ -20,7 +20,9 @@ export default function Purchases() {
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
   const [supplierName, setSupplierName] = useState("");
+  const [supplierId, setSupplierId] = useState<number | undefined>(undefined);
   const [notes, setNotes] = useState("");
+  const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10));
   const [items, setItems] = useState<LineItem[]>([]);
 
   const { data, isLoading } = useGetPurchases({ search: search || undefined, status: statusFilter as "pending" | "received" | "cancelled" | undefined, page, limit: 20 });
@@ -31,7 +33,7 @@ export default function Purchases() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getGetPurchasesQueryKey() });
 
-  const openNew = () => { setSupplierName(""); setNotes(""); setItems([]); setOpen(true); };
+  const openNew = () => { setSupplierName(""); setSupplierId(undefined); setNotes(""); setPurchaseDate(new Date().toISOString().slice(0, 10)); setItems([]); setOpen(true); };
 
   const addItem = () => {
     if (products?.data[0]) {
@@ -61,6 +63,10 @@ export default function Purchases() {
         supplierName,
         notes: notes || undefined,
         items: items.map(i => ({ productId: i.productId, quantity: i.quantity, unitCost: i.unitCost })),
+        // supplierId links this PO to a real supplier record so it posts to
+        // their ledger/khata; purchaseDate enables backdated entry. Both are
+        // accepted by the backend but not yet part of the generated type.
+        ...({ supplierId, purchaseDate: new Date(purchaseDate).toISOString() } as {}),
       }
     });
     invalidate(); setOpen(false);
@@ -132,7 +138,7 @@ export default function Purchases() {
                             </SelectContent>
                           </Select>
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">{new Date(p.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">{new Date((p as any).purchaseDate ?? p.createdAt).toLocaleDateString()}</td>
                       </tr>
                     ))}
                 </tbody>
@@ -148,8 +154,26 @@ export default function Purchases() {
           <div className="space-y-4 py-2">
             <div className="space-y-1">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">Supplier *</Label>
-              <Input value={supplierName} onChange={e => setSupplierName(e.target.value)} className="bg-background/50 border-border" list="suppliers-list" />
-              <datalist id="suppliers-list">{suppliers?.map(s => <option key={s.id} value={s.name} />)}</datalist>
+              <Select
+                value={supplierId ? String(supplierId) : supplierName ? "__adhoc__" : ""}
+                onValueChange={(v) => {
+                  if (v === "__adhoc__") { setSupplierId(undefined); return; }
+                  const s = suppliers?.find(s => s.id === Number(v));
+                  if (s) { setSupplierId(s.id); setSupplierName(s.name); }
+                }}
+              >
+                <SelectTrigger className="bg-background/50 border-border"><SelectValue placeholder="Select a registered supplier" /></SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {suppliers?.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name} — {s.phone}</SelectItem>)}
+                  <SelectItem value="__adhoc__">One-off / Other (no khata tracking)</SelectItem>
+                </SelectContent>
+              </Select>
+              {supplierId === undefined && (
+                <Input value={supplierName} onChange={e => setSupplierName(e.target.value)} placeholder="Supplier name" className="bg-background/50 border-border mt-1" />
+              )}
+              {supplierId !== undefined && (
+                <p className="text-xs text-muted-foreground">This purchase will post to the supplier's ledger (khata) automatically.</p>
+              )}
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -169,9 +193,15 @@ export default function Purchases() {
                 </div>
               ))}
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
-              <Input value={notes} onChange={e => setNotes(e.target.value)} className="bg-background/50 border-border" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
+                <Input value={notes} onChange={e => setNotes(e.target.value)} className="bg-background/50 border-border" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Purchase Date</Label>
+                <Input type="date" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)} className="bg-background/50 border-border" />
+              </div>
             </div>
             <div className="border-t border-border pt-3 text-right">
               <p className="text-lg font-bold text-secondary">Total: Rs. {total.toLocaleString()}</p>

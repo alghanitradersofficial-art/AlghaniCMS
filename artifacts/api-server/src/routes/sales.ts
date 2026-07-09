@@ -3,8 +3,14 @@ import { db } from "@workspace/db";
 import { salesTable, productsTable, priceHistoryTable } from "@workspace/db";
 import { eq, ilike, and, sql, inArray } from "drizzle-orm";
 import { CreateSaleBody, UpdateSaleBody } from "@workspace/api-zod";
+import { z } from "zod";
 import { appendLedgerEntry, round2 } from "../lib/ledger.js";
+import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
 import { getUserIdFromRequest } from "../lib/auth-context.js";
+
+// Optional backdating field, layered on top of CreateSaleBody (see purchases.ts
+// for the same pattern) so historical invoices can be entered with a real date.
+const SaleDateExtension = z.object({ saleDate: z.string().optional() });
 
 const router = Router();
 
@@ -16,6 +22,7 @@ function formatSale(sale: typeof salesTable.$inferSelect) {
     total: parseFloat(sale.total as string),
     amountPaid: parseFloat((sale.amountPaid as string) ?? "0"),
     items: (sale.items as unknown[]) || [],
+    saleDate: (sale.saleDate ?? sale.createdAt).toISOString(),
     createdAt: sale.createdAt.toISOString(),
   };
 }
@@ -102,7 +109,8 @@ router.post("/", async (req, res) => {
     const total = round2(subtotal - discount);
     const invoiceNumber = `INV-${Date.now()}`;
     const status = body.status || "completed";
-    const invoiceDate = new Date();
+    const { saleDate: saleDateStr } = SaleDateExtension.parse(req.body);
+    const invoiceDate = saleDateStr ? new Date(saleDateStr) : new Date();
 
     const sale = await db.transaction(async (tx) => {
       // Deduct stock for completed sales.
@@ -124,6 +132,7 @@ router.post("/", async (req, res) => {
         total: String(total),
         notes: body.notes ?? null,
         items: items.map(({ productId, productName, quantity, unitPrice, total }) => ({ productId, productName, quantity, unitPrice, total })),
+        saleDate: invoiceDate,
       }).returning();
 
       // Customer Price History + Ledger — only meaningful for a registered
@@ -160,6 +169,24 @@ router.post("/", async (req, res) => {
           description: `Invoice ${invoiceNumber}`,
           createdByUserId,
           entryDate: invoiceDate,
+        });
+      }
+
+      // Unified feed entry for every completed sale (registered customer or
+      // walk-in) — this is what powers the Calendar view and cross-module
+      // Ledger report; the customer-specific khata above stays untouched.
+      if (status === "completed") {
+        await appendGeneralLedgerEntry(tx, {
+          date: invoiceDate,
+          type: "sale",
+          referenceId: insertedSale.id,
+          partyType: body.customerId ? "customer" : "none",
+          partyId: body.customerId ?? null,
+          partyName: body.customerName,
+          amount: total,
+          direction: "credit",
+          note: `Invoice ${invoiceNumber}`,
+          createdByUserId,
         });
       }
 

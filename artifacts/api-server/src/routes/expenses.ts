@@ -3,6 +3,8 @@ import { db } from "@workspace/db";
 import { expensesTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { CreateExpenseBody, UpdateExpenseBody } from "@workspace/api-zod";
+import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
+import { getUserIdFromRequest } from "../lib/auth-context.js";
 
 const router = Router();
 
@@ -34,17 +36,32 @@ router.get("/", async (req, res): Promise<any> => {
 router.post("/", async (req, res): Promise<any> => {
   try {
     const body = CreateExpenseBody.parse(req.body);
+    const createdByUserId = getUserIdFromRequest(req);
     // Loose inference alignment ke liye 'as any' use kiya
     const [expense] = await db.insert(expensesTable).values({
       ...body,
       amount: String(body.amount),
+      createdByUserId,
     } as any).returning();
+
+    await appendGeneralLedgerEntry(db as any, {
+      date: body.date ? new Date(body.date) : new Date(),
+      type: "expense",
+      referenceId: expense.id,
+      partyType: "none",
+      amount: body.amount,
+      direction: "debit",
+      note: `${body.category}: ${body.title}`,
+      createdByUserId,
+    });
+
     return res.status(201).json({
       ...expense,
       amount: parseFloat(expense.amount as string),
       createdAt: expense.createdAt.toISOString(),
     });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({ error: "Failed to create expense" });
   }
 });

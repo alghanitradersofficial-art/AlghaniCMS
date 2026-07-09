@@ -9,6 +9,8 @@ const router = Router();
 router.get("/profit-loss", async (req, res) => {
   try {
     const period = (req.query.period as string) || "monthly";
+    const fromParam = req.query.from as string | undefined;
+    const toParam = req.query.to as string | undefined;
     let intervals = 6;
     let intervalUnit = "month";
 
@@ -17,9 +19,20 @@ router.get("/profit-loss", async (req, res) => {
     else if (period === "monthly") { intervals = 6; intervalUnit = "month"; }
     else if (period === "yearly") { intervals = 3; intervalUnit = "year"; }
 
+    // When an explicit custom range is given, the headline totals (revenue,
+    // costOfGoods, expenses) are scoped to that range instead of all-time —
+    // the trailing `breakdown` series below is unaffected and always shows
+    // the last N intervals for trend context.
+    const rangeParams: unknown[] = [];
+    let rangeClause = "";
+    if (fromParam && toParam) {
+      rangeClause = " AND created_at >= $1 AND created_at <= $2";
+      rangeParams.push(fromParam, new Date(new Date(toParam).setHours(23, 59, 59, 999)).toISOString());
+    }
+
     const [revenueRes, cogRes, expRes] = await Promise.all([
-      pool.query(`SELECT COALESCE(SUM(total::numeric), 0) as total FROM sales WHERE status != 'cancelled'`),
-      pool.query(`SELECT COALESCE(SUM(total::numeric), 0) as total FROM purchases WHERE status != 'cancelled'`),
+      pool.query(`SELECT COALESCE(SUM(total::numeric), 0) as total FROM sales WHERE status != 'cancelled'${rangeClause}`, rangeParams),
+      pool.query(`SELECT COALESCE(SUM(total::numeric), 0) as total FROM purchases WHERE status != 'cancelled'${rangeClause}`, rangeParams),
       pool.query(`SELECT COALESCE(SUM(amount::numeric), 0) as total FROM expenses`),
     ]);
 

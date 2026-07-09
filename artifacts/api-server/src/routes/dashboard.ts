@@ -1,10 +1,147 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
 import { db } from "@workspace/db";
-import { productsTable } from "@workspace/db";
-import { lte, sql } from "drizzle-orm";
+import { productsTable, generalLedgerEntriesTable } from "@workspace/db";
+import { lte, sql, and, gte } from "drizzle-orm";
 
 const router = Router();
+
+/**
+ * Resolves a `range` query param (today | week | month | year | all | custom)
+ * plus optional `from`/`to` into a concrete [start, end] Date pair. Shared by
+ * every date-range-aware endpoint below and intended to match the same
+ * presets used by the frontend's shared DateRangeSelector component.
+ */
+function resolveRange(req: import("express").Request): { start: Date | null; end: Date | null } {
+  const range = (req.query.range as string) || "all";
+  const now = new Date();
+
+  if (range === "custom") {
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+    return {
+      start: from ? new Date(from) : null,
+      end: to ? new Date(new Date(to).setHours(23, 59, 59, 999)) : null,
+    };
+  }
+  if (range === "today") {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return { start, end: now };
+  }
+  if (range === "week") {
+    const start = new Date(now);
+    start.setDate(now.getDate() - now.getDay());
+    start.setHours(0, 0, 0, 0);
+    return { start, end: now };
+  }
+  if (range === "month") {
+    return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now };
+  }
+  if (range === "year") {
+    return { start: new Date(now.getFullYear(), 0, 1), end: now };
+  }
+  return { start: null, end: null }; // "all"
+}
+
+// GET /api/dashboard/summary-range?range=today|week|month|year|all|custom&from=&to=
+// Range-aware KPI summary driven by the shared date-range selector (section 5).
+// "all" returns true lifetime totals — the existing /summary endpoint below is
+// kept unchanged for backward compatibility and is equivalent to range=all.
+router.get("/summary-range", async (req, res): Promise<any> => {
+  try {
+    const { start, end } = resolveRange(req);
+    const conditions = [];
+    if (start) conditions.push(gte(generalLedgerEntriesTable.date, start));
+    if (end) conditions.push(lte(generalLedgerEntriesTable.date, end));
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [byType] = await Promise.all([
+      db
+        .select({
+          type: generalLedgerEntriesTable.type,
+          direction: generalLedgerEntriesTable.direction,
+          total: sql<string>`COALESCE(SUM(${generalLedgerEntriesTable.amount}), 0)`,
+          count: sql<string>`COUNT(*)`,
+        })
+        .from(generalLedgerEntriesTable)
+        .where(whereClause)
+        .groupBy(generalLedgerEntriesTable.type, generalLedgerEntriesTable.direction),
+    ]);
+
+    const totals: Record<string, number> = {};
+    let salesCount = 0;
+    for (const row of byType) {
+      const amount = parseFloat(row.total);
+      totals[row.type] = (totals[row.type] ?? 0) + amount;
+      if (row.type === "sale") salesCount += parseInt(row.count);
+    }
+
+    const totalRevenue = totals["sale"] ?? 0;
+    const totalPurchases = totals["purchase"] ?? 0;
+    const totalExpenses = totals["expense"] ?? 0;
+    const totalSalaries = totals["salary"] ?? 0;
+    const netProfit = totalRevenue - totalPurchases - totalExpenses - totalSalaries;
+
+    // Lifetime-only figures that don't make sense to range-filter (current
+    // stock value, total counts) are always computed as true "all time".
+    const [productsRes, customersRes, suppliersRes, inventoryValueRes] = await Promise.all([
+      pool.query(`SELECT COUNT(*) AS count FROM products`),
+      pool.query(`SELECT COUNT(*) AS count FROM customers`),
+      pool.query(`SELECT COUNT(*) AS count FROM suppliers`),
+      pool.query(`SELECT COALESCE(SUM(current_stock::numeric * cost_price::numeric), 0) AS value FROM products`),
+    ]);
+
+    return res.json({
+      range: (req.query.range as string) || "all",
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      totalPurchases: Math.round(totalPurchases * 100) / 100,
+      totalExpenses: Math.round(totalExpenses * 100) / 100,
+      totalSalaries: Math.round(totalSalaries * 100) / 100,
+      netProfit: Math.round(netProfit * 100) / 100,
+      salesCount,
+      totalProducts: parseInt(productsRes.rows[0].count, 10),
+      totalCustomers: parseInt(customersRes.rows[0].count, 10),
+      totalSuppliers: parseInt(suppliersRes.rows[0].count, 10),
+      inventoryValue: parseFloat(inventoryValueRes.rows[0].value),
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to fetch range-aware dashboard summary" });
+  }
+});
+
+// GET /api/dashboard/recent-activity-range?range=&from=&to=&limit=
+router.get("/recent-activity-range", async (req, res): Promise<any> => {
+  try {
+    const { start, end } = resolveRange(req);
+    const limit = parseInt(req.query.limit as string) || 15;
+    const conditions = [];
+    if (start) conditions.push(gte(generalLedgerEntriesTable.date, start));
+    if (end) conditions.push(lte(generalLedgerEntriesTable.date, end));
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const rows = await db
+      .select()
+      .from(generalLedgerEntriesTable)
+      .where(whereClause)
+      .orderBy(sql`${generalLedgerEntriesTable.date} DESC`)
+      .limit(limit);
+
+    return res.json(rows.map((r) => ({
+      id: r.id,
+      type: r.type,
+      description: r.note || `${r.type} — ${r.partyName ?? ""}`,
+      amount: parseFloat(r.amount as string),
+      direction: r.direction,
+      partyType: r.partyType,
+      partyName: r.partyName,
+      createdAt: r.date.toISOString(),
+    })));
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to fetch recent activity" });
+  }
+});
 
 router.get("/summary", async (req, res) => {
   try {

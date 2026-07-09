@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useGetSuppliers, useCreateSupplier, useUpdateSupplier, useDeleteSupplier, getGetSuppliersQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, UserSquare } from "lucide-react";
+import { Plus, Search, Edit, Trash2, UserSquare, ChevronRight } from "lucide-react";
+import { Link } from "wouter";
 
 type SuppForm = { name: string; phone: string; email: string; address: string; city: string; };
 const emptyForm: SuppForm = { name: "", phone: "", email: "", address: "", city: "" };
@@ -75,12 +76,17 @@ export default function Suppliers() {
                     : data?.length === 0 ? <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">No suppliers found</td></tr>
                     : data?.map(s => (
                       <tr key={s.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
-                        <td className="px-4 py-3 font-medium">{s.name}</td>
+                        <td className="px-4 py-3 font-medium">
+                          <Link href={`/suppliers/${s.id}`} className="hover:text-primary hover:underline">{s.name}</Link>
+                        </td>
                         <td className="px-4 py-3 text-muted-foreground">{s.phone}</td>
                         <td className="px-4 py-3 text-muted-foreground">{s.email || "—"}</td>
                         <td className="px-4 py-3 text-muted-foreground">{s.city || "—"}</td>
                         <td className="px-4 py-3 text-center">
                           <div className="flex gap-2 justify-center">
+                            <Link href={`/suppliers/${s.id}`}>
+                              <Button size="sm" variant="ghost" className="hover:bg-accent w-8 h-8 p-0"><ChevronRight className="w-4 h-4" /></Button>
+                            </Link>
                             <Button size="sm" variant="ghost" onClick={() => openEdit(s)} className="hover:bg-accent w-8 h-8 p-0"><Edit className="w-4 h-4" /></Button>
                             <Button size="sm" variant="ghost" onClick={() => handleDelete(s.id)} className="hover:bg-destructive/20 hover:text-destructive w-8 h-8 p-0"><Trash2 className="w-4 h-4" /></Button>
                           </div>

@@ -101,6 +101,157 @@ export async function initializeDatabase() {
         created_at timestamp with time zone NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS audit_log_entity_idx ON audit_log (entity_type, entity_id);
+
+      -- Suppliers: contact person / notes / opening balance (Khata)
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contact_person text;
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS notes text;
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS opening_balance numeric(14, 2) NOT NULL DEFAULT 0;
+
+      -- Staff (HR) module
+      CREATE TABLE IF NOT EXISTS staff (
+        id serial PRIMARY KEY,
+        name text NOT NULL,
+        designation text NOT NULL,
+        phone text,
+        address text,
+        cnic text,
+        joining_date text NOT NULL,
+        base_salary numeric(12, 2) NOT NULL DEFAULT 0,
+        status text NOT NULL DEFAULT 'active',
+        notes text,
+        created_at timestamp with time zone NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS staff_status_idx ON staff (status);
+
+      CREATE TABLE IF NOT EXISTS staff_attendance (
+        id serial PRIMARY KEY,
+        staff_id integer NOT NULL REFERENCES staff(id),
+        date text NOT NULL,
+        status text NOT NULL DEFAULT 'present',
+        note text,
+        created_at timestamp with time zone NOT NULL DEFAULT NOW(),
+        CONSTRAINT staff_attendance_staff_date_unique UNIQUE (staff_id, date)
+      );
+      CREATE INDEX IF NOT EXISTS staff_attendance_staff_idx ON staff_attendance (staff_id, date);
+      CREATE INDEX IF NOT EXISTS staff_attendance_date_idx ON staff_attendance (date);
+
+      CREATE TABLE IF NOT EXISTS staff_ledger_entries (
+        id serial PRIMARY KEY,
+        staff_id integer NOT NULL REFERENCES staff(id),
+        type text NOT NULL,
+        amount numeric(14, 2) NOT NULL,
+        running_balance numeric(14, 2) NOT NULL,
+        payslip_id integer,
+        description text,
+        created_by_user_id integer,
+        entry_date timestamp with time zone NOT NULL DEFAULT NOW(),
+        created_at timestamp with time zone NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS staff_ledger_staff_date_idx ON staff_ledger_entries (staff_id, entry_date);
+      CREATE INDEX IF NOT EXISTS staff_ledger_staff_id_idx ON staff_ledger_entries (staff_id, id);
+
+      CREATE TABLE IF NOT EXISTS staff_payslips (
+        id serial PRIMARY KEY,
+        staff_id integer NOT NULL REFERENCES staff(id),
+        month text NOT NULL,
+        base_salary numeric(12, 2) NOT NULL,
+        working_days integer NOT NULL,
+        days_present numeric(6, 2) NOT NULL,
+        days_absent numeric(6, 2) NOT NULL DEFAULT 0,
+        days_leave numeric(6, 2) NOT NULL DEFAULT 0,
+        prorated_salary numeric(12, 2) NOT NULL,
+        bonus numeric(12, 2) NOT NULL DEFAULT 0,
+        deduction numeric(12, 2) NOT NULL DEFAULT 0,
+        net_salary numeric(12, 2) NOT NULL,
+        notes text,
+        created_by_user_id integer,
+        created_at timestamp with time zone NOT NULL DEFAULT NOW(),
+        CONSTRAINT staff_payslips_staff_month_unique UNIQUE (staff_id, month)
+      );
+      CREATE INDEX IF NOT EXISTS staff_payslips_staff_idx ON staff_payslips (staff_id, month);
+
+      -- Supplier products / aliases
+      CREATE TABLE IF NOT EXISTS supplier_products (
+        id serial PRIMARY KEY,
+        supplier_id integer NOT NULL REFERENCES suppliers(id),
+        product_id integer NOT NULL REFERENCES products(id),
+        supplier_sku text,
+        supplier_product_name text,
+        cost_price numeric(12, 2),
+        is_preferred boolean NOT NULL DEFAULT false,
+        notes text,
+        created_at timestamp with time zone NOT NULL DEFAULT NOW(),
+        CONSTRAINT supplier_products_supplier_product_unique UNIQUE (supplier_id, product_id)
+      );
+      CREATE INDEX IF NOT EXISTS supplier_products_supplier_idx ON supplier_products (supplier_id);
+      CREATE INDEX IF NOT EXISTS supplier_products_product_idx ON supplier_products (product_id);
+
+      -- Supplier ledger (Khata)
+      CREATE TABLE IF NOT EXISTS supplier_ledger_entries (
+        id serial PRIMARY KEY,
+        supplier_id integer NOT NULL REFERENCES suppliers(id),
+        type text NOT NULL,
+        amount numeric(14, 2) NOT NULL,
+        running_balance numeric(14, 2) NOT NULL,
+        purchase_id integer,
+        payment_id integer,
+        description text,
+        created_by_user_id integer,
+        entry_date timestamp with time zone NOT NULL DEFAULT NOW(),
+        created_at timestamp with time zone NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS supplier_ledger_supplier_date_idx ON supplier_ledger_entries (supplier_id, entry_date);
+      CREATE INDEX IF NOT EXISTS supplier_ledger_supplier_id_idx ON supplier_ledger_entries (supplier_id, id);
+
+      CREATE TABLE IF NOT EXISTS supplier_payments (
+        id serial PRIMARY KEY,
+        supplier_id integer NOT NULL REFERENCES suppliers(id),
+        amount numeric(14, 2) NOT NULL,
+        method text NOT NULL DEFAULT 'cash',
+        bank_name text,
+        cheque_number text,
+        transaction_id text,
+        reference text,
+        notes text,
+        paid_by_user_id integer,
+        payment_date timestamp with time zone NOT NULL DEFAULT NOW(),
+        is_voided boolean NOT NULL DEFAULT false,
+        void_reason text,
+        created_at timestamp with time zone NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS supplier_payments_supplier_idx ON supplier_payments (supplier_id, payment_date);
+
+      -- Purchases: allow backdating + link to supplier ledger
+      ALTER TABLE purchases ADD COLUMN IF NOT EXISTS purchase_date timestamp with time zone NOT NULL DEFAULT NOW();
+      ALTER TABLE purchases ADD COLUMN IF NOT EXISTS amount_paid numeric(12, 2) NOT NULL DEFAULT 0;
+
+      -- Expenses: allow linking a party (e.g. paid to a supplier) — optional, non-breaking
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS created_by_user_id integer;
+
+      -- Sales: allow backdating the invoice date independent of created_at
+      ALTER TABLE sales ADD COLUMN IF NOT EXISTS sale_date timestamp with time zone;
+      UPDATE sales SET sale_date = created_at WHERE sale_date IS NULL;
+      ALTER TABLE sales ALTER COLUMN sale_date SET DEFAULT NOW();
+      ALTER TABLE sales ALTER COLUMN sale_date SET NOT NULL;
+
+      -- General ledger (unified cross-module feed for dashboard/calendar/reports)
+      CREATE TABLE IF NOT EXISTS general_ledger_entries (
+        id serial PRIMARY KEY,
+        date timestamp with time zone NOT NULL,
+        type text NOT NULL,
+        reference_id integer,
+        party_type text NOT NULL DEFAULT 'none',
+        party_id integer,
+        party_name text,
+        amount numeric(14, 2) NOT NULL,
+        direction text NOT NULL,
+        note text,
+        created_by_user_id integer,
+        created_at timestamp with time zone NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS general_ledger_date_idx ON general_ledger_entries (date);
+      CREATE INDEX IF NOT EXISTS general_ledger_type_idx ON general_ledger_entries (type, date);
+      CREATE INDEX IF NOT EXISTS general_ledger_party_idx ON general_ledger_entries (party_type, party_id, date);
     `);
   } catch (error) {
     logger.error({ err: error }, "Failed to initialize database schema");

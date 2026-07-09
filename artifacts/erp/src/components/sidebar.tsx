@@ -1,4 +1,4 @@
-import { LayoutDashboard, Package, Tags, Briefcase, ShoppingCart, Truck, Users, UserSquare, Receipt, Users2, IdCard, FileBarChart, LogOut, Settings2, Bell } from "lucide-react";
+import { LayoutDashboard, Package, Tags, Briefcase, ShoppingCart, Truck, Users, UserSquare, Receipt, Users2, IdCard, FileBarChart, LogOut, Settings2, Bell, HardHat, BookText, CalendarClock } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { clearAuth, getUser } from "@/lib/auth";
 
@@ -16,6 +16,9 @@ export function Sidebar() {
     { icon: Users, label: "Customers", href: "/customers" },
     { icon: UserSquare, label: "Suppliers", href: "/suppliers" },
     { icon: Receipt, label: "Expenses", href: "/expenses" },
+    { icon: HardHat, label: "Staff", href: "/staff" },
+    { icon: BookText, label: "Ledger", href: "/ledger" },
+    { icon: CalendarClock, label: "Calendar", href: "/calendar" },
     { icon: IdCard, label: "Employees", href: "/employees" },
     { icon: Users2, label: "Users", href: "/users" },
     { icon: FileBarChart, label: "Reports", href: "/reports" },

@@ -3,15 +3,26 @@ import { db } from "@workspace/db";
 import { purchasesTable, productsTable } from "@workspace/db";
 import { eq, ilike, and, sql } from "drizzle-orm";
 import { CreatePurchaseBody, UpdatePurchaseBody } from "@workspace/api-zod";
+import { z } from "zod";
+import { appendSupplierLedgerEntry } from "../lib/supplier-ledger.js";
+import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
+import { getUserIdFromRequest } from "../lib/auth-context.js";
 
 const router = Router();
+
+// Optional backdating field, layered on top of the generated CreatePurchaseBody
+// (not yet part of the OpenAPI spec) so old purchase records can be entered
+// with a real historical date instead of always defaulting to "now".
+const PurchaseDateExtension = z.object({ purchaseDate: z.string().optional() });
 
 function formatPurchase(p: typeof purchasesTable.$inferSelect) {
   return {
     ...p,
     subtotal: parseFloat(p.subtotal as string),
     total: parseFloat(p.total as string),
+    amountPaid: parseFloat((p.amountPaid ?? "0") as string),
     items: (p.items as unknown[]) || [],
+    purchaseDate: (p.purchaseDate ?? p.createdAt).toISOString(),
     createdAt: p.createdAt.toISOString(),
   };
 }
@@ -53,6 +64,10 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const body = CreatePurchaseBody.parse(req.body);
+    const { purchaseDate: purchaseDateStr } = PurchaseDateExtension.parse(req.body);
+    const purchaseDate = purchaseDateStr ? new Date(purchaseDateStr) : new Date();
+    const createdByUserId = getUserIdFromRequest(req);
+
     const items = body.items.map((item: { productId: number; quantity: number; unitCost: number }) => ({
       productId: item.productId,
       productName: "",
@@ -78,16 +93,50 @@ router.post("/", async (req, res) => {
     const subtotal = items.reduce((sum, i) => sum + i.total, 0);
     const poNumber = `PO-${Date.now()}`;
 
-    const [purchase] = await db.insert(purchasesTable).values({
-      poNumber,
-      supplierId: body.supplierId ?? null,
-      supplierName: body.supplierName,
-      status: body.status || "received",
-      subtotal: String(subtotal),
-      total: String(subtotal),
-      notes: body.notes ?? null,
-      items: items,
-    }).returning();
+    const purchase = await db.transaction(async (tx) => {
+      const [inserted] = await tx.insert(purchasesTable).values({
+        poNumber,
+        supplierId: body.supplierId ?? null,
+        supplierName: body.supplierName,
+        status: body.status || "received",
+        subtotal: String(subtotal),
+        total: String(subtotal),
+        notes: body.notes ?? null,
+        items: items,
+        purchaseDate,
+      }).returning();
+
+      // Only suppliers that exist as a real supplier record get a ledger
+      // entry — ad-hoc supplierName-only purchases (no supplierId) don't
+      // have a khata to post to.
+      if (body.supplierId) {
+        const ledgerEntry = await appendSupplierLedgerEntry(tx, {
+          supplierId: body.supplierId,
+          type: "purchase",
+          amount: subtotal,
+          purchaseId: inserted.id,
+          description: `Purchase — ${poNumber}`,
+          createdByUserId,
+          entryDate: purchaseDate,
+        });
+
+        await appendGeneralLedgerEntry(tx, {
+          date: purchaseDate,
+          type: "purchase",
+          referenceId: inserted.id,
+          partyType: "supplier",
+          partyId: body.supplierId,
+          partyName: body.supplierName,
+          amount: subtotal,
+          direction: "debit",
+          note: `PO ${poNumber}`,
+          createdByUserId,
+        });
+        void ledgerEntry;
+      }
+
+      return inserted;
+    });
 
     return res.status(201).json(formatPurchase(purchase));
   } catch (error) {

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, numeric } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, numeric, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -9,6 +9,7 @@ export const expensesTable = pgTable("expenses", {
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   date: text("date").notNull(),
   notes: text("notes"),
+  createdByUserId: integer("created_by_user_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
