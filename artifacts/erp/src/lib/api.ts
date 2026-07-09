@@ -1,5 +1,5 @@
 // Shared API base URL, matching the convention already used across pages
-// (see src/lib/auth.ts and src/pages/employees.tsx).
+// (see src/lib/auth.ts).
 export const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
 export async function apiFetch<T = any>(path: string, options?: RequestInit): Promise<T> {
