@@ -158,10 +158,13 @@ router.post("/:id/payments", async (req, res): Promise<any> => {
         entryDate: paymentDate,
       });
 
+      const validAllocations = (body.allocations ?? [])
+        .filter((a): a is { purchaseId: number; amount: number } => typeof a.purchaseId === "number" && typeof a.amount === "number");
+
       await allocateSupplierPayment(tx, {
         supplierId,
         amount: body.amount,
-        explicitAllocations: body.allocations,
+        explicitAllocations: validAllocations.length > 0 ? validAllocations : undefined,
       });
 
       const [inserted] = await tx.insert(supplierPaymentsTable).values({
