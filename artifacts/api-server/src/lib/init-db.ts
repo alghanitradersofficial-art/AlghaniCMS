@@ -252,6 +252,31 @@ export async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS general_ledger_date_idx ON general_ledger_entries (date);
       CREATE INDEX IF NOT EXISTS general_ledger_type_idx ON general_ledger_entries (type, date);
       CREATE INDEX IF NOT EXISTS general_ledger_party_idx ON general_ledger_entries (party_type, party_id, date);
+
+      CREATE TABLE IF NOT EXISTS stock_adjustments (
+        id serial PRIMARY KEY,
+        product_id integer NOT NULL REFERENCES products(id),
+        direction text NOT NULL,
+        quantity integer NOT NULL,
+        reason text NOT NULL,
+        notes text,
+        created_by_user_id integer,
+        created_at timestamp with time zone NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS stock_adjustments_product_idx ON stock_adjustments (product_id, created_at);
+
+      CREATE TABLE IF NOT EXISTS reminders (
+        id serial PRIMARY KEY,
+        title text NOT NULL,
+        description text,
+        due_date timestamp with time zone NOT NULL,
+        related_type text,
+        related_id integer,
+        is_completed boolean NOT NULL DEFAULT false,
+        created_by_user_id integer,
+        created_at timestamp with time zone NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS reminders_due_idx ON reminders (due_date, is_completed);
     `);
   } catch (error) {
     logger.error({ err: error }, "Failed to initialize database schema");

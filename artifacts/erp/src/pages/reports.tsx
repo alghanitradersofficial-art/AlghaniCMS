@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Layout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useGetProfitLossReport, useGetInventoryReport } from "@workspace/api-client-react";
+import { useGetProfitLossReport, useGetInventoryReport, useGetDashboardSummary } from "@workspace/api-client-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { FileBarChart, TrendingUp, TrendingDown, Package, Download, Send, Mail, MessageSquare } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -25,6 +25,7 @@ export default function Reports() {
 
   const { data: pl, isLoading: loadingPL } = useGetProfitLossReport({ period });
   const { data: inv, isLoading: loadingInv } = useGetInventoryReport();
+  const { data: dashboardSummary } = useGetDashboardSummary();
 
   const handleExcelExport = async () => {
     setExporting(true);
@@ -115,6 +116,22 @@ export default function Reports() {
               onClick={() => setPeriod(p)}
               className={`capitalize h-9 ${period === p ? "bg-primary text-white hover:bg-primary/90" : "border border-border bg-transparent hover:bg-accent"}`}
             >{p}</Button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          {[
+            { label: "Today Sales", value: dashboardSummary?.todaySales },
+            { label: "This Week", value: dashboardSummary?.weeklySales },
+            { label: "This Month", value: dashboardSummary?.monthlySales },
+            { label: "Net Profit", value: pl?.netProfit },
+          ].map(stat => (
+            <Card key={stat.label} className="border-border bg-card">
+              <CardContent className="p-3 sm:p-4">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">{stat.label}</p>
+                <p className="text-base sm:text-xl font-bold text-secondary">Rs. {stat.value?.toLocaleString() || 0}</p>
+              </CardContent>
+            </Card>
           ))}
         </div>
 

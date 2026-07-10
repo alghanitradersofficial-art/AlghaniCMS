@@ -1,9 +1,14 @@
 import { Router } from "express";
-import { pool } from "@workspace/db";
+import { pool, db, productsTable, customersTable, suppliersTable, purchasesTable, salesTable } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
 import multer from "multer";
 import ExcelJS from "exceljs";
 import path from "path";
 import { groqVision, groqChat, getGroqClient } from "../lib/groq.js";
+import { appendLedgerEntry, round2 } from "../lib/ledger.js";
+import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
+import { appendSupplierLedgerEntry } from "../lib/supplier-ledger.js";
+import { getUserIdFromRequest } from "../lib/auth-context.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -13,6 +18,317 @@ function parseNumber(val: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 function parseStr(val: unknown): string { return String(val || "").trim(); }
+function parseDate(val: unknown): Date {
+  if (!val) return new Date();
+  const d = new Date(String(val));
+  return Number.isNaN(d.getTime()) ? new Date() : d;
+}
+
+async function ensureProduct(productData: Record<string, unknown>) {
+  const name = parseStr(productData.name);
+  const sku = parseStr(productData.sku) || `LEGACY-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  if (!name) return null;
+
+  const [existing] = await db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.sku, sku));
+  if (existing) {
+    await db.update(productsTable).set({
+      name,
+      costPrice: String(parseNumber(productData.costPrice)),
+      salePrice: String(parseNumber(productData.salePrice)),
+      currentStock: parseInt(String(productData.currentStock || 0), 10) || 0,
+      minStock: parseInt(String(productData.minStock || 5), 10) || 5,
+      unit: parseStr(productData.unit) || "pcs",
+    }).where(eq(productsTable.id, existing.id));
+    return { id: existing.id, created: false };
+  }
+
+  const [inserted] = await db.insert(productsTable).values({
+    name,
+    sku,
+    costPrice: String(parseNumber(productData.costPrice)),
+    salePrice: String(parseNumber(productData.salePrice)),
+    currentStock: parseInt(String(productData.currentStock || 0), 10) || 0,
+    minStock: parseInt(String(productData.minStock || 5), 10) || 5,
+    unit: parseStr(productData.unit) || "pcs",
+  }).returning();
+  return { id: inserted.id, created: true };
+}
+
+async function ensureCustomer(customerData: Record<string, unknown>) {
+  const name = parseStr(customerData.name);
+  const phone = parseStr(customerData.phone);
+  if (!name) return null;
+
+  const [existing] = await db.select().from(customersTable).where(phone ? sql`${customersTable.phone} = ${phone}` : eq(customersTable.name, name)).limit(1);
+  if (existing) {
+    await db.update(customersTable).set({
+      name,
+      phone: phone || existing.phone,
+      email: parseStr(customerData.email) || null,
+      address: parseStr(customerData.address) || null,
+      city: parseStr(customerData.city) || null,
+      type: parseStr(customerData.type) || "retail",
+      openingBalance: String(parseNumber(customerData.openingBalance)),
+      creditLimit: String(parseNumber(customerData.creditLimit)),
+    }).where(eq(customersTable.id, existing.id));
+    return { id: existing.id, created: false };
+  }
+
+  const [inserted] = await db.insert(customersTable).values({
+    name,
+    phone: phone || "",
+    email: parseStr(customerData.email) || null,
+    address: parseStr(customerData.address) || null,
+    city: parseStr(customerData.city) || null,
+    type: parseStr(customerData.type) || "retail",
+    openingBalance: String(parseNumber(customerData.openingBalance)),
+    creditLimit: String(parseNumber(customerData.creditLimit)),
+  }).returning();
+  return { id: inserted.id, created: true };
+}
+
+async function ensureSupplier(supplierData: Record<string, unknown>) {
+  const name = parseStr(supplierData.name);
+  const phone = parseStr(supplierData.phone);
+  if (!name) return null;
+
+  const [existing] = await db.select().from(suppliersTable).where(phone ? sql`${suppliersTable.phone} = ${phone}` : eq(suppliersTable.name, name)).limit(1);
+  if (existing) {
+    await db.update(suppliersTable).set({
+      name,
+      phone: phone || existing.phone,
+      email: parseStr(supplierData.email) || null,
+      address: parseStr(supplierData.address) || null,
+      city: parseStr(supplierData.city) || null,
+      contactPerson: parseStr(supplierData.contactPerson) || null,
+      openingBalance: String(parseNumber(supplierData.openingBalance)),
+    }).where(eq(suppliersTable.id, existing.id));
+    return { id: existing.id, created: false };
+  }
+
+  const [inserted] = await db.insert(suppliersTable).values({
+    name,
+    phone: phone || "",
+    email: parseStr(supplierData.email) || null,
+    address: parseStr(supplierData.address) || null,
+    city: parseStr(supplierData.city) || null,
+    contactPerson: parseStr(supplierData.contactPerson) || null,
+    openingBalance: String(parseNumber(supplierData.openingBalance)),
+  }).returning();
+  return { id: inserted.id, created: true };
+}
+
+router.post("/legacy", upload.single("file"), async (req, res) => {
+  try {
+    let payload: Record<string, unknown> = {};
+    if (req.file) {
+      payload = JSON.parse(req.file.buffer.toString("utf-8"));
+    } else if (typeof req.body?.data === "string") {
+      payload = JSON.parse(req.body.data);
+    } else {
+      payload = (req.body as Record<string, unknown>) || {};
+    }
+
+    const createdByUserId = getUserIdFromRequest(req);
+    const products = Array.isArray(payload.products) ? payload.products : [];
+    const customers = Array.isArray(payload.customers) ? payload.customers : [];
+    const suppliers = Array.isArray(payload.suppliers) ? payload.suppliers : [];
+    const purchases = Array.isArray(payload.purchases) ? payload.purchases : [];
+    const sales = Array.isArray(payload.sales) ? payload.sales : [];
+
+    const summary = { importedProducts: 0, importedCustomers: 0, importedSuppliers: 0, importedPurchases: 0, importedSales: 0 };
+
+    for (const rawProduct of products as Array<Record<string, unknown>>) {
+      const product = await ensureProduct(rawProduct);
+      if (product) summary.importedProducts += product.created ? 1 : 0;
+    }
+
+    for (const rawCustomer of customers as Array<Record<string, unknown>>) {
+      const customer = await ensureCustomer(rawCustomer);
+      if (customer) summary.importedCustomers += customer.created ? 1 : 0;
+    }
+
+    for (const rawSupplier of suppliers as Array<Record<string, unknown>>) {
+      const supplier = await ensureSupplier(rawSupplier);
+      if (supplier) summary.importedSuppliers += supplier.created ? 1 : 0;
+    }
+
+    for (const rawPurchase of purchases as Array<Record<string, unknown>>) {
+      const supplierName = parseStr(rawPurchase.supplierName);
+      const supplierId = rawPurchase.supplierId ? Number(rawPurchase.supplierId) : undefined;
+      const supplierRow = supplierId
+        ? (await db.select({ id: suppliersTable.id }).from(suppliersTable).where(eq(suppliersTable.id, supplierId)).limit(1))[0] ?? null
+        : supplierName
+          ? (await db.select({ id: suppliersTable.id }).from(suppliersTable).where(eq(suppliersTable.name, supplierName)).limit(1))[0] ?? null
+          : null;
+      const items = Array.isArray(rawPurchase.items) ? rawPurchase.items : [];
+      if (!items.length) continue;
+
+      const purchaseItems = await Promise.all(items.map(async (item: Record<string, unknown>) => {
+        const productIdentifier = parseStr(item.sku) || parseStr(item.productName);
+        let productId = item.productId ? Number(item.productId) : undefined;
+        if (!productId && productIdentifier) {
+          const [product] = await db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.sku, productIdentifier));
+          productId = product?.id;
+        }
+        if (!productId) {
+          const created = await ensureProduct({ name: parseStr(item.productName) || `Imported item ${Date.now()}`, sku: parseStr(item.sku) || `ITEM-${Math.random().toString(36).slice(2, 8)}`, costPrice: item.unitCost, salePrice: item.unitCost });
+          productId = created?.id;
+        }
+        return {
+          productId: productId ?? 0,
+          productName: parseStr(item.productName) || "Imported item",
+          quantity: parseNumber(item.quantity),
+          unitCost: parseNumber(item.unitCost),
+          total: parseNumber(item.quantity) * parseNumber(item.unitCost),
+        };
+      }));
+
+      const subtotal = purchaseItems.reduce((sum, item) => sum + item.total, 0);
+      const poNumber = parseStr(rawPurchase.poNumber) || `PO-LEGACY-${Date.now()}-${summary.importedPurchases + 1}`;
+      const purchaseDate = parseDate(rawPurchase.purchaseDate);
+      const status = parseStr(rawPurchase.status) || "received";
+
+      const insertedPurchase = await db.transaction(async (tx) => {
+        const [inserted] = await tx.insert(purchasesTable).values({
+          poNumber,
+          supplierId: supplierRow?.id ?? null,
+          supplierName: supplierName || "Imported Supplier",
+          status,
+          subtotal: String(round2(subtotal)),
+          total: String(round2(subtotal)),
+          notes: parseStr(rawPurchase.notes) || null,
+          items: purchaseItems,
+          purchaseDate,
+        }).returning();
+
+        if (supplierRow?.id) {
+          await appendSupplierLedgerEntry(tx, {
+            supplierId: supplierRow.id,
+            type: "purchase",
+            amount: round2(subtotal),
+            purchaseId: inserted.id,
+            description: `Imported purchase — ${poNumber}`,
+            createdByUserId,
+            entryDate: purchaseDate,
+          });
+          await appendGeneralLedgerEntry(tx, {
+            date: purchaseDate,
+            type: "purchase",
+            referenceId: inserted.id,
+            partyType: "supplier",
+            partyId: supplierRow.id,
+            partyName: supplierName || "Imported Supplier",
+            amount: round2(subtotal),
+            direction: "debit",
+            note: `Imported PO ${poNumber}`,
+            createdByUserId,
+          });
+        }
+
+        if (status === "received") {
+          for (const line of purchaseItems) {
+            await tx.update(productsTable).set({ currentStock: sql`${productsTable.currentStock} + ${line.quantity}` }).where(eq(productsTable.id, line.productId));
+          }
+        }
+
+        return inserted;
+      });
+
+      if (insertedPurchase) summary.importedPurchases += 1;
+    }
+
+    for (const rawSale of sales as Array<Record<string, unknown>>) {
+      const customerName = parseStr(rawSale.customerName);
+      const customerId = rawSale.customerId ? Number(rawSale.customerId) : undefined;
+      const customerRow = customerId
+        ? (await db.select({ id: customersTable.id }).from(customersTable).where(eq(customersTable.id, customerId)).limit(1))[0] ?? null
+        : customerName
+          ? (await db.select({ id: customersTable.id }).from(customersTable).where(eq(customersTable.name, customerName)).limit(1))[0] ?? null
+          : null;
+      const items = Array.isArray(rawSale.items) ? rawSale.items : [];
+      if (!items.length) continue;
+
+      const saleItems = await Promise.all(items.map(async (item: Record<string, unknown>) => {
+        const productIdentifier = parseStr(item.sku) || parseStr(item.productName);
+        let productId = item.productId ? Number(item.productId) : undefined;
+        if (!productId && productIdentifier) {
+          const [product] = await db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.sku, productIdentifier));
+          productId = product?.id;
+        }
+        if (!productId) {
+          const created = await ensureProduct({ name: parseStr(item.productName) || `Imported item ${Date.now()}`, sku: parseStr(item.sku) || `ITEM-${Math.random().toString(36).slice(2, 8)}`, costPrice: item.unitPrice, salePrice: item.unitPrice });
+          productId = created?.id;
+        }
+        return {
+          productId: productId ?? 0,
+          productName: parseStr(item.productName) || "Imported item",
+          quantity: parseNumber(item.quantity),
+          unitPrice: parseNumber(item.unitPrice),
+          total: parseNumber(item.quantity) * parseNumber(item.unitPrice),
+        };
+      }));
+
+      const subtotal = saleItems.reduce((sum, item) => sum + item.total, 0);
+      const discount = parseNumber(rawSale.discount);
+      const total = round2(subtotal - discount);
+      const invoiceNumber = parseStr(rawSale.invoiceNumber) || `INV-LEGACY-${Date.now()}-${summary.importedSales + 1}`;
+      const status = parseStr(rawSale.status) || "completed";
+      const saleDate = parseDate(rawSale.saleDate);
+
+      const insertedSale = await db.transaction(async (tx) => {
+        const [inserted] = await tx.insert(salesTable).values({
+          invoiceNumber,
+          customerId: customerRow?.id ?? null,
+          customerName: customerName || "Imported Customer",
+          status,
+          subtotal: String(round2(subtotal)),
+          discount: String(round2(discount)),
+          total: String(total),
+          notes: parseStr(rawSale.notes) || null,
+          items: saleItems,
+          saleDate,
+        }).returning();
+
+        if (customerRow?.id && status === "completed") {
+          for (const line of saleItems) {
+            await tx.update(productsTable).set({ currentStock: sql`${productsTable.currentStock} - ${line.quantity}` }).where(eq(productsTable.id, line.productId));
+            await appendLedgerEntry(tx, {
+              customerId: customerRow.id,
+              type: "sale",
+              amount: round2(line.total),
+              saleId: inserted.id,
+              description: `Imported sale — ${invoiceNumber}`,
+              createdByUserId,
+              entryDate: saleDate,
+            });
+          }
+          await appendGeneralLedgerEntry(tx, {
+            date: saleDate,
+            type: "sale",
+            referenceId: inserted.id,
+            partyType: "customer",
+            partyId: customerRow.id,
+            partyName: customerName || "Imported Customer",
+            amount: total,
+            direction: "credit",
+            note: `Imported invoice ${invoiceNumber}`,
+            createdByUserId,
+          });
+        }
+
+        return inserted;
+      });
+
+      if (insertedSale) summary.importedSales += 1;
+    }
+
+    return res.json({ success: true, message: "Legacy ERP data imported successfully", ...summary });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Legacy import failed: " + (error as Error).message });
+  }
+});
 
 // ─── AI IMAGE IMPORT (Groq Vision) ───────────────────────────────────────────
 router.post("/ai/image", upload.single("file"), async (req, res) => {

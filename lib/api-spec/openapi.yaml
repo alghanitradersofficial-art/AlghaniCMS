@@ -1524,7 +1524,7 @@ components:
 
     User:
       type: object
-      required: [id, name, email, role, isActive, createdAt]
+      required: [id, name, email, role, isActive, createdAt, permissions]
       properties:
         id:
           type: integer
@@ -1537,6 +1537,10 @@ components:
           enum: [ceo, developer, manager, sales, accountant, warehouse, content]
         isActive:
           type: boolean
+        permissions:
+          type: array
+          items:
+            type: string
         createdAt:
           type: string
 
@@ -1553,6 +1557,10 @@ components:
           enum: [ceo, developer, manager, sales, accountant, warehouse, content]
         password:
           type: string
+        permissions:
+          type: array
+          items:
+            type: string
 
     UserUpdate:
       type: object
@@ -1564,6 +1572,10 @@ components:
           enum: [ceo, developer, manager, sales, accountant, warehouse, content]
         isActive:
           type: boolean
+        permissions:
+          type: array
+          items:
+            type: string
 
     Expense:
       type: object

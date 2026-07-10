@@ -17,6 +17,7 @@ export interface DashboardSummary {
   netProfit: number;
   totalProducts: number;
   totalCustomers: number;
+  totalSuppliers: number;
   pendingOrders: number;
   lowStockCount: number;
   todaySales: number;
@@ -444,6 +445,7 @@ export interface User {
   email: string;
   role: UserRole;
   isActive: boolean;
+  permissions: string[];
   createdAt: string;
 }
 
@@ -465,6 +467,7 @@ export interface UserInput {
   email: string;
   role: UserInputRole;
   password: string;
+  permissions?: string[];
 }
 
 export type UserUpdateRole = typeof UserUpdateRole[keyof typeof UserUpdateRole];
@@ -484,6 +487,7 @@ export interface UserUpdate {
   name?: string;
   role?: UserUpdateRole;
   isActive?: boolean;
+  permissions?: string[];
 }
 
 export interface Expense {

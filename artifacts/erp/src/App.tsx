@@ -20,6 +20,8 @@ import SupplierDetail from "@/pages/supplier-detail";
 import LedgerPage from "@/pages/ledger";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
+import QuickEntry from "@/pages/quick-entry";
+import Operations from "@/pages/operations";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30000 } },
@@ -57,6 +59,8 @@ function Router() {
       <Route path="/ledger">{() => <AuthGuard component={LedgerPage} permission="ledger" />}</Route>
       <Route path="/users">{() => <AuthGuard component={Users} permission="users" />}</Route>
       <Route path="/reports">{() => <AuthGuard component={Reports} permission="reports" />}</Route>
+      <Route path="/quick-entry">{() => <AuthGuard component={QuickEntry} permission="sales" />}</Route>
+      <Route path="/operations">{() => <AuthGuard component={Operations} permission="inventory" />}</Route>
       <Route path="/settings">{() => <AuthGuard component={Settings} permission="settings" />}</Route>
       <Route path="/">{() => <Redirect to={isLoggedIn() ? "/dashboard" : "/login"} />}</Route>
       <Route component={NotFound} />

@@ -46,6 +46,8 @@ export default function Settings() {
   const [emailPreviewLoading, setEmailPreviewLoading] = useState(false);
   const [dbStats, setDbStats] = useState<Record<string, number> | null>(null);
   const [importing, setImporting] = useState(false);
+  const [legacyImporting, setLegacyImporting] = useState(false);
+  const [legacyImportResult, setLegacyImportResult] = useState<{ message?: string; importedProducts?: number; importedCustomers?: number; importedSuppliers?: number; importedPurchases?: number; importedSales?: number } | null>(null);
 
   useEffect(() => {
     fetch(`${BASE}/api/settings`).then(r => r.json()).then(d => { if (d.company) setCompany(c => ({ ...c, ...d.company })); }).catch(() => {});
@@ -130,6 +132,25 @@ export default function Settings() {
       toast({ title: `✅ Import done`, description: `${d.imported} records restored. ${d.errors?.length ? d.errors.length + " errors." : ""}` });
     } catch (err) { toast({ title: "Import failed", description: (err as Error).message, variant: "destructive" }); }
     finally { setImporting(false); e.target.value = ""; }
+  };
+
+  const importLegacyData = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLegacyImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${BASE}/api/import/legacy`, { method: "POST", body: formData });
+      const d = await res.json();
+      setLegacyImportResult(d);
+      toast({ title: "✅ Legacy data imported", description: d.message || "Your historical records are now available in ERP." });
+    } catch (err) {
+      toast({ title: "Legacy import failed", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setLegacyImporting(false);
+      e.target.value = "";
+    }
   };
 
 
@@ -333,6 +354,25 @@ export default function Settings() {
                     </div>
                     <input type="file" accept=".json" className="hidden" onChange={importDB} disabled={importing} />
                   </label>
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3 font-medium">Legacy ERP Data Import</p>
+                  <p className="text-sm text-muted-foreground mb-3">Upload a JSON file with products, customers, suppliers, purchases, and sales to bring old records into the new ERP.</p>
+                  <label className="cursor-pointer">
+                    <div className="border-2 border-dashed border-border hover:border-primary/50 rounded-lg p-6 text-center transition-colors">
+                      <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">{legacyImporting ? "Importing legacy records..." : "Upload old business data"}</p>
+                    </div>
+                    <input type="file" accept=".json" className="hidden" onChange={importLegacyData} disabled={legacyImporting} />
+                  </label>
+                  {legacyImportResult && (
+                    <div className="rounded-lg border border-border bg-background/50 p-3 text-sm text-muted-foreground mt-3">
+                      <p className="font-medium text-foreground">{legacyImportResult.message}</p>
+                      <p>Products: {legacyImportResult.importedProducts ?? 0} · Customers: {legacyImportResult.importedCustomers ?? 0} · Suppliers: {legacyImportResult.importedSuppliers ?? 0}</p>
+                      <p>Purchases: {legacyImportResult.importedPurchases ?? 0} · Sales: {legacyImportResult.importedSales ?? 0}</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

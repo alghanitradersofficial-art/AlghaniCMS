@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useGetProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useGetCategories, useGetBrands, getGetProductsQueryKey } from "@workspace/api-client-react";
+import { useGetProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useGetCategories, useGetBrands, useGetInventoryReport, getGetProductsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit, Trash2, AlertTriangle, Package } from "lucide-react";
 
@@ -40,6 +40,7 @@ export default function Inventory() {
   });
   const { data: categories } = useGetCategories();
   const { data: brands } = useGetBrands();
+  const { data: inventoryReport } = useGetInventoryReport();
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
@@ -107,6 +108,27 @@ export default function Inventory() {
           <Button variant={lowStockOnly ? "default" : "outline"} onClick={() => setLowStockOnly(!lowStockOnly)} className={lowStockOnly ? "bg-primary" : "border-border"}>
             <AlertTriangle className="w-4 h-4 mr-2" /> Low Stock
           </Button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Card className="border-border bg-card">
+            <CardContent className="p-4">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Total Stock Units</p>
+              <p className="text-xl font-bold mt-1">{inventoryReport?.totalStock?.toLocaleString() || "0"}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border bg-card">
+            <CardContent className="p-4">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Inventory Value</p>
+              <p className="text-xl font-bold mt-1 text-secondary">Rs. {inventoryReport?.totalValue?.toLocaleString() || "0"}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border bg-card">
+            <CardContent className="p-4">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Low Stock Alerts</p>
+              <p className="text-xl font-bold mt-1 text-destructive">{inventoryReport?.categories?.filter(c => c.count <= 0).length || 0}</p>
+            </CardContent>
+          </Card>
         </div>
 
         <Card className="border-border bg-card">

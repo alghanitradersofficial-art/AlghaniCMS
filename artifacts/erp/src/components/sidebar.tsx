@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Package, Briefcase, ShoppingCart, Truck, Users,
   UserSquare, Receipt, FileBarChart, LogOut, Settings2, HardHat,
-  BookText, Users2
+  BookText, Users2, Zap
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { clearAuth, getUser, hasPermission } from "@/lib/auth";
@@ -15,6 +15,8 @@ export const MENU_ITEMS = [
   { icon: Users, label: "Customers", href: "/customers", permission: "customers" },
   { icon: UserSquare, label: "Suppliers", href: "/suppliers", permission: "suppliers" },
   { icon: Receipt, label: "Expenses", href: "/expenses", permission: "expenses" },
+  { icon: Zap, label: "Quick Entry", href: "/quick-entry", permission: "sales" },
+  { icon: Package, label: "Operations", href: "/operations", permission: "inventory" },
   { icon: HardHat, label: "Staff", href: "/staff", permission: "staff" },
   { icon: BookText, label: "Ledger", href: "/ledger", permission: "ledger" },
   { icon: FileBarChart, label: "Reports & Analytics", href: "/reports", permission: "reports" },

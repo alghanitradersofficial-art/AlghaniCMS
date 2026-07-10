@@ -1,15 +1,17 @@
 import type { Request } from "express";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "alghani-erp-secret-2024";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET environment variable is required");
+}
 
 /**
  * Best-effort extraction of the calling user's id from the `Authorization:
  * Bearer <token>` header, used to attribute ledger entries, price history
  * rows, payments, and audit log entries to a real user.
  *
- * Returns `null` (never throws) when there is no/invalid token, so this can
- * be called from any route without changing that route's auth requirements.
+ * Returns `null` when there is no/invalid token.
  */
 export function getUserIdFromRequest(req: Request): number | null {
   try {

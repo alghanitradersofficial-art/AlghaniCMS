@@ -1,0 +1,356 @@
+$ vite build --config vite.config.ts
+[36mvite v7.3.5 [32mbuilding client environment for production...[36m[39m
+transforming...
+[33msrc/components/ui/tooltip.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
+[33msrc/components/ui/calendar.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
+[33msrc/components/ui/select.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
+[33msrc/components/ui/label.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
+[32mG£ô[39m 4118 modules transformed.
+runtime: VirtualAlloc of 8192 bytes failed with errno=1455
+fatal error: out of memory
+System.Management.Automation.RemoteException
+runtime stack:
+runtime.throw({0x7ff712bc3671?, 0xc003270000?})
+	runtime/panic.go:1094 +0x4d fp=0x4a8e9ff810 sp=0x4a8e9ff7e0 pc=0x7ff7125b71ad
+runtime.sysUsedOS(0xc003270000, 0x2000)
+	runtime/mem_windows.go:83 +0x1bb fp=0x4a8e9ff870 sp=0x4a8e9ff810 pc=0x7ff71255bc7b
+runtime.sysUsed(...)
+	runtime/mem.go:85
+runtime.(*mheap).allocSpan(0x7ff712ff78a0, 0x1, 0x0, 0x37)
+	runtime/mheap.go:1404 +0x487 fp=0x4a8e9ff918 sp=0x4a8e9ff870 pc=0x7ff71256eb47
+runtime.(*mheap).alloc.func1()
+	runtime/mheap.go:1017 +0x5c fp=0x4a8e9ff960 sp=0x4a8e9ff918 pc=0x7ff71256e31c
+runtime.systemstack(0xc000188540)
+	runtime/asm_amd64.s:513 +0x49 fp=0x4a8e9ff970 sp=0x4a8e9ff960 pc=0x7ff7125bd269
+System.Management.Automation.RemoteException
+goroutine 1781 gp=0xc00091e1c0 m=8 mp=0xc000183008 [running]:
+runtime.systemstack_switch()
+	runtime/asm_amd64.s:478 +0x8 fp=0xc002e38fd8 sp=0xc002e38fc8 pc=0x7ff7125bd208
+runtime.(*mheap).alloc(0x0?, 0xdba?, 0x7?)
+	runtime/mheap.go:1011 +0x5b fp=0xc002e39020 sp=0xc002e38fd8 pc=0x7ff71256e27b
+runtime.(*mcentral).grow(0x2000?)
+	runtime/mcentral.go:253 +0x36 fp=0xc002e39050 sp=0xc002e39020 pc=0x7ff712559c96
+runtime.(*mcentral).cacheSpan(0x7ff71300a678)
+	runtime/mcentral.go:171 +0x42e fp=0xc002e390c8 sp=0xc002e39050 pc=0x7ff712559b2e
+runtime.(*mcache).refill(0x219b20d0ed0, 0x37?)
+	runtime/mcache.go:184 +0x153 fp=0xc002e39108 sp=0xc002e390c8 pc=0x7ff712559153
+runtime.(*mcache).nextFree(0x219b20d0ed0, 0x37)
+	runtime/malloc.go:968 +0x7e fp=0xc002e39140 sp=0xc002e39108 pc=0x7ff71255575e
+runtime.mallocgcSmallNoscan(0x219f78df640?, 0x40019b20d0ed0?, 0xe0?)
+	runtime/malloc.go:1295 +0x195 fp=0xc002e39198 sp=0xc002e39140 pc=0x7ff712555d55
+runtime.mallocgc(0x220, 0x7ff712b51380, 0x1)
+	runtime/malloc.go:1059 +0xc5 fp=0xc002e391c8 sp=0xc002e39198 pc=0x7ff7125b5065
+runtime.newarray(0xc002e39218?, 0x7ff7125b5225?)
+	runtime/malloc.go:1797 +0x45 fp=0xc002e391f0 sp=0xc002e391c8 pc=0x7ff7125b5225
+internal/runtime/maps.newarray(0x20?, 0x7ff712b94600?)
+	runtime/malloc.go:1821 +0x13 fp=0xc002e39210 sp=0xc002e391f0 pc=0x7ff7125b52d3
+internal/runtime/maps.newGroups(...)
+	internal/runtime/maps/group.go:316
+internal/runtime/maps.(*table).reset(0xc003254b00, 0x7ff712b3f3a0, 0x20)
+	internal/runtime/maps/table.go:104 +0x3d fp=0xc002e39238 sp=0xc002e39210 pc=0x7ff712545cdd
+internal/runtime/maps.newTable(0x7ff712b3f3a0, 0x20, 0x0, 0x0)
+	internal/runtime/maps/table.go:95 +0x8f fp=0xc002e39268 sp=0xc002e39238 pc=0x7ff712545c2f
+internal/runtime/maps.(*table).grow(0xc003254ae0, 0x7ff712b3f3a0, 0xc003260f60, 0xc130?)
+	internal/runtime/maps/table.go:1201 +0x37 fp=0xc002e392d0 sp=0xc002e39268 pc=0x7ff712547377
+internal/runtime/maps.(*table).rehash(0xc002e39338?, 0x7ff712544b73?, 0xc003260f30?)
+	internal/runtime/maps/table.go:1136 +0x25 fp=0xc002e39300 sp=0xc002e392d0 pc=0x7ff7125470e5
+runtime.mapassign_fast64(0x7ff712b3f3a0, 0xc003260f60, 0x7a9900000001)
+	internal/runtime/maps/runtime_fast64_swiss.go:316 +0x132 fp=0xc002e39370 sp=0xc002e39300 pc=0x7ff7125483d2
+github.com/evanw/esbuild/internal/js_parser.(*parser).convertSymbolUseToCall(0xc0002fc008, {0x12ca4dc0?, 0x7ff7?}, 0x1)
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:16786 +0x165 fp=0xc002e393b8 sp=0xc002e39370 pc=0x7ff7128dafc5
+github.com/evanw/esbuild/internal/js_parser.(*parser).visitExprInOut(0xc0002fc008, {{0x7ff712ca4fa0, 0xc001205980}, {0x2ed6bd}}, {0x0, 0x0, 0x0, 0x0, 0x0, 0x0})
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:15450 +0xd0d8 fp=0xc002e39e58 sp=0xc002e393b8 pc=0x7ff7128d1658
+github.com/evanw/esbuild/internal/js_parser.(*parser).visitExpr(...)
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:13211
+github.com/evanw/esbuild/internal/js_parser.(*parser).visitAndAppendStmt(0xc0002fc008, {0xc003029dc0, 0x6, 0x9}, {{0x7ff712ca5000?, 0xc00128c0a0?}, {0x2e3a518?}})
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:10804 +0x4ba7 fp=0xc002e3a428 sp=0xc002e39e58 pc=0x7ff7128afc07
+github.com/evanw/esbuild/internal/js_parser.(*parser).visitStmts(0xc0002fc008, {0xc00278bc80, 0x9, 0x7a8900000001?}, 0x2)
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:8965 +0x536 fp=0xc002e3a788 sp=0xc002e3a428 pc=0x7ff7128a03d6
+github.com/evanw/esbuild/internal/js_parser.(*parser).visitStmtsAndPrependTempRefs(0xc0002fc008, {0xc00278bc80?, 0x10?, 0x0?}, {0x0?, 0x8?})
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:8837 +0xae fp=0xc002e3a8f0 sp=0xc002e3a788 pc=0x7ff71289f1ee
+github.com/evanw/esbuild/internal/js_parser.(*parser).visitExprInOut(0xc0002fc008, {{0x7ff712ca4e40, 0xc001bb0050}, {0x2ed5f9}}, {0x0, 0x0, 0x0, 0x0, 0x0, 0x0})
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:15819 +0x1dc5 fp=0xc002e3b390 sp=0xc002e3a8f0 pc=0x7ff7128c6345
+github.com/evanw/esbuild/internal/js_parser.(*parser).visitExpr(...)
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:13211
+github.com/evanw/esbuild/internal/js_parser.(*parser).visitAndAppendStmt(0xc0002fc008, {0xc003242308, 0x14, 0x1e}, {{0x7ff712ca5140?, 0xc00128c100?}, {0x9?}})
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:10689 +0xa15c fp=0xc002e3b960 sp=0xc002e3b390 pc=0x7ff7128b51bc
+github.com/evanw/esbuild/internal/js_parser.(*parser).visitStmts(0xc0002fc008, {0xc00128a008, 0x1e, 0xc002e3be18?}, 0x2)
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:8965 +0x536 fp=0xc002e3bcc0 sp=0xc002e3b960 pc=0x7ff7128a03d6
+github.com/evanw/esbuild/internal/js_parser.(*parser).visitStmtsAndPrependTempRefs(0xc0002fc008, {0xc00128a008?, 0xc0019c90f2?, 0x5?}, {0xc0012085f0?, 0x8?})
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:8837 +0xae fp=0xc002e3be28 sp=0xc002e3bcc0 pc=0x7ff71289f1ee
+github.com/evanw/esbuild/internal/js_parser.(*parser).visitFn(0xc0002fc008, 0xc0012085b0, {0x12ca48c0?}, {0xf7?, 0x7f?, 0x0?})
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:17172 +0x414 fp=0xc002e3bf80 sp=0xc002e3be28 pc=0x7ff7128dd7b4
+github.com/evanw/esbuild/internal/js_parser.(*parser).visitAndAppendStmt(0xc0002fc008, {0xc003268480, 0x0, 0x1}, {{0x7ff712ca50a0?, 0xc0012085b0?}, {0x12ca4f20?}})
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:11258 +0xc9 fp=0xc002e3c550 sp=0xc002e3bf80 pc=0x7ff7128ab129
+github.com/evanw/esbuild/internal/js_parser.(*parser).visitStmts(0xc0002fc008, {0xc003268468, 0x1, 0x7ff712ca48c0?}, 0x0)
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:8965 +0x536 fp=0xc002e3c8b0 sp=0xc002e3c550 pc=0x7ff7128a03d6
+github.com/evanw/esbuild/internal/js_parser.(*parser).visitStmtsAndPrependTempRefs(0xc0002fc008, {0xc003268468?, 0x219f78debe0?, 0xc002e3caa8?}, {0x0?, 0x0?})
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:8837 +0xae fp=0xc002e3ca18 sp=0xc002e3c8b0 pc=0x7ff71289f1ee
+github.com/evanw/esbuild/internal/js_parser.(*parser).appendPart(0xc0002fc008, {0xc003080000, 0x1200, 0x135e}, {0xc003268468, 0x1, 0x1})
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:17621 +0x127 fp=0xc002e3cbe8 sp=0xc002e3ca18 pc=0x7ff7128e1087
+github.com/evanw/esbuild/internal/js_parser.Parse({_, _, _, _, _, _}, {{{0xc00001c66d, 0x18}, {0xc00001c66d, 0x18}}, ...}, ...)
+	github.com/evanw/esbuild/internal/js_parser/js_parser.go:18037 +0x1d07 fp=0xc002e3d720 sp=0xc002e3cbe8 pc=0x7ff7128e3ca7
+github.com/evanw/esbuild/internal/cache.(*JSCache).Parse(_, {_, _, _, _, _, _}, {{{0xc00001c66d, 0x18}, {0xc00001c66d, ...}}, ...}, ...)
+	github.com/evanw/esbuild/internal/cache/cache_ast.go:170 +0x245 fp=0xc002e3de10 sp=0xc002e3d720 pc=0x7ff712928f65
+github.com/evanw/esbuild/internal/bundler.parseFile({{0x7ff712caced0, 0xc0001d8a40}, {0xc00021e000, 0xc0003b00d8, 0xc0003b0180, 0xc000212040, 0x6, 0xc000000090}, 0xc000391208, 0xc000074180, ...})
+	github.com/evanw/esbuild/internal/bundler/bundler.go:265 +0xb45 fp=0xc002e3f608 sp=0xc002e3de10 pc=0x7ff712968085
+github.com/evanw/esbuild/internal/bundler.(*scanner).maybeParseFile.gowrap1()
+	github.com/evanw/esbuild/internal/bundler/bundler.go:1630 +0x2fa fp=0xc002e3ffe0 sp=0xc002e3f608 pc=0x7ff712975a5a
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc002e3ffe8 sp=0xc002e3ffe0 pc=0x7ff7125bf221
+created by github.com/evanw/esbuild/internal/bundler.(*scanner).maybeParseFile in goroutine 1778
+	github.com/evanw/esbuild/internal/bundler/bundler.go:1630 +0xd85
+System.Management.Automation.RemoteException
+goroutine 1 gp=0xc0000021c0 m=0 mp=0x7ff712fee600 [syscall]:
+runtime.cgocall(0x7ff7125c0a40, 0x7ff712fee950)
+	runtime/cgocall.go:167 +0x3e fp=0xc00013fa58 sp=0xc00013f9f0 pc=0x7ff7125b467e
+runtime.syscall_syscalln(0x7ff712544d94?, 0xc00013faa8?, {0xc00013faa0?, 0x500f712feeb60?, 0x219f76ab000?})
+	runtime/syscall_windows.go:521 +0x4e fp=0xc00013fa78 sp=0xc00013fa58 pc=0x7ff7125a0bee
+syscall.Syscall6(0xc00013fb18?, 0x7ff71258d5ff?, 0xc00013faf8?, 0x7ff71258d640?, 0xc00030d050?, 0xc0000021c0?, 0x7ff712a61a11?, 0xc00013fcd0?)
+	runtime/syscall_windows.go:463 +0x38 fp=0xc00013fae0 sp=0xc00013fa78 pc=0x7ff7125bb038
+syscall.readFile(0x398, {0xc00016e000?, 0x4000, 0x7ff712567a45?}, 0x7ff713036960?, 0xbeff22?)
+	syscall/zsyscall_windows.go:1030 +0x8b fp=0xc00013fb50 sp=0xc00013fae0 pc=0x7ff7125fb6eb
+syscall.ReadFile(...)
+	syscall/syscall_windows.go:482
+internal/poll.(*FD).Read.func1(0x7ff713036960?)
+	internal/poll/fd_windows.go:522 +0x4d fp=0xc00013fb90 sp=0xc00013fb50 pc=0x7ff71261a1cd
+internal/poll.execIO(0xc000110020, 0x7ff712bf7348)
+	internal/poll/fd_windows.go:233 +0xa7 fp=0xc00013fc00 sp=0xc00013fb90 pc=0x7ff712616047
+internal/poll.(*FD).Read(0xc000110008, {0xc00016e000, 0x4000, 0x4000})
+	internal/poll/fd_windows.go:521 +0x288 fp=0xc00013fca0 sp=0xc00013fc00 pc=0x7ff712616c28
+os.(*File).read(...)
+	os/file_posix.go:29
+os.(*File).Read(0xc000064030, {0xc00016e000?, 0x4000?, 0x4000?})
+	os/file.go:144 +0x4f fp=0xc00013fce0 sp=0xc00013fca0 pc=0x7ff71261c14f
+main.runService(0x1)
+	github.com/evanw/esbuild/cmd/esbuild/service.go:134 +0x37c fp=0xc00013fe08 sp=0xc00013fce0 pc=0x7ff712a5f4dc
+main.main()
+	github.com/evanw/esbuild/cmd/esbuild/main.go:252 +0xb75 fp=0xc00013ff50 sp=0xc00013fe08 pc=0x7ff712a5dcd5
+runtime.main()
+	runtime/proc.go:285 +0x27d fp=0xc00013ffe0 sp=0xc00013ff50 pc=0x7ff71258365d
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc00013ffe8 sp=0xc00013ffe0 pc=0x7ff7125bf221
+System.Management.Automation.RemoteException
+goroutine 2 gp=0xc0000028c0 m=nil [force gc (idle)]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	runtime/proc.go:460 +0xce fp=0xc00005dfa8 sp=0xc00005df88 pc=0x7ff7125b72ce
+runtime.goparkunlock(...)
+	runtime/proc.go:466
+runtime.forcegchelper()
+	runtime/proc.go:373 +0xb8 fp=0xc00005dfe0 sp=0xc00005dfa8 pc=0x7ff712583978
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc00005dfe8 sp=0xc00005dfe0 pc=0x7ff7125bf221
+created by runtime.init.7 in goroutine 1
+	runtime/proc.go:361 +0x1a
+System.Management.Automation.RemoteException
+goroutine 3 gp=0xc000002c40 m=nil [GC sweep wait]:
+runtime.gopark(0x1?, 0x0?, 0x0?, 0x0?, 0x0?)
+	runtime/proc.go:460 +0xce fp=0xc00005ff80 sp=0xc00005ff60 pc=0x7ff7125b72ce
+runtime.goparkunlock(...)
+	runtime/proc.go:466
+runtime.bgsweep(0xc000028080)
+	runtime/mgcsweep.go:323 +0xdf fp=0xc00005ffc8 sp=0xc00005ff80 pc=0x7ff71256ac9f
+runtime.gcenable.gowrap1()
+	runtime/mgc.go:212 +0x25 fp=0xc00005ffe0 sp=0xc00005ffc8 pc=0x7ff71255eca5
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc00005ffe8 sp=0xc00005ffe0 pc=0x7ff7125bf221
+created by runtime.gcenable in goroutine 1
+	runtime/mgc.go:212 +0x66
+System.Management.Automation.RemoteException
+goroutine 4 gp=0xc000002e00 m=nil [GC scavenge wait]:
+runtime.gopark(0x1764ac?, 0x13375de?, 0x0?, 0x0?, 0x0?)
+	runtime/proc.go:460 +0xce fp=0xc000071f78 sp=0xc000071f58 pc=0x7ff7125b72ce
+runtime.goparkunlock(...)
+	runtime/proc.go:466
+runtime.(*scavengerState).park(0x7ff712fed340)
+	runtime/mgcscavenge.go:425 +0x49 fp=0xc000071fa8 sp=0xc000071f78 pc=0x7ff712568729
+runtime.bgscavenge(0xc000028080)
+	runtime/mgcscavenge.go:658 +0x59 fp=0xc000071fc8 sp=0xc000071fa8 pc=0x7ff712568cd9
+runtime.gcenable.gowrap2()
+	runtime/mgc.go:213 +0x25 fp=0xc000071fe0 sp=0xc000071fc8 pc=0x7ff71255ec45
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc000071fe8 sp=0xc000071fe0 pc=0x7ff7125bf221
+created by runtime.gcenable in goroutine 1
+	runtime/mgc.go:213 +0xa5
+System.Management.Automation.RemoteException
+goroutine 5 gp=0xc000003180 m=nil [finalizer wait]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	runtime/proc.go:460 +0xce fp=0xc000073e20 sp=0xc000073e00 pc=0x7ff7125b72ce
+runtime.runFinalizers()
+	runtime/mfinal.go:210 +0x107 fp=0xc000073fe0 sp=0xc000073e20 pc=0x7ff71255dbe7
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc000073fe8 sp=0xc000073fe0 pc=0x7ff7125bf221
+created by runtime.createfing in goroutine 1
+	runtime/mfinal.go:172 +0x3d
+System.Management.Automation.RemoteException
+goroutine 6 gp=0xc000003340 m=nil [cleanup wait]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	runtime/proc.go:460 +0xce fp=0xc00006df68 sp=0xc00006df48 pc=0x7ff7125b72ce
+runtime.goparkunlock(...)
+	runtime/proc.go:466
+runtime.(*cleanupQueue).dequeue(0x7ff712fed620)
+	runtime/mcleanup.go:439 +0xc5 fp=0xc00006dfa0 sp=0xc00006df68 pc=0x7ff71255afc5
+runtime.runCleanups()
+	runtime/mcleanup.go:635 +0x45 fp=0xc00006dfe0 sp=0xc00006dfa0 pc=0x7ff71255b685
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc00006dfe8 sp=0xc00006dfe0 pc=0x7ff7125bf221
+created by runtime.(*cleanupQueue).createGs in goroutine 1
+	runtime/mcleanup.go:589 +0xa5
+System.Management.Automation.RemoteException
+goroutine 7 gp=0xc000003500 m=nil [chan receive]:
+runtime.gopark(0x21?, 0x0?, 0x0?, 0x0?, 0x0?)
+	runtime/proc.go:460 +0xce fp=0xc000061ee8 sp=0xc000061ec8 pc=0x7ff7125b72ce
+runtime.chanrecv(0xc00002c150, 0xc000061fb0, 0x1)
+	runtime/chan.go:667 +0x473 fp=0xc000061f60 sp=0xc000061ee8 pc=0x7ff71254e593
+runtime.chanrecv2(0xc000064038?, 0xc00031eb80?)
+	runtime/chan.go:514 +0x12 fp=0xc000061f88 sp=0xc000061f60 pc=0x7ff71254e112
+main.runService.func1()
+	github.com/evanw/esbuild/cmd/esbuild/service.go:98 +0x45 fp=0xc000061fe0 sp=0xc000061f88 pc=0x7ff712a5f985
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc000061fe8 sp=0xc000061fe0 pc=0x7ff7125bf221
+created by main.runService in goroutine 1
+	github.com/evanw/esbuild/cmd/esbuild/service.go:97 +0x1db
+System.Management.Automation.RemoteException
+goroutine 8 gp=0xc0000036c0 m=nil [sleep]:
+runtime.gopark(0x12e618fea2728?, 0xc000080568?, 0x0?, 0x40?, 0x7ff7125b7b0f?)
+	runtime/proc.go:460 +0xce fp=0xc00006ff48 sp=0xc00006ff28 pc=0x7ff7125b72ce
+time.Sleep(0x3b9aca00)
+	runtime/time.go:363 +0x167 fp=0xc00006ffa0 sp=0xc00006ff48 pc=0x7ff7125bb367
+main.runService.func3()
+	github.com/evanw/esbuild/cmd/esbuild/service.go:124 +0x48 fp=0xc00006ffe0 sp=0xc00006ffa0 pc=0x7ff712a5f868
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc00006ffe8 sp=0xc00006ffe0 pc=0x7ff7125bf221
+created by main.runService in goroutine 1
+	github.com/evanw/esbuild/cmd/esbuild/service.go:122 +0x30c
+System.Management.Automation.RemoteException
+goroutine 53 gp=0xc0002068c0 m=nil [GC worker (idle)]:
+runtime.gopark(0x12e61b818f828?, 0x1?, 0x58?, 0x54?, 0xc000479fd0?)
+	runtime/proc.go:460 +0xce fp=0xc000479f38 sp=0xc000479f18 pc=0x7ff7125b72ce
+runtime.gcBgMarkWorker(0xc00019d7a0)
+	runtime/mgc.go:1463 +0xeb fp=0xc000479fc8 sp=0xc000479f38 pc=0x7ff7125612eb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	runtime/mgc.go:1373 +0x25 fp=0xc000479fe0 sp=0xc000479fc8 pc=0x7ff7125611c5
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc000479fe8 sp=0xc000479fe0 pc=0x7ff7125bf221
+created by runtime.gcBgMarkStartWorkers in goroutine 66
+	runtime/mgc.go:1373 +0x105
+System.Management.Automation.RemoteException
+goroutine 54 gp=0xc0001881c0 m=nil [GC worker (idle)]:
+runtime.gopark(0x12e61b818f828?, 0x3?, 0x5c?, 0xb0?, 0x0?)
+	runtime/proc.go:460 +0xce fp=0xc000451f38 sp=0xc000451f18 pc=0x7ff7125b72ce
+runtime.gcBgMarkWorker(0xc00019d7a0)
+	runtime/mgc.go:1463 +0xeb fp=0xc000451fc8 sp=0xc000451f38 pc=0x7ff7125612eb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	runtime/mgc.go:1373 +0x25 fp=0xc000451fe0 sp=0xc000451fc8 pc=0x7ff7125611c5
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc000451fe8 sp=0xc000451fe0 pc=0x7ff7125bf221
+created by runtime.gcBgMarkStartWorkers in goroutine 66
+	runtime/mgc.go:1373 +0x105
+System.Management.Automation.RemoteException
+goroutine 52 gp=0xc000206e00 m=nil [GC worker (idle)]:
+runtime.gopark(0x12e61b818f828?, 0x1?, 0x0?, 0x0?, 0x90000000f?)
+	runtime/proc.go:460 +0xce fp=0xc000455f38 sp=0xc000455f18 pc=0x7ff7125b72ce
+runtime.gcBgMarkWorker(0xc00019d7a0)
+	runtime/mgc.go:1463 +0xeb fp=0xc000455fc8 sp=0xc000455f38 pc=0x7ff7125612eb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	runtime/mgc.go:1373 +0x25 fp=0xc000455fe0 sp=0xc000455fc8 pc=0x7ff7125611c5
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc000455fe8 sp=0xc000455fe0 pc=0x7ff7125bf221
+created by runtime.gcBgMarkStartWorkers in goroutine 66
+	runtime/mgc.go:1373 +0x105
+System.Management.Automation.RemoteException
+goroutine 55 gp=0xc000188380 m=nil [GC worker (idle)]:
+runtime.gopark(0x12e61b818f828?, 0x3?, 0x4?, 0xa8?, 0x7ff712a063f3?)
+	runtime/proc.go:460 +0xce fp=0xc000457f38 sp=0xc000457f18 pc=0x7ff7125b72ce
+runtime.gcBgMarkWorker(0xc00019d7a0)
+	runtime/mgc.go:1463 +0xeb fp=0xc000457fc8 sp=0xc000457f38 pc=0x7ff7125612eb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	runtime/mgc.go:1373 +0x25 fp=0xc000457fe0 sp=0xc000457fc8 pc=0x7ff7125611c5
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc000457fe8 sp=0xc000457fe0 pc=0x7ff7125bf221
+created by runtime.gcBgMarkStartWorkers in goroutine 66
+	runtime/mgc.go:1373 +0x105
+System.Management.Automation.RemoteException
+goroutine 82 gp=0xc0002a8000 m=nil [GC worker (idle)]:
+runtime.gopark(0x12e5ec8eafa00?, 0x1?, 0x0?, 0x0?, 0x0?)
+	runtime/proc.go:460 +0xce fp=0xc000475f38 sp=0xc000475f18 pc=0x7ff7125b72ce
+runtime.gcBgMarkWorker(0xc00019d7a0)
+	runtime/mgc.go:1463 +0xeb fp=0xc000475fc8 sp=0xc000475f38 pc=0x7ff7125612eb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	runtime/mgc.go:1373 +0x25 fp=0xc000475fe0 sp=0xc000475fc8 pc=0x7ff7125611c5
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc000475fe8 sp=0xc000475fe0 pc=0x7ff7125bf221
+created by runtime.gcBgMarkStartWorkers in goroutine 66
+	runtime/mgc.go:1373 +0x105
+System.Management.Automation.RemoteException
+goroutine 83 gp=0xc0002a81c0 m=nil [GC worker (idle)]:
+runtime.gopark(0x12e61b818f828?, 0x3?, 0xe0?, 0xec?, 0x0?)
+	runtime/proc.go:460 +0xce fp=0xc000477f38 sp=0xc000477f18 pc=0x7ff7125b72ce
+runtime.gcBgMarkWorker(0xc00019d7a0)
+	runtime/mgc.go:1463 +0xeb fp=0xc000477fc8 sp=0xc000477f38 pc=0x7ff7125612eb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	runtime/mgc.go:1373 +0x25 fp=0xc000477fe0 sp=0xc000477fc8 pc=0x7ff7125611c5
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc000477fe8 sp=0xc000477fe0 pc=0x7ff7125bf221
+created by runtime.gcBgMarkStartWorkers in goroutine 66
+	runtime/mgc.go:1373 +0x105
+System.Management.Automation.RemoteException
+goroutine 84 gp=0xc0002a8380 m=nil [GC worker (idle)]:
+runtime.gopark(0x12e61b818f828?, 0x3?, 0xf8?, 0xc5?, 0x0?)
+	runtime/proc.go:460 +0xce fp=0xc0002aff38 sp=0xc0002aff18 pc=0x7ff7125b72ce
+runtime.gcBgMarkWorker(0xc00019d7a0)
+	runtime/mgc.go:1463 +0xeb fp=0xc0002affc8 sp=0xc0002aff38 pc=0x7ff7125612eb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	runtime/mgc.go:1373 +0x25 fp=0xc0002affe0 sp=0xc0002affc8 pc=0x7ff7125611c5
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc0002affe8 sp=0xc0002affe0 pc=0x7ff7125bf221
+created by runtime.gcBgMarkStartWorkers in goroutine 66
+	runtime/mgc.go:1373 +0x105
+System.Management.Automation.RemoteException
+goroutine 85 gp=0xc0002a8540 m=nil [GC worker (idle)]:
+runtime.gopark(0x12e61b818f828?, 0x3?, 0x34?, 0x5a?, 0x0?)
+	runtime/proc.go:460 +0xce fp=0xc0002b1f38 sp=0xc0002b1f18 pc=0x7ff7125b72ce
+runtime.gcBgMarkWorker(0xc00019d7a0)
+	runtime/mgc.go:1463 +0xeb fp=0xc0002b1fc8 sp=0xc0002b1f38 pc=0x7ff7125612eb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	runtime/mgc.go:1373 +0x25 fp=0xc0002b1fe0 sp=0xc0002b1fc8 pc=0x7ff7125611c5
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc0002b1fe8 sp=0xc0002b1fe0 pc=0x7ff7125bf221
+created by runtime.gcBgMarkStartWorkers in goroutine 66
+	runtime/mgc.go:1373 +0x105
+System.Management.Automation.RemoteException
+goroutine 1778 gp=0xc000189880 m=nil [chan receive]:
+runtime.gopark(0xc0002362a0?, 0x11400f7125b5065?, 0x8?, 0x28?, 0x219b20d2130?)
+	runtime/proc.go:460 +0xce fp=0xc0000c3b08 sp=0xc0000c3ae8 pc=0x7ff7125b72ce
+runtime.chanrecv(0xc00065c070, 0xc0000c3f00, 0x1)
+	runtime/chan.go:667 +0x473 fp=0xc0000c3b80 sp=0xc0000c3b08 pc=0x7ff71254e593
+runtime.chanrecv1(0x0?, 0x0?)
+	runtime/chan.go:509 +0x12 fp=0xc0000c3ba8 sp=0xc0000c3b80 pc=0x7ff71254e0f2
+github.com/evanw/esbuild/internal/bundler.(*scanner).scanAllDependencies(0xc000391688)
+	github.com/evanw/esbuild/internal/bundler/bundler.go:2182 +0x255 fp=0xc0000c4078 sp=0xc0000c3ba8 pc=0x7ff71297b2b5
+github.com/evanw/esbuild/internal/bundler.ScanBundle(_, {_, _, _, _, _, _}, {_, _}, 0xc000074180, ...)
+	github.com/evanw/esbuild/internal/bundler/bundler.go:1505 +0xbdc fp=0xc0000c4670 sp=0xc0000c4078 pc=0x7ff712973a7c
+github.com/evanw/esbuild/pkg/api.transformImpl({_, _}, {0x0, 0x0, 0x0, 0xc000000030, 0x0, 0x3, {0x0, 0x0}, ...})
+	github.com/evanw/esbuild/pkg/api/api_impl.go:1801 +0x13c5 fp=0xc0000c5980 sp=0xc0000c4670 pc=0x7ff712a25465
+github.com/evanw/esbuild/pkg/api.Transform(...)
+	github.com/evanw/esbuild/pkg/api/api.go:477
+main.(*serviceType).handleTransformRequest(0x2200000000?, 0x64, 0xc00030cff0)
+	github.com/evanw/esbuild/cmd/esbuild/service.go:1179 +0x378 fp=0xc0000c5f60 sp=0xc0000c5980 pc=0x7ff712a6b198
+main.(*serviceType).handleIncomingPacket.func3()
+	github.com/evanw/esbuild/cmd/esbuild/service.go:242 +0x57 fp=0xc0000c5fe0 sp=0xc0000c5f60 pc=0x7ff712a642d7
+runtime.goexit({})
+	runtime/asm_amd64.s:1693 +0x1 fp=0xc0000c5fe8 sp=0xc0000c5fe0 pc=0x7ff7125bf221
+created by main.(*serviceType).handleIncomingPacket in goroutine 1
+	github.com/evanw/esbuild/cmd/esbuild/service.go:240 +0x1772
+[31mG£ù[39m Build failed in 14.75s
+[31merror during build:
+[31m[vite:esbuild-transpile] The service was stopped[31m
+    at C:\Users\pc\Desktop\B2B\CMS2\AlghaniCMS\node_modules\.pnpm\esbuild@0.27.3\node_modules\esbuild\lib\main.js:718:38
+    at responseCallbacks.<computed> (C:\Users\pc\Desktop\B2B\CMS2\AlghaniCMS\node_modules\.pnpm\esbuild@0.27.3\node_modules\esbuild\lib\main.js:603:9)
+    at Socket.afterClose (C:\Users\pc\Desktop\B2B\CMS2\AlghaniCMS\node_modules\.pnpm\esbuild@0.27.3\node_modules\esbuild\lib\main.js:594:28)
+    at Socket.emit (node:events:521:24)
+    at endReadableNT (node:internal/streams/readable:1746:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)[39m
+C:\Users\pc\Desktop\B2B\CMS2\AlghaniCMS\artifacts\erp:
+[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @workspace/erp@0.0.0 build: `vite build --config vite.config.ts`
+Exit status 1
