@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
-import helmet from "helmet";
-import { rateLimit } from "express-rate-limit";
+import helmetPkg from "helmet";
+import rateLimitPkg from "express-rate-limit";
 import { pinoHttp } from "pino-http"; // Fixed: Using named import
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
@@ -9,6 +9,8 @@ import { initTelegramBot } from "./routes/telegram.js";
 import { errorHandler } from "./lib/error-handler.js";
 
 const app: Express = express();
+const helmet = (helmetPkg as any).default ? (helmetPkg as any).default : helmetPkg;
+const rateLimit = (rateLimitPkg as any).default ? (rateLimitPkg as any).default : rateLimitPkg;
 
 app.use(
   pinoHttp({
