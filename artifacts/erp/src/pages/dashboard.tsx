@@ -41,25 +41,26 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="space-y-5 sm:space-y-8">
-        <div className="flex items-start justify-between flex-wrap gap-3">
+      <div className="space-y-6 sm:space-y-8">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <h1 className="text-xl sm:text-3xl font-bold tracking-tight">Command Center</h1>
-            <p className="text-muted-foreground mt-0.5 sm:mt-1 text-sm">Real-time enterprise overview.</p>
+            <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">Command Center</h1>
+            <p className="mt-2 max-w-2xl text-sm sm:text-base text-muted-foreground">
+              Premium insights for sales, inventory and financial performance.
+            </p>
           </div>
-          <DateRangeSelector value={range} onChange={setRange} />
+
+          <div className="w-full max-w-sm">
+            <DateRangeSelector value={range} onChange={setRange} />
+          </div>
         </div>
 
         {/* Range-aware KPIs */}
         {loadingRangeSummary ? (
           <SectionLoading label="Crunching the numbers" />
         ) : rangeSummary && (
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <KpiCard
-              title={`Revenue (${range.preset === "all" ? "All Time" : range.preset})`}
-              value={`Rs. ${rangeSummary.totalRevenue.toLocaleString()}`}
-              icon={DollarSign} highlight
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <KpiCard title={`Revenue (${range.preset === "all" ? "All Time" : range.preset})`} value={`Rs. ${rangeSummary.totalRevenue.toLocaleString()}`} icon={DollarSign} highlight />
             <KpiCard title="Net Profit" value={`Rs. ${rangeSummary.netProfit.toLocaleString()}`} icon={Activity} />
             <KpiCard title="Purchases" value={`Rs. ${rangeSummary.totalPurchases.toLocaleString()}`} icon={Truck} />
             <KpiCard title="Expenses" value={`Rs. ${rangeSummary.totalExpenses.toLocaleString()}`} icon={ArrowDownRight} />
@@ -72,7 +73,7 @@ export default function Dashboard() {
 
         {/* Lifetime snapshot KPIs */}
         {!loadingSummary && summary && (
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <KpiCard title="Total Products" value={summary.totalProducts?.toLocaleString() || "0"} icon={Activity} />
             <KpiCard title="Low Stock Items" value={lowStock?.length?.toString() || "0"} icon={AlertTriangle} alert={!!lowStock?.length} />
             <KpiCard title="Active Customers" value={summary.totalCustomers?.toLocaleString() || "0"} icon={Users} />
@@ -81,54 +82,50 @@ export default function Dashboard() {
         )}
 
         {/* Charts row */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
-          {/* Revenue area chart */}
-          <Card className="border-border bg-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm sm:text-base font-semibold">Revenue Trend (6 months)</CardTitle>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <Card className="border-border bg-card shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">Revenue Trend</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-36 sm:h-48">
+              <div className="h-56 sm:h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData || []} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                  <AreaChart data={chartData || []} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
                     <defs>
                       <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
                         <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" stroke="#888" fontSize={10} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#888" fontSize={10} tickLine={false} axisLine={false} tickFormatter={v => `${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
+                    <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="hsl(var(--border))" />
+                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => (value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value)} />
                     <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))", color: "hsl(var(--foreground))", fontSize: 12 }} />
-                    <Area type="monotone" dataKey="revenue" name="Revenue" stroke="hsl(var(--primary))" fill="url(#revGrad)" strokeWidth={2} />
+                    <Area type="monotone" dataKey="revenue" name="Revenue" stroke="hsl(var(--primary))" fill="url(#revGrad)" strokeWidth={3} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
 
-          {/* Top Products */}
-          <Card className="border-border bg-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm sm:text-base font-semibold">Top Performing Products</CardTitle>
+          <Card className="border-border bg-card shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">Top Performing Products</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {topProducts?.slice(0, 5).map((item: any, idx: number) => (
-                  <div key={item.id} className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground w-4 flex-shrink-0">#{idx + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{item.name}</div>
+                  <div key={item.id} className="flex items-center gap-4 rounded-3xl border border-border/70 bg-background/70 p-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary font-semibold">{idx + 1}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold truncate">{item.name}</div>
                       <div className="text-xs text-muted-foreground">{item.totalSold} units sold</div>
                     </div>
-                    <div className="text-sm font-bold text-secondary flex-shrink-0">
-                      Rs. {item.revenue?.toLocaleString()}
-                    </div>
+                    <div className="text-sm font-semibold text-secondary">Rs. {item.revenue?.toLocaleString()}</div>
                   </div>
                 ))}
                 {(!topProducts || topProducts.length === 0) && (
-                  <div className="text-center py-6 text-muted-foreground text-sm">No sales data yet.</div>
+                  <div className="text-center py-8 text-muted-foreground">No sales data available.</div>
                 )}
               </div>
             </CardContent>
@@ -136,67 +133,62 @@ export default function Dashboard() {
         </div>
 
         {/* Activity + Low Stock row */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
-          {/* Recent Activity */}
-          <Card className="border-border bg-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm sm:text-base font-semibold">Recent Activity</CardTitle>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <Card className="border-border bg-card shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">Recent Activity</CardTitle>
             </CardHeader>
             <CardContent>
               {loadingActivity ? (
                 <SectionLoading label="Loading activity" />
               ) : (
-                <div className="space-y-2">
-                  {activity?.map(item => (
-                    <div key={item.id} className="flex items-center gap-3 py-1.5 border-b border-border/40 last:border-0">
-                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${item.direction === "credit" ? "bg-emerald-500" : "bg-red-500"}`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium truncate">{item.description}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {item.createdAt ? format(new Date(item.createdAt), "d MMM, h:mm a") : "—"}
-                        </div>
+                <div className="space-y-3">
+                  {activity?.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-4 rounded-3xl border border-border/70 bg-background/70 p-4">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold truncate">{item.description}</div>
+                        <div className="text-xs text-muted-foreground">{item.createdAt ? format(new Date(item.createdAt), "d MMM, h:mm a") : "—"}</div>
                       </div>
-                      <span className={`text-xs font-bold flex-shrink-0 ${item.direction === "credit" ? "text-emerald-500" : "text-red-500"}`}>
-                        {item.direction === "credit" ? "+" : "-"}Rs. {item.amount?.toLocaleString()}
-                      </span>
+                      <div className={`rounded-2xl px-3 py-1 text-xs font-semibold ${item.direction === "credit" ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"}`}>
+                        {item.direction === "credit" ? "+" : "-"} Rs. {item.amount.toLocaleString()}
+                      </div>
                     </div>
                   ))}
                   {(!activity || activity.length === 0) && (
-                    <div className="text-center py-6 text-muted-foreground text-sm">No activity in this period.</div>
+                    <div className="text-center py-10 text-muted-foreground">No activity in this period.</div>
                   )}
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Low Stock Alerts */}
-          <Card className="border-border bg-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-destructive" /> Low Stock Alerts
+          <Card className="border-border bg-card shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-destructive" /> Low Stock Alerts
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {lowStock?.map((item: any) => (
-                  <div key={item.id} className="flex items-center justify-between p-2.5 rounded-lg border border-destructive/20 bg-destructive/5">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-sm truncate">{item.name}</div>
+                  <div key={item.id} className="flex items-center justify-between gap-4 rounded-3xl border border-destructive/20 bg-destructive/5 p-4">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold truncate">{item.name}</div>
                       <div className="text-xs text-muted-foreground">{item.sku}</div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                      <div className="text-sm text-right">
-                        <span className="text-destructive font-bold">{item.currentStock}</span>
-                        <span className="text-muted-foreground"> / {item.minStock}</span>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right text-sm">
+                        <div className="font-semibold text-destructive">{item.currentStock}</div>
+                        <div className="text-xs text-muted-foreground">Min {item.minStock}</div>
                       </div>
-                      <Badge variant="destructive" className="text-xs">Refill</Badge>
+                      <Badge variant="destructive" className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]">
+                        Refill
+                      </Badge>
                     </div>
                   </div>
                 ))}
                 {(!lowStock || lowStock.length === 0) && (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
-                    Inventory levels optimal.
-                  </div>
+                  <div className="text-center py-10 text-muted-foreground">Inventory levels optimal.</div>
                 )}
               </div>
             </CardContent>
@@ -208,23 +200,31 @@ export default function Dashboard() {
 }
 
 function KpiCard({ title, value, icon: Icon, trend, trendDown, highlight, alert }: {
-  title: string; value: string; icon: any; trend?: string; trendDown?: boolean; highlight?: boolean; alert?: boolean;
+  title: string;
+  value: string;
+  icon: any;
+  trend?: string;
+  trendDown?: boolean;
+  highlight?: boolean;
+  alert?: boolean;
 }) {
   return (
-    <Card className={`border-border bg-card ${highlight ? "border-primary/50 shadow-[0_0_15px_rgba(220,38,38,0.1)]" : ""} ${alert ? "border-destructive/50 shadow-[0_0_15px_rgba(220,38,38,0.1)]" : ""}`}>
-      <CardHeader className="flex flex-row items-center justify-between pb-1.5 sm:pb-2 space-y-0 p-3 sm:p-6">
-        <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider leading-tight">{title}</CardTitle>
-        <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0 ${alert ? "text-destructive" : highlight ? "text-primary" : "text-muted-foreground"}`} />
+    <Card className={`border-border bg-card ${highlight ? "border-primary/50 shadow-[0_0_20px_rgba(56,189,248,0.1)]" : ""} ${alert ? "border-destructive/50 shadow-[0_0_20px_rgba(248,113,113,0.1)]" : ""}`}>
+      <CardHeader className="flex items-center justify-between gap-3 p-4 sm:p-5">
+        <div>
+          <CardTitle className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">{title}</CardTitle>
+        </div>
+        <Icon className={`h-4 w-4 ${alert ? "text-destructive" : highlight ? "text-primary" : "text-muted-foreground"}`} />
       </CardHeader>
-      <CardContent className="p-3 sm:p-6 pt-0">
-        <div className={`text-lg sm:text-2xl font-bold ${highlight ? "text-primary" : ""} ${alert ? "text-destructive" : ""}`}>{value}</div>
+      <CardContent className="p-4 sm:p-5 pt-0">
+        <div className={`text-xl sm:text-2xl font-semibold ${highlight ? "text-primary" : alert ? "text-destructive" : "text-foreground"}`}>{value}</div>
         {trend && (
-          <p className="text-xs mt-1 flex items-center gap-1">
+          <p className="text-xs mt-2 flex items-center gap-1 text-muted-foreground">
             <span className={trendDown ? "text-destructive" : "text-emerald-500"}>
-              {trendDown ? <ArrowDownRight className="w-3 h-3 inline" /> : <ArrowUpRight className="w-3 h-3 inline" />}
+              {trendDown ? <ArrowDownRight className="inline h-3 w-3" /> : <ArrowUpRight className="inline h-3 w-3" />}
               {trend}
             </span>
-            <span className="text-muted-foreground">vs last month</span>
+            <span>vs last month</span>
           </p>
         )}
       </CardContent>
