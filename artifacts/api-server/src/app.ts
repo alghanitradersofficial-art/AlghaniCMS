@@ -1,6 +1,6 @@
 import express, { type Express } from "express";
 import cors from "cors";
-import { helmet } from "helmet";
+import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { pinoHttp } from "pino-http"; // Fixed: Using named import
 import router from "./routes/index.js";
