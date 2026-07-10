@@ -51,7 +51,7 @@ export default function Users() {
   const [resetUserId, setResetUserId] = useState<number | null>(null);
   const [newPassword, setNewPassword] = useState("");
 
-  const { data, isLoading } = useGetUsers();
+  const { data, isLoading, error, isError } = useGetUsers();
   const create = useCreateUser();
   const update = useUpdateUser();
   const del = useDeleteUser();
@@ -171,6 +171,8 @@ export default function Users() {
                 <tbody>
                   {isLoading ? (
                     <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">Loading...</td></tr>
+                  ) : isError ? (
+                    <tr><td colSpan={6} className="text-center py-12 text-destructive">Failed to load users: {(error as Error)?.message || "Unknown error"}</td></tr>
                   ) : data?.length === 0 ? (
                     <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No users found</td></tr>
                   ) : data?.map(u => (

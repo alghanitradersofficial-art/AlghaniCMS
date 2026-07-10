@@ -147,6 +147,7 @@ SMTP_PORT=587
 SMTP_USER=your@gmail.com
 SMTP_PASS=your-app-password
 CEO_EMAIL=junaid@alghani.pk
+FRONTEND_URL=https://your-frontend.vercel.app
 NODE_ENV=production
 ```
 

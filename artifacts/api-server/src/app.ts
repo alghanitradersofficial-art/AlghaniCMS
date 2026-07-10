@@ -26,7 +26,13 @@ const frontendUrl = process.env.FRONTEND_URL;
 const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     if (process.env.NODE_ENV !== "production") return callback(null, true);
-    if (!frontendUrl) return callback(new Error("FRONTEND_URL must be configured in production"));
+    if (!origin) return callback(null, true);
+    if (!frontendUrl) {
+      logger.warn(
+        "FRONTEND_URL is not configured in production. All origins are temporarily allowed for CORS."
+      );
+      return callback(null, true);
+    }
     return callback(null, origin === frontendUrl);
   },
   credentials: true,
