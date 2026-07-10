@@ -12,6 +12,7 @@ import { useGetUsers, useCreateUser, useUpdateUser, useDeleteUser, getGetUsersQu
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Edit, Trash2, Users2, Key, ShieldCheck } from "lucide-react";
 import { getUser } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 
 const ALL_MODULES = [
   { id: "dashboard", label: "Dashboard" },
@@ -41,6 +42,7 @@ const isAdminRole = (role: string) => role === "ceo" || role === "developer";
 
 export default function Users() {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const currentUser = getUser();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
@@ -73,42 +75,68 @@ export default function Users() {
 
   const handleSave = async () => {
     const perms = isAdminRole(form.role) ? ALL_MODULES.map(m => m.id) : form.permissions;
-    if (editing) {
-      await update.mutateAsync({
-        id: editing,
-        data: {
-          name: form.name,
-          role: form.role as "ceo" | "developer" | "manager" | "sales" | "accountant" | "warehouse" | "content",
-          permissions: perms,
-        }
-      });
-    } else {
-      await create.mutateAsync({
-        data: {
-          name: form.name, email: form.email,
-          role: form.role as "ceo" | "developer" | "manager" | "sales" | "accountant" | "warehouse" | "content",
-          password: form.password,
-          permissions: perms,
-        }
-      });
+    try {
+      if (editing) {
+        await update.mutateAsync({
+          id: editing,
+          data: {
+            name: form.name,
+            role: form.role as "ceo" | "developer" | "manager" | "sales" | "accountant" | "warehouse" | "content",
+            permissions: perms,
+          },
+        });
+        toast({ title: "User updated", description: "The user has been updated successfully." });
+      } else {
+        await create.mutateAsync({
+          data: {
+            name: form.name,
+            email: form.email,
+            role: form.role as "ceo" | "developer" | "manager" | "sales" | "accountant" | "warehouse" | "content",
+            password: form.password,
+            permissions: perms,
+          },
+        });
+        toast({ title: "User added", description: "The new user has been created successfully." });
+      }
+      invalidate();
+      setOpen(false);
+    } catch (error) {
+      toast({ title: "Failed to save user", description: (error as Error).message, variant: "destructive" });
     }
-    invalidate(); setOpen(false);
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm("Delete this user?")) return;
-    await del.mutateAsync({ id }); invalidate();
+    try {
+      await del.mutateAsync({ id });
+      toast({ title: "User deleted", description: "The user has been removed." });
+      invalidate();
+    } catch (error) {
+      toast({ title: "Failed to delete user", description: (error as Error).message, variant: "destructive" });
+    }
   };
 
   const handleToggleActive = async (id: number, isActive: boolean) => {
-    await update.mutateAsync({ id, data: { isActive: !isActive } }); invalidate();
+    try {
+      await update.mutateAsync({ id, data: { isActive: !isActive } });
+      toast({ title: "User status updated" });
+      invalidate();
+    } catch (error) {
+      toast({ title: "Failed to update user status", description: (error as Error).message, variant: "destructive" });
+    }
   };
 
   const openReset = (id: number) => { setResetUserId(id); setNewPassword(""); setResetOpen(true); };
   const handleReset = async () => {
     if (!resetUserId || !newPassword) return;
-    await update.mutateAsync({ id: resetUserId, data: { password: newPassword } as any });
-    invalidate(); setResetOpen(false);
+    try {
+      await update.mutateAsync({ id: resetUserId, data: { password: newPassword } as any });
+      toast({ title: "Password reset", description: "User password has been updated." });
+      invalidate();
+      setResetOpen(false);
+    } catch (error) {
+      toast({ title: "Failed to reset password", description: (error as Error).message, variant: "destructive" });
+    }
   };
 
   return (

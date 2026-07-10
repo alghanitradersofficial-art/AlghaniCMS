@@ -5,7 +5,10 @@ import jwt from "jsonwebtoken";
 
 const router = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || "alghani-erp-secret-2024";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET environment variable is required");
+}
 const JWT_EXPIRES = "30d";
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
@@ -39,13 +42,22 @@ router.post("/login", async (req, res) => {
 
     if (!valid) return res.status(401).json({ error: "Invalid credentials" });
 
-    const payload = { id: user.id, email: user.email, role: user.role, name: user.name };
+    const payload = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      permissions: user.permissions || [],
+    };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES });
 
     return res.json({
       token,
       user: {
-        id: user.id, name: user.name, email: user.email, role: user.role,
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
         permissions: user.permissions || [],
       },
     });
