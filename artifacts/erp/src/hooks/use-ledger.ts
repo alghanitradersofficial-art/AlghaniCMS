@@ -122,10 +122,16 @@ export function useLedgerTimeline(customerId: number | undefined, page = 1) {
   });
 }
 
-export function usePriceHistory(customerId: number | undefined, productId: number | undefined) {
+export function usePriceHistory(customerId: number | undefined, productId: number | undefined, from?: string, to?: string) {
   return useQuery({
-    queryKey: ["price-history", customerId, productId],
-    queryFn: () => customFetch<PriceHistoryResponse>(`/api/customers/${customerId}/price-history/${productId}`),
+    queryKey: ["price-history", customerId, productId, from, to],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+      const qs = params.toString() ? `?${params.toString()}` : "";
+      return customFetch<PriceHistoryResponse>(`/api/customers/${customerId}/price-history/${productId}${qs}`);
+    },
     enabled: !!customerId && !!productId,
   });
 }

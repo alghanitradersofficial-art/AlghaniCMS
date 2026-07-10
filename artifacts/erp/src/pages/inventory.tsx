@@ -13,12 +13,12 @@ import { Plus, Search, Edit, Trash2, AlertTriangle, Package } from "lucide-react
 
 type ProductForm = {
   name: string; sku: string; description: string; categoryId: string; brandId: string;
-  costPrice: string; salePrice: string; currentStock: string; minStock: string; unit: string; oemNumber: string;
+  costPrice: string; currentStock: string; minStock: string; unit: string; oemNumber: string;
 };
 
 const emptyForm: ProductForm = {
   name: "", sku: "", description: "", categoryId: "", brandId: "",
-  costPrice: "", salePrice: "", currentStock: "0", minStock: "5", unit: "pcs", oemNumber: "",
+  costPrice: "", currentStock: "0", minStock: "5", unit: "pcs", oemNumber: "",
 };
 
 export default function Inventory() {
@@ -51,7 +51,7 @@ export default function Inventory() {
   const openEdit = (p: NonNullable<typeof data>["data"][0]) => {
     setForm({
       name: p.name, sku: p.sku, description: p.description || "", categoryId: p.categoryId ? String(p.categoryId) : "",
-      brandId: p.brandId ? String(p.brandId) : "", costPrice: String(p.costPrice), salePrice: String(p.salePrice),
+      brandId: p.brandId ? String(p.brandId) : "", costPrice: String(p.costPrice),
       currentStock: String(p.currentStock), minStock: String(p.minStock), unit: p.unit, oemNumber: p.oemNumber || "",
     });
     setEditing(p.id);
@@ -63,7 +63,7 @@ export default function Inventory() {
       name: form.name, sku: form.sku, description: form.description || undefined,
       categoryId: form.categoryId ? parseInt(form.categoryId) : null,
       brandId: form.brandId ? parseInt(form.brandId) : null,
-      costPrice: parseFloat(form.costPrice), salePrice: parseFloat(form.salePrice),
+      costPrice: parseFloat(form.costPrice),
       currentStock: parseInt(form.currentStock), minStock: parseInt(form.minStock),
       unit: form.unit, oemNumber: form.oemNumber || undefined,
     };
@@ -142,7 +142,6 @@ export default function Inventory() {
                     <th className="px-4 py-3 text-left">Category</th>
                     <th className="px-4 py-3 text-left">Brand</th>
                     <th className="px-4 py-3 text-right">Cost</th>
-                    <th className="px-4 py-3 text-right">Sale Price</th>
                     <th className="px-4 py-3 text-center">Stock</th>
                     <th className="px-4 py-3 text-center">Actions</th>
                   </tr>
@@ -159,7 +158,6 @@ export default function Inventory() {
                       <td className="px-4 py-3 text-muted-foreground">{p.categoryName || "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{p.brandName || "—"}</td>
                       <td className="px-4 py-3 text-right">Rs. {p.costPrice?.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right text-secondary font-medium">Rs. {p.salePrice?.toLocaleString()}</td>
                       <td className="px-4 py-3 text-center">
                         <Badge variant={p.currentStock <= p.minStock ? "destructive" : "secondary"} className={p.currentStock <= p.minStock ? "bg-destructive/20 text-red-400 border-0" : "bg-green-500/10 text-green-400 border-0"}>
                           {p.currentStock} {p.unit}
@@ -227,10 +225,6 @@ export default function Inventory() {
               <div className="space-y-1">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Cost Price (Rs.)</Label>
                 <Input type="number" value={form.costPrice} onChange={e => setForm(f => ({ ...f, costPrice: e.target.value }))} className="bg-background/50 border-border" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Sale Price (Rs.)</Label>
-                <Input type="number" value={form.salePrice} onChange={e => setForm(f => ({ ...f, salePrice: e.target.value }))} className="bg-background/50 border-border" />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">

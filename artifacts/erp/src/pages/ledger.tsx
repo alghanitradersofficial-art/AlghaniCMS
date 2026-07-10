@@ -30,7 +30,7 @@ export default function LedgerPage() {
   if (partyType !== "all") params.set("partyType", partyType);
   params.set("limit", "100");
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["general-ledger", params.toString()],
     queryFn: () => apiGet<LedgerResponse>(`/api/general-ledger?${params.toString()}`),
   });
@@ -63,13 +63,18 @@ export default function LedgerPage() {
           </Select>
         </div>
 
-        {data && (
+        {isError ? (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            <p className="font-semibold">Unable to load ledger</p>
+            <p>{error instanceof Error ? error.message : "An unexpected error occurred."}</p>
+          </div>
+        ) : data ? (
           <div className="grid grid-cols-3 gap-3">
             <Card className="border-border bg-card"><CardContent className="p-4"><p className="text-xs text-muted-foreground uppercase">Total In</p><p className="text-xl font-bold text-emerald-500">Rs {data.totalCredit.toLocaleString()}</p></CardContent></Card>
             <Card className="border-border bg-card"><CardContent className="p-4"><p className="text-xs text-muted-foreground uppercase">Total Out</p><p className="text-xl font-bold text-red-500">Rs {data.totalDebit.toLocaleString()}</p></CardContent></Card>
             <Card className="border-border bg-card"><CardContent className="p-4"><p className="text-xs text-muted-foreground uppercase">Net</p><p className={cn("text-xl font-bold", data.netBalance >= 0 ? "text-emerald-500" : "text-red-500")}>Rs {data.netBalance.toLocaleString()}</p></CardContent></Card>
           </div>
-        )}
+        ) : null}
 
         <Card className="border-border bg-card">
           <CardContent className="p-0">

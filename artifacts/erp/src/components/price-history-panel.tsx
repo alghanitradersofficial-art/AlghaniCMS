@@ -1,6 +1,16 @@
 import { usePriceHistory, usePriceSuggestion } from "@/hooks/use-ledger";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, TrendingUp, TrendingDown, History } from "lucide-react";
+import { useState } from "react";
+
+function InputDate({ label, value, onChange }: { label: string; value?: string; onChange: (v?: string) => void }) {
+  return (
+    <div className="text-xs">
+      <div className="text-muted-foreground text-[10px]">{label}</div>
+      <input type="date" value={value ?? ""} onChange={(e) => onChange(e.target.value || undefined)} className="bg-background/50 border-border text-xs h-8 px-2 rounded" />
+    </div>
+  );
+}
 
 interface PriceHistoryPanelProps {
   customerId: number | undefined;
@@ -9,7 +19,9 @@ interface PriceHistoryPanelProps {
 }
 
 export function PriceHistoryPanel({ customerId, productId, proposedPrice }: PriceHistoryPanelProps) {
-  const { data: history, isLoading: historyLoading } = usePriceHistory(customerId, productId);
+  const [from, setFrom] = useState<string | undefined>(undefined);
+  const [to, setTo] = useState<string | undefined>(undefined);
+  const { data: history, isLoading: historyLoading } = usePriceHistory(customerId, productId, from, to);
   const { data: suggestion } = usePriceSuggestion(customerId, productId, proposedPrice || undefined);
 
   if (!customerId || !productId) {
@@ -26,6 +38,10 @@ export function PriceHistoryPanel({ customerId, productId, proposedPrice }: Pric
 
   return (
     <div className="rounded-lg border border-border bg-background/40 p-3 space-y-2 text-xs">
+      <div className="flex gap-2 items-center">
+        <InputDate label="From" value={from} onChange={setFrom} />
+        <InputDate label="To" value={to} onChange={setTo} />
+      </div>
       {history?.hasHistory ? (
         <>
           <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
@@ -71,6 +87,26 @@ export function PriceHistoryPanel({ customerId, productId, proposedPrice }: Pric
           {suggestion.requiresApproval && (
             <Badge className="bg-yellow-500/10 text-yellow-400 border-0">Requires manager approval</Badge>
           )}
+        </div>
+      )}
+
+      {history?.previousSales && history.previousSales.length > 0 && (
+        <div className="border-t border-border pt-2 space-y-2">
+          <div className="font-medium text-muted-foreground text-xs">Recent Sales</div>
+          <div className="space-y-1 max-h-40 overflow-y-auto text-xs">
+            {history.previousSales.map((s: any) => (
+              <div key={s.id} className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium">{s.invoiceNumber}</div>
+                  <div className="text-muted-foreground text-[11px]">{new Date(s.invoiceDate).toLocaleDateString()}</div>
+                </div>
+                <div className="text-right">
+                  <div>Rs. {s.unitPrice.toLocaleString()}</div>
+                  <div className="text-muted-foreground text-[11px]">Qty: {s.quantity}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

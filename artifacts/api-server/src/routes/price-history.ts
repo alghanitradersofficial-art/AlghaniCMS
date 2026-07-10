@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, priceHistoryTable, productsTable } from "@workspace/db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
 import { round2 } from "../lib/ledger.js";
 
 const router = Router();
@@ -33,13 +33,19 @@ router.get("/:customerId/price-history/:productId", async (req, res) => {
   try {
     const customerId = parseInt(req.params.customerId);
     const productId = parseInt(req.params.productId);
+    const from = req.query.from ? new Date(req.query.from as string) : undefined;
+    const to = req.query.to ? new Date(req.query.to as string) : undefined;
+
+    const conditions: Array<any> = [eq(priceHistoryTable.customerId, customerId), eq(priceHistoryTable.productId, productId)];
+    if (from) conditions.push(gte(priceHistoryTable.invoiceDate, from));
+    if (to) conditions.push(lte(priceHistoryTable.invoiceDate, to));
 
     const history = await db
       .select()
       .from(priceHistoryTable)
-      .where(and(eq(priceHistoryTable.customerId, customerId), eq(priceHistoryTable.productId, productId)))
+      .where(and(...conditions))
       .orderBy(desc(priceHistoryTable.invoiceDate))
-      .limit(10);
+      .limit(100);
 
     if (history.length === 0) {
       return res.json({ hasHistory: false });

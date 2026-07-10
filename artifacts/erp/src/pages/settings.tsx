@@ -49,15 +49,52 @@ export default function Settings() {
   const [legacyImporting, setLegacyImporting] = useState(false);
   const [legacyImportResult, setLegacyImportResult] = useState<{ message?: string; importedProducts?: number; importedCustomers?: number; importedSuppliers?: number; importedPurchases?: number; importedSales?: number } | null>(null);
 
+  const fetchJson = async <T = unknown>(url: string, options?: RequestInit): Promise<T> => {
+    const res = await fetch(url, options);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error((data && typeof data === "object" && "error" in data ? (data as any).error : `Request failed with status ${res.status}`) as string);
+    }
+    return data as T;
+  };
+
   useEffect(() => {
-    fetch(`${BASE}/api/settings`).then(r => r.json()).then(d => { if (d.company) setCompany(c => ({ ...c, ...d.company })); }).catch(() => {});
-    loadSchedules();
-    fetch(`${BASE}/api/telegram/status`).then(r => r.json()).then(setTelegramStatus).catch(() => {});
-    fetch(`${BASE}/api/backup/stats`).then(r => r.json()).then(d => setDbStats(d.tables)).catch(() => {});
+    const load = async () => {
+      try {
+        const data = await fetchJson<{ company?: Partial<CompanySettings> }>(`${BASE}/api/settings`);
+        if (data.company) setCompany(c => ({ ...c, ...data.company }));
+      } catch (error) {
+        console.warn("Settings load failed:", error);
+      }
+
+      loadSchedules();
+
+      try {
+        const status = await fetchJson<typeof telegramStatus>(`${BASE}/api/telegram/status`);
+        setTelegramStatus(status);
+      } catch (error) {
+        console.warn("Telegram status load failed:", error);
+      }
+
+      try {
+        const stats = await fetchJson<{ tables: Record<string, number> }>(`${BASE}/api/backup/stats`);
+        setDbStats(stats.tables || null);
+      } catch (error) {
+        console.warn("Backup stats load failed:", error);
+      }
+    };
+
+    load();
   }, []);
 
-  const loadSchedules = () => {
-    fetch(`${BASE}/api/settings/report-schedules`).then(r => r.json()).then(setSchedules).catch(() => {});
+  const loadSchedules = async () => {
+    try {
+      const data = await fetchJson<Schedule[]>(`${BASE}/api/settings/report-schedules`);
+      setSchedules(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.warn("Schedule load failed:", error);
+      setSchedules([]);
+    }
   };
 
   const saveCompany = async () => {

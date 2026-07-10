@@ -22,7 +22,23 @@ type RecentActivityItem = {
 
 export default function Dashboard() {
   const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary();
-  const { data: chartData } = useGetSalesChart({ months: 6 });
+  const monthsFromRange = (r: DateRangeValue) => {
+    if (!r) return 6;
+    if (r.preset === "all") return 24;
+    if (r.preset === "year") return 12;
+    if (r.preset === "month") return 1;
+    if (r.preset === "week") return 1;
+    if (r.preset === "today") return 1;
+    if (r.preset === "custom" && r.from && r.to) {
+      const from = new Date(r.from);
+      const to = new Date(r.to);
+      const months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth()) + 1;
+      return Math.max(1, Math.min(48, months));
+    }
+    return 6;
+  };
+
+  const { data: chartData } = useGetSalesChart({ months: monthsFromRange(range) });
   const { data: topProducts } = useGetTopProducts();
   const { data: lowStock } = useGetLowStockAlerts();
 
@@ -98,10 +114,10 @@ export default function Dashboard() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                    <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
                     <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => (value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value)} />
                     <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))", color: "hsl(var(--foreground))", fontSize: 12 }} />
-                    <Area type="monotone" dataKey="revenue" name="Revenue" stroke="hsl(var(--primary))" fill="url(#revGrad)" strokeWidth={3} />
+                    <Area type="monotone" dataKey="sales" name="Revenue" stroke="hsl(var(--primary))" fill="url(#revGrad)" strokeWidth={3} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>

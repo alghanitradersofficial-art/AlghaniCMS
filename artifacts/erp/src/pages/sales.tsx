@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useGetSales, useCreateSale, useUpdateSale, useDeleteSale, useGetProducts, useGetCustomers, getGetSalesQueryKey } from "@workspace/api-client-react";
+import { apiGet } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit, Trash2, ShoppingCart, X, Info } from "lucide-react";
 import { PriceHistoryPanel } from "@/components/price-history-panel";
@@ -45,7 +46,7 @@ export default function Sales() {
   const addItem = () => {
     if (products?.data[0]) {
       const p = products.data[0];
-      setItems(prev => [...prev, { productId: p.id, productName: p.name, quantity: 1, unitPrice: p.salePrice }]);
+      setItems(prev => [...prev, { productId: p.id, productName: p.name, quantity: 1, unitPrice: 0 }]);
     }
   };
 
@@ -55,7 +56,30 @@ export default function Sales() {
       if (field === "productId") {
         const product = products?.data.find(p => p.id === Number(val));
         if (product) {
-          next[idx] = { ...next[idx], productId: product.id, productName: product.name, unitPrice: product.salePrice };
+          // Set unit price to customer's previous price for this product if available,
+          // otherwise fall back to product.salePrice or 0.
+          next[idx] = { ...next[idx], productId: product.id, productName: product.name, unitPrice: 0 };
+          (async () => {
+            try {
+              if (customerId) {
+                const suggestion = await apiGet<any>(`/api/customers/${customerId}/price-suggestion/${product.id}`);
+                const prev = suggestion.previousCustomerPrice ?? null;
+                setItems(cur => {
+                  const n = [...cur];
+                  n[idx] = { ...n[idx], unitPrice: prev ?? product.salePrice ?? 0 };
+                  return n;
+                });
+              } else {
+                setItems(cur => {
+                  const n = [...cur];
+                  n[idx] = { ...n[idx], unitPrice: product.salePrice ?? 0 };
+                  return n;
+                });
+              }
+            } catch (e) {
+              // ignore and leave unitPrice as-is
+            }
+          })();
         }
       } else {
         next[idx] = { ...next[idx], [field]: Number(val) };

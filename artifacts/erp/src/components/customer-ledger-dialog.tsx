@@ -25,8 +25,8 @@ const METHODS: Array<{ value: RecordPaymentInput["method"]; label: string }> = [
 ];
 
 export function CustomerLedgerDialog({ customerId, customerName, open, onOpenChange }: CustomerLedgerDialogProps) {
-  const { data: ledger, isLoading } = useCustomerLedger(customerId ?? undefined);
-  const { data: timeline } = useLedgerTimeline(customerId ?? undefined);
+  const { data: ledger, isLoading, isError, error } = useCustomerLedger(customerId ?? undefined);
+  const { data: timeline, isError: timelineError } = useLedgerTimeline(customerId ?? undefined);
   const recordPayment = useRecordPayment();
 
   const [amount, setAmount] = useState("");
@@ -46,8 +46,15 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
           <DialogTitle className="flex items-center gap-2"><Wallet className="w-5 h-5 text-primary" /> {customerName} — Khata</DialogTitle>
         </DialogHeader>
 
-        {isLoading || !ledger ? (
+        {isLoading ? (
           <div className="text-center py-10 text-muted-foreground text-sm">Loading ledger…</div>
+        ) : isError ? (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            <p className="font-semibold">Failed to load customer ledger</p>
+            <p>{error instanceof Error ? error.message : "An unexpected error occurred."}</p>
+          </div>
+        ) : !ledger ? (
+          <div className="text-center py-10 text-muted-foreground text-sm">No customer ledger available.</div>
         ) : (
           <div className="space-y-5">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -88,7 +95,11 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
             <div className="border-t border-border pt-4">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground mb-2 block flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5" /> Ledger Timeline</Label>
               <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {timeline?.data.length ? timeline.data.map(entry => (
+                {timelineError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                    Failed to load timeline entries.
+                  </div>
+                ) : timeline?.data.length ? timeline.data.map(entry => (
                   <div key={entry.id} className="flex items-center justify-between text-xs border-b border-border/50 pb-2">
                     <div className="flex items-center gap-2">
                       {entry.amount >= 0 ? <ArrowUpCircle className="w-4 h-4 text-red-400" /> : <ArrowDownCircle className="w-4 h-4 text-green-400" />}
