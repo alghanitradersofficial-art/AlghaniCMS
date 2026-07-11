@@ -20,8 +20,7 @@ import { clearAuth, getUser, hasPermission } from "@/lib/auth";
 
 export const MENU_ITEMS = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", permission: "dashboard" },
-  { icon: Package, label: "Inventory", href: "/inventory", permission: "inventory" },
-  { icon: Briefcase, label: "Brands", href: "/brands", permission: "brands" },
+  { icon: Package, label: "Inventory & Brands", href: "/inventory", permission: "inventory" },
   { icon: ShoppingCart, label: "Sales", href: "/sales", permission: "sales" },
   { icon: Truck, label: "Purchases", href: "/purchases", permission: "purchases" },
   { icon: Users, label: "Customers", href: "/customers", permission: "customers" },
@@ -30,7 +29,6 @@ export const MENU_ITEMS = [
   { icon: Zap, label: "Quick Entry", href: "/quick-entry", permission: "sales" },
   { icon: Package, label: "Operations", href: "/operations", permission: "inventory" },
   { icon: HardHat, label: "Staff", href: "/staff", permission: "staff" },
-  { icon: BookText, label: "Ledger", href: "/ledger", permission: "ledger" },
   { icon: FileBarChart, label: "Reports & Analytics", href: "/reports", permission: "reports" },
   { icon: Users2, label: "Users", href: "/users", permission: "users" },
   { icon: Settings2, label: "Settings", href: "/settings", permission: "settings" },
