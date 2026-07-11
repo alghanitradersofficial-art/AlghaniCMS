@@ -348,8 +348,8 @@ router.get("/recent-activity", async (req, res) => {
 });
 
 router.get("/top-products", async (req, res) => {
+  const cacheKey = "dashboard:top-products";
   try {
-    const cacheKey = "dashboard:top-products";
     const cached = getCached(cacheKey);
     if (cached) return res.json(cached);
     const result = await pool.query(`
