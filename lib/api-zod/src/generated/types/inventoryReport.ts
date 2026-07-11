@@ -5,7 +5,7 @@
  * Al Ghani Wholesale Traders ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { InventoryReportCategoriesItem } from './inventoryReportCategoriesItem';
+import type { InventoryReportCategoriesItem } from './inventoryReportCategoriesItem.js';
 
 export interface InventoryReport {
   totalProducts: number;

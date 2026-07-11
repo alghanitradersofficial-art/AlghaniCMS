@@ -5,7 +5,7 @@
  * Al Ghani Wholesale Traders ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { Product } from './product';
+import type { Product } from './product.js';
 
 export interface ProductList {
   data: Product[];

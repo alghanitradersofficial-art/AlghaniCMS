@@ -5,7 +5,7 @@
  * Al Ghani Wholesale Traders ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { UserInputRole } from './userInputRole';
+import type { UserInputRole } from './userInputRole.js';
 
 export interface UserInput {
   name: string;

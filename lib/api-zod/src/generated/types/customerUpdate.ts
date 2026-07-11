@@ -5,7 +5,7 @@
  * Al Ghani Wholesale Traders ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { CustomerUpdateType } from './customerUpdateType';
+import type { CustomerUpdateType } from './customerUpdateType.js';
 
 export interface CustomerUpdate {
   name?: string;
