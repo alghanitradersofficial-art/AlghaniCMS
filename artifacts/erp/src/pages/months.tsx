@@ -11,10 +11,11 @@ const monthNames = ["January", "February", "March", "April", "May", "June", "Jul
 export default function MonthsPage() {
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const qc = useQueryClient();
 
-  const { data: overview } = useQuery({ queryKey: ["financial-period-overview"], queryFn: () => apiGet(`/api/months/overview`) });
-  const { data: closures } = useQuery({ queryKey: ["months-closures"], queryFn: () => apiGet(`/api/months`) });
+  const { data: overview, error: overviewError } = useQuery({ queryKey: ["financial-period-overview"], queryFn: () => apiGet(`/api/months/overview`) });
+  const { data: closures, error: closuresError } = useQuery({ queryKey: ["months-closures"], queryFn: () => apiGet(`/api/months`) });
 
   const summaryCards = useMemo(() => [
     { label: "Current financial month", value: `${monthNames[(month - 1) % 12]} ${year}` },
@@ -24,15 +25,27 @@ export default function MonthsPage() {
   ], [closures, month, overview, year]);
 
   async function handleClose() {
-    await apiPost(`/api/months/close`, { year, month });
-    qc.invalidateQueries({ queryKey: ["months-closures"] });
-    qc.invalidateQueries({ queryKey: ["financial-period-overview"] });
+    try {
+      setStatusMessage(null);
+      await apiPost(`/api/months/close`, { year, month });
+      qc.invalidateQueries({ queryKey: ["months-closures"] });
+      qc.invalidateQueries({ queryKey: ["financial-period-overview"] });
+      setStatusMessage("Month closed successfully.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Unable to close month right now.");
+    }
   }
 
   async function handleReopen() {
-    await apiPost(`/api/months/reopen`, { year, month, reason: "Administrator reopened the month" });
-    qc.invalidateQueries({ queryKey: ["months-closures"] });
-    qc.invalidateQueries({ queryKey: ["financial-period-overview"] });
+    try {
+      setStatusMessage(null);
+      await apiPost(`/api/months/reopen`, { year, month, reason: "Administrator reopened the month" });
+      qc.invalidateQueries({ queryKey: ["months-closures"] });
+      qc.invalidateQueries({ queryKey: ["financial-period-overview"] });
+      setStatusMessage("Month reopened successfully.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Unable to reopen month right now.");
+    }
   }
 
   return (
@@ -57,6 +70,9 @@ export default function MonthsPage() {
             <Button variant="outline" onClick={handleReopen}>Reopen</Button>
           </div>
         </div>
+
+        {statusMessage && <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700">{statusMessage}</div>}
+        {(overviewError || closuresError) && <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">Unable to load financial period data. Please refresh the page or try again shortly.</div>}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {summaryCards.map((card) => (

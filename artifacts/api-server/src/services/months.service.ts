@@ -1,5 +1,6 @@
 import { db } from "@workspace/db";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { initializeDatabase } from "../lib/init-db.js";
 import {
   salesTable,
   purchasesTable,
@@ -13,14 +14,19 @@ import {
   financialPeriodSnapshotsTable,
   financialPeriodBalancesTable,
   financialPeriodAuditLogsTable,
-} from "@workspace/db";
+} from "@workspace/db/schema";
 
 function toNumber(value: unknown): number {
   const parsed = typeof value === "string" ? Number.parseFloat(value) : Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+async function ensureFinancialTablesReady() {
+  await initializeDatabase();
+}
+
 export async function computeMonthSummary(periodStart: Date, periodEnd: Date) {
+  await ensureFinancialTablesReady();
   const [{ total_sales }] = await db.select({ total_sales: sql<number>`coalesce(sum(${salesTable.total}::numeric), 0)` }).from(salesTable).where(sql`${salesTable.saleDate} >= ${periodStart} AND ${salesTable.saleDate} <= ${periodEnd} AND ${salesTable.status} = 'completed'`);
   const [{ total_sales_discount }] = await db.select({ total_sales_discount: sql<number>`coalesce(sum(${salesTable.discount}::numeric), 0)` }).from(salesTable).where(sql`${salesTable.saleDate} >= ${periodStart} AND ${salesTable.saleDate} <= ${periodEnd} AND ${salesTable.status} = 'completed'`);
   const [{ total_purchases }] = await db.select({ total_purchases: sql<number>`coalesce(sum(${purchasesTable.total}::numeric), 0)` }).from(purchasesTable).where(sql`${purchasesTable.purchaseDate} >= ${periodStart} AND ${purchasesTable.purchaseDate} <= ${periodEnd}`);
@@ -116,6 +122,7 @@ async function buildWarnings(periodStart: Date, periodEnd: Date) {
 }
 
 export async function closeMonth(year: number, month: number, actorUserId: number | null, periodStart: Date, periodEnd: Date) {
+  await ensureFinancialTablesReady();
   const summary = await computeMonthSummary(periodStart, periodEnd);
   const warnings = await buildWarnings(periodStart, periodEnd);
 
@@ -266,6 +273,7 @@ export async function getClosure(id: number) {
 }
 
 export async function getCurrentPeriodOverview() {
+  await ensureFinancialTablesReady();
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
@@ -288,6 +296,7 @@ export async function getCurrentPeriodOverview() {
 }
 
 export async function reopenMonth(year: number, month: number, actorUserId: number | null, reason: string) {
+  await ensureFinancialTablesReady();
   const [period] = await db.select().from(financialPeriodsTable).where(and(eq(financialPeriodsTable.year, year), eq(financialPeriodsTable.month, month)));
   if (!period) throw new Error("Period not found");
   await db.transaction(async (tx) => {

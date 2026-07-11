@@ -1,7 +1,6 @@
 import {
   LayoutDashboard,
   Package,
-  Briefcase,
   ShoppingCart,
   Truck,
   Users,
@@ -35,7 +34,7 @@ export const MENU_ITEMS = [
   { icon: Settings2, label: "Settings", href: "/settings", permission: "settings" },
 ];
 
-export function SidebarContent({ onItemClick }: { onItemClick?: () => void }) {
+export function SidebarContent({ onItemClick, collapsed = false }: { onItemClick?: () => void; collapsed?: boolean }) {
   const [location, setLocation] = useLocation();
   const user = getUser();
 
@@ -49,18 +48,20 @@ export function SidebarContent({ onItemClick }: { onItemClick?: () => void }) {
 
   return (
     <div className="flex h-full flex-col bg-card/90 p-3 text-sm text-foreground backdrop-blur-xl shadow-inner">
-      <div className="flex items-center justify-between gap-3 rounded-3xl border border-border/60 bg-background/90 px-4 py-4 shadow-sm">
-        <div className="flex items-center gap-3">
-          <img src="/logo.jpg" alt="Al Ghani" className="h-10 w-10 rounded-2xl object-cover" />
-          <div>
-            <div className="text-sm font-semibold uppercase tracking-[0.22em] text-muted-foreground">Al Ghani</div>
-            <div className="text-xs text-muted-foreground/80">ERP HQ</div>
-          </div>
+      <div className="flex items-center justify-between gap-3 rounded-[24px] border border-border/60 bg-background/90 px-3 py-3 shadow-sm">
+        <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"} w-full`}>
+          <img src="/logo.jpg" alt="Al Ghani" className={`${collapsed ? "h-10 w-10" : "h-10 w-10"} rounded-2xl object-cover`} />
+          {!collapsed && (
+            <div>
+              <div className="text-sm font-semibold uppercase tracking-[0.22em] text-muted-foreground">Al Ghani</div>
+              <div className="text-xs text-muted-foreground/80">ERP HQ</div>
+            </div>
+          )}
         </div>
       </div>
 
-      {user && (
-        <div className="mt-4 rounded-3xl border border-border/60 bg-primary/5 p-4 shadow-sm">
+      {user && !collapsed && (
+        <div className="mt-4 rounded-[24px] border border-border/60 bg-primary/5 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Signed in as</div>
           <div className="mt-2 text-sm font-semibold text-foreground">{user.name}</div>
           <div className="text-xs text-muted-foreground/80 capitalize">{user.role}</div>
@@ -74,14 +75,14 @@ export function SidebarContent({ onItemClick }: { onItemClick?: () => void }) {
             return (
               <Link key={item.href} href={item.href} onClick={onItemClick}>
                 <div
-                  className={`group flex items-center gap-3 rounded-3xl border px-4 py-3 transition-all duration-300 ease-in-out ${
+                  className={`group flex items-center rounded-[22px] border px-3 py-3 transition-all duration-300 ease-in-out ${collapsed ? "justify-center" : "gap-3"} ${
                     isActive
                       ? "border-primary/60 bg-primary/10 text-primary shadow-sm"
                       : "border-border/60 bg-background/80 text-muted-foreground hover:border-primary/30 hover:bg-primary/5 hover:text-foreground"
                   }`}
                 >
                   <item.icon className="h-5 w-5 flex-shrink-0" />
-                  <span className="truncate text-sm font-medium">{item.label}</span>
+                  {!collapsed && <span className="truncate text-sm font-medium">{item.label}</span>}
                 </div>
               </Link>
             );
@@ -89,13 +90,13 @@ export function SidebarContent({ onItemClick }: { onItemClick?: () => void }) {
         </nav>
       </div>
 
-      <div className="mt-4 rounded-3xl border border-border/60 bg-background/80 p-4 shadow-sm">
+      <div className="mt-4 rounded-[24px] border border-border/60 bg-background/80 p-3 shadow-sm">
         <button
           onClick={handleLogout}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-destructive/60 bg-destructive/5 px-4 py-3 text-sm font-semibold text-destructive transition-all duration-300 hover:bg-destructive/10"
+          className={`flex w-full items-center justify-center gap-2 rounded-[20px] border border-destructive/60 bg-destructive/5 px-4 py-3 text-sm font-semibold text-destructive transition-all duration-300 hover:bg-destructive/10 ${collapsed ? "px-2" : ""}`}
         >
           <LogOut className="h-4 w-4" />
-          Logout
+          {!collapsed && "Logout"}
         </button>
       </div>
     </div>
