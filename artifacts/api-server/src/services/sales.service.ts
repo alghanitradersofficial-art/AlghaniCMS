@@ -22,7 +22,7 @@ export async function listSales(params: Record<string, any>) {
 
 export async function createSale(body: any, actorUserId: number | null) {
   // prepare products and items
-  const productIds = [...new Set(body.items.map((i: any) => i.productId))];
+  const productIds = Array.from(new Set(body.items.map((i: any) => Number(i.productId)))) as number[];
   const products = productIds.length ? await db.select({ id: productsTable.id, name: productsTable.name, sku: productsTable.sku, costPrice: productsTable.costPrice }).from(productsTable).where(inArray(productsTable.id, productIds)) : [];
   const productById = new Map(products.map((p) => [p.id, p]));
 
