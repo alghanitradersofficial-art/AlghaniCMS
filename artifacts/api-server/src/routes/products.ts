@@ -217,18 +217,29 @@ router.patch("/:id", async (req, res): Promise<any> => { // Fixed return type
 
 // DELETE /api/products/:id
 router.delete("/:id", async (req, res): Promise<any> => { // Fixed return type
+  const client = await pool.connect();
   try {
     const id = parseInt(req.params.id);
-    const existing = await pool.query(`SELECT image_public_id FROM products WHERE id = $1`, [id]);
+    const existing = await client.query(`SELECT image_public_id FROM products WHERE id = $1`, [id]);
     const publicId = existing.rows[0]?.image_public_id;
     if (publicId) {
       await destroyCloudinaryAsset(publicId as string);
     }
-    await pool.query(`DELETE FROM products WHERE id = $1`, [id]);
-    return res.status(204).send(); // Added return block to ensure consistency
+
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM supplier_products WHERE product_id = $1`, [id]);
+    await client.query(`DELETE FROM customer_price_history WHERE product_id = $1`, [id]);
+    await client.query(`DELETE FROM stock_adjustments WHERE product_id = $1`, [id]);
+    await client.query(`DELETE FROM products WHERE id = $1`, [id]);
+    await client.query("COMMIT");
+
+    return res.status(204).send();
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error(error);
     return res.status(500).json({ error: "Failed to delete product" });
+  } finally {
+    client.release();
   }
 });
 

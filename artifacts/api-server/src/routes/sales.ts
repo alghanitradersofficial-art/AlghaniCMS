@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
+import { db, ledgerEntriesTable } from "@workspace/db";
 import { salesTable, productsTable, priceHistoryTable } from "@workspace/db";
 import { eq, ilike, and, sql, inArray } from "drizzle-orm";
 import { CreateSaleBody, UpdateSaleBody } from "@workspace/api-zod";
@@ -289,6 +289,12 @@ router.delete("/:id", async (req, res) => {
         });
         await adjustSaleStock(existingSale, 1, tx);
       }
+
+      // Some related records keep a nullable sale_id foreign key, so clear
+      // those references before deleting the sale row.
+      await tx.update(priceHistoryTable).set({ saleId: null }).where(eq(priceHistoryTable.saleId, id));
+      await tx.update(ledgerEntriesTable).set({ saleId: null }).where(eq(ledgerEntriesTable.saleId, id));
+
       await tx.delete(salesTable).where(eq(salesTable.id, id));
     });
 

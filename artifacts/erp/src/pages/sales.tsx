@@ -40,10 +40,10 @@ export default function Sales() {
   const updateSale = useUpdateSale();
   const deleteSale = useDeleteSale();
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getGetSalesQueryKey() });
+  const invalidate = () => qc.invalidateQueries({ queryKey: getGetSalesQueryKey(), exact: false });
 
   const openNew = () => {
-    setCustomerName(""); setCustomerId(undefined); setDiscount("0"); setNotes(""); setSaleDate(new Date().toISOString().slice(0, 10)); setItems([]); setEditingId(null); setExpandedRow(null); setOpen(true);
+    setCustomerName(""); setCustomerId(undefined); setDiscount("0"); setNotes(""); setSaleDate(new Date().toISOString().slice(0, 10)); setItems([]); setEditingSale(null); setExpandedRow(null); setOpen(true);
   };
 
   const addItem = () => {

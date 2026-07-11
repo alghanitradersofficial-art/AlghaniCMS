@@ -45,7 +45,7 @@ export default function Inventory() {
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getGetProductsQueryKey() });
+  const invalidate = () => qc.invalidateQueries({ queryKey: getGetProductsQueryKey(), exact: false });
 
   const openNew = () => { setForm(emptyForm); setEditing(null); setOpen(true); };
   const openEdit = (p: NonNullable<typeof data>["data"][0]) => {
@@ -64,6 +64,7 @@ export default function Inventory() {
       categoryId: form.categoryId ? parseInt(form.categoryId) : null,
       brandId: form.brandId ? parseInt(form.brandId) : null,
       costPrice: parseFloat(form.costPrice),
+      salePrice: parseFloat(form.costPrice),
       currentStock: parseInt(form.currentStock), minStock: parseInt(form.minStock),
       unit: form.unit, oemNumber: form.oemNumber || undefined,
     };
