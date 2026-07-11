@@ -1,5 +1,5 @@
 import { Router } from "express";
-import settingsService from "../services/settings.service.js";
+import settingsService, { DEFAULT_SETTINGS } from "../services/settings.service.js";
 
 const router = Router();
 
@@ -9,7 +9,7 @@ router.get("/", async (req, res) => {
     return res.json(settings);
   } catch (error) {
     console.error(error);
-    return res.json(settingsService.DEFAULT_SETTINGS);
+    return res.json(DEFAULT_SETTINGS);
   }
 });
 
@@ -28,22 +28,21 @@ router.patch("/", async (req, res) => {
 
 router.get("/report-schedules", async (req, res) => {
   try {
-    const result = await pool.query(`SELECT * FROM report_schedules ORDER BY created_at DESC`);
-    return res.json(result.rows);
+    const rows = await settingsService.listReportSchedules();
+    return res.json(rows);
   } catch (error) {
+    console.error(error);
     return res.status(500).json({ error: "Failed to fetch schedules" });
   }
 });
 
 router.post("/report-schedules", async (req, res) => {
   try {
-    const { reportType, frequency, sendTo, whatsappNumbers } = req.body;
-    const result = await pool.query(
-      `INSERT INTO report_schedules (report_type, frequency, send_to, whatsapp_numbers) VALUES ($1, $2, $3, $4) RETURNING *`,
-      [reportType, frequency, JSON.stringify(sendTo || []), JSON.stringify(whatsappNumbers || [])]
-    );
-    return res.status(201).json(result.rows[0]);
+    const data = req.body as any;
+    const row = await settingsService.createReportSchedule({ reportType: data.reportType, frequency: data.frequency, sendTo: data.sendTo, whatsappNumbers: data.whatsappNumbers });
+    return res.status(201).json(row);
   } catch (error) {
+    console.error(error);
     return res.status(500).json({ error: "Failed to create schedule" });
   }
 });
@@ -51,19 +50,11 @@ router.post("/report-schedules", async (req, res) => {
 router.patch("/report-schedules/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { isActive, sendTo, whatsappNumbers, frequency } = req.body;
-    const updates: string[] = [];
-    const values: unknown[] = [];
-    let idx = 1;
-    if (isActive !== undefined) { updates.push(`is_active = $${idx++}`); values.push(isActive); }
-    if (sendTo !== undefined) { updates.push(`send_to = $${idx++}`); values.push(JSON.stringify(sendTo)); }
-    if (whatsappNumbers !== undefined) { updates.push(`whatsapp_numbers = $${idx++}`); values.push(JSON.stringify(whatsappNumbers)); }
-    if (frequency !== undefined) { updates.push(`frequency = $${idx++}`); values.push(frequency); }
-    values.push(id);
-    if (updates.length === 0) return res.status(400).json({ error: "Nothing to update" });
-    const result = await pool.query(`UPDATE report_schedules SET ${updates.join(", ")} WHERE id = $${idx} RETURNING *`, values);
-    return res.json(result.rows[0]);
+    const updates = req.body as Record<string, unknown>;
+    const row = await settingsService.updateReportSchedule(id, updates);
+    return res.json(row);
   } catch (error) {
+    console.error(error);
     return res.status(500).json({ error: "Failed to update schedule" });
   }
 });
@@ -71,9 +62,10 @@ router.patch("/report-schedules/:id", async (req, res) => {
 router.delete("/report-schedules/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    await pool.query(`DELETE FROM report_schedules WHERE id = $1`, [id]);
+    await settingsService.deleteReportSchedule(id);
     res.status(204).send();
   } catch (error) {
+    console.error(error);
     return res.status(500).json({ error: "Failed to delete schedule" });
   }
 });
