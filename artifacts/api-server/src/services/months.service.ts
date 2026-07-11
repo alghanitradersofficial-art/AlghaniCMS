@@ -52,7 +52,7 @@ export async function closeMonth(year: number, month: number, actorUserId: numbe
   }
 
   const inserted = await db.transaction(async (tx) => {
-    const row = await tx.insert(monthClosuresTable).values({
+    const insertedRows = await tx.insert(monthClosuresTable).values({
       year,
       month,
       periodStart,
@@ -66,6 +66,7 @@ export async function closeMonth(year: number, month: number, actorUserId: numbe
       supplierOutstanding: String(summary.supplier_outstanding),
       createdByUserId: actorUserId,
     }).returning();
+    const row = Array.isArray(insertedRows) ? insertedRows[0] : insertedRows;
 
     // Write audit log entry for this closure
     await tx.insert(auditLogTable).values({
