@@ -5,7 +5,7 @@
  * Al Ghani Wholesale Traders ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { GetProfitLossReportPeriod } from './getProfitLossReportPeriod.js';
+import type { GetProfitLossReportPeriod } from './getProfitLossReportPeriod';
 
 export type GetProfitLossReportParams = {
 period?: GetProfitLossReportPeriod;

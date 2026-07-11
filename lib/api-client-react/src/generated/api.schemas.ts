@@ -17,7 +17,6 @@ export interface DashboardSummary {
   netProfit: number;
   totalProducts: number;
   totalCustomers: number;
-  totalSuppliers: number;
   pendingOrders: number;
   lowStockCount: number;
   todaySales: number;
@@ -117,6 +116,7 @@ export interface ProductInput {
   unit: string;
   oemNumber?: string;
   barcode?: string;
+  createdAt?: string;
 }
 
 export interface ProductUpdate {

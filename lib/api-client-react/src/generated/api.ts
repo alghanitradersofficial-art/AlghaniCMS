@@ -70,8 +70,8 @@ import type {
   UserUpdate
 } from './api.schemas';
 
-import { customFetch } from '../custom-fetch.js';
-import type { ErrorType , BodyType } from '../custom-fetch.js';
+import { customFetch } from '../custom-fetch';
+import type { ErrorType , BodyType } from '../custom-fetch';
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 

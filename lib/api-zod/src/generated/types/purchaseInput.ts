@@ -5,8 +5,8 @@
  * Al Ghani Wholesale Traders ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { PurchaseInputStatus } from './purchaseInputStatus.js';
-import type { PurchaseItemInput } from './purchaseItemInput.js';
+import type { PurchaseInputStatus } from './purchaseInputStatus';
+import type { PurchaseItemInput } from './purchaseItemInput';
 
 export interface PurchaseInput {
   /** @nullable */

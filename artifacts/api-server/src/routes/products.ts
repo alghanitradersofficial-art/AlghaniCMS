@@ -90,11 +90,37 @@ router.get("/", async (req, res): Promise<any> => { // Fixed return type
 router.post("/", async (req, res): Promise<any> => { // Fixed return type
   try {
     const body = CreateProductBody.parse(req.body) as any;
+    const insertColumns = [
+      "name", "sku", "description", "category_id", "brand_id",
+      "cost_price", "sale_price", "current_stock", "min_stock",
+      "unit", "oem_number", "barcode", "image_url", "image_public_id",
+    ];
+    const values: unknown[] = [
+      body.name,
+      body.sku,
+      body.description ?? null,
+      body.categoryId ?? null,
+      body.brandId ?? null,
+      String(body.costPrice),
+      String(body.salePrice),
+      body.currentStock ?? 0,
+      body.minStock ?? 5,
+      body.unit ?? "pcs",
+      body.oemNumber ?? null,
+      body.barcode ?? null,
+      body.imageUrl ?? null,
+      body.imagePublicId ?? null,
+    ];
+
+    if (body.createdAt !== undefined) {
+      insertColumns.push("created_at");
+      values.push(new Date(body.createdAt).toISOString());
+    }
+
+    const placeholders = values.map((_, index) => `$${index + 1}`).join(",");
     const result = await pool.query(
-      `INSERT INTO products (name, sku, description, category_id, brand_id,
-                             cost_price, sale_price, current_stock, min_stock,
-                             unit, oem_number, barcode, image_url, image_public_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+      `INSERT INTO products (${insertColumns.join(", ")})
+       VALUES (${placeholders})
        RETURNING id, name, sku, description,
                  category_id AS "categoryId", brand_id AS "brandId",
                  cost_price AS "costPrice", sale_price AS "salePrice",
@@ -102,22 +128,7 @@ router.post("/", async (req, res): Promise<any> => { // Fixed return type
                  unit, oem_number AS "oemNumber", barcode,
                  image_url AS "imageUrl", image_public_id AS "imagePublicId",
                  created_at AS "createdAt"`,
-      [
-        body.name,
-        body.sku,
-        body.description ?? null,
-        body.categoryId ?? null,
-        body.brandId ?? null,
-        String(body.costPrice),
-        String(body.salePrice),
-        body.currentStock ?? 0,
-        body.minStock ?? 5,
-        body.unit ?? "pcs",
-        body.oemNumber ?? null,
-        body.barcode ?? null,
-        body.imageUrl ?? null,
-        body.imagePublicId ?? null,
-      ],
+      values,
     );
     const product = result.rows[0] as Record<string, unknown>;
     return res.status(201).json({

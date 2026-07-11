@@ -149,8 +149,7 @@ export const CreateProductBody = zod.object({
   "unit": zod.string(),
   "oemNumber": zod.string().optional(),
   "barcode": zod.string().optional(),
-  "imageUrl": zod.string().optional(),
-  "imagePublicId": zod.string().optional()
+  "createdAt": zod.coerce.date().optional()
 })
 
 export const CreateProductResponse = zod.object({
@@ -219,9 +218,7 @@ export const UpdateProductBody = zod.object({
   "minStock": zod.number().optional(),
   "unit": zod.string().optional(),
   "oemNumber": zod.string().optional(),
-  "barcode": zod.string().optional(),
-  "imageUrl": zod.string().optional(),
-  "imagePublicId": zod.string().optional()
+  "barcode": zod.string().optional()
 })
 
 export const UpdateProductResponse = zod.object({
@@ -854,6 +851,7 @@ export const GetUsersResponseItem = zod.object({
   "email": zod.string(),
   "role": zod.enum(['ceo', 'developer', 'manager', 'sales', 'accountant', 'warehouse', 'content']),
   "isActive": zod.boolean(),
+  "permissions": zod.array(zod.string()),
   "createdAt": zod.string()
 })
 export const GetUsersResponse = zod.array(GetUsersResponseItem)
@@ -866,7 +864,8 @@ export const CreateUserBody = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "role": zod.enum(['ceo', 'developer', 'manager', 'sales', 'accountant', 'warehouse', 'content']),
-  "password": zod.string()
+  "password": zod.string(),
+  "permissions": zod.array(zod.string()).optional()
 })
 
 export const CreateUserResponse = zod.object({
@@ -875,6 +874,7 @@ export const CreateUserResponse = zod.object({
   "email": zod.string(),
   "role": zod.enum(['ceo', 'developer', 'manager', 'sales', 'accountant', 'warehouse', 'content']),
   "isActive": zod.boolean(),
+  "permissions": zod.array(zod.string()),
   "createdAt": zod.string()
 })
 
@@ -889,7 +889,8 @@ export const UpdateUserParams = zod.object({
 export const UpdateUserBody = zod.object({
   "name": zod.string().optional(),
   "role": zod.enum(['ceo', 'developer', 'manager', 'sales', 'accountant', 'warehouse', 'content']).optional(),
-  "isActive": zod.boolean().optional()
+  "isActive": zod.boolean().optional(),
+  "permissions": zod.array(zod.string()).optional()
 })
 
 export const UpdateUserResponse = zod.object({
@@ -898,6 +899,7 @@ export const UpdateUserResponse = zod.object({
   "email": zod.string(),
   "role": zod.enum(['ceo', 'developer', 'manager', 'sales', 'accountant', 'warehouse', 'content']),
   "isActive": zod.boolean(),
+  "permissions": zod.array(zod.string()),
   "createdAt": zod.string()
 })
 

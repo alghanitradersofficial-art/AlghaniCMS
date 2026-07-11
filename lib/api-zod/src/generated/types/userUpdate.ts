@@ -5,10 +5,11 @@
  * Al Ghani Wholesale Traders ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { UserUpdateRole } from './userUpdateRole.js';
+import type { UserUpdateRole } from './userUpdateRole';
 
 export interface UserUpdate {
   name?: string;
   role?: UserUpdateRole;
   isActive?: boolean;
+  permissions?: string[];
 }
