@@ -33,7 +33,7 @@ router.get("/profit-loss", async (req, res) => {
     const [revenueRes, cogRes, expRes] = await Promise.all([
       pool.query(`SELECT COALESCE(SUM(total::numeric), 0) as total FROM sales WHERE status != 'cancelled'${rangeClause}`, rangeParams),
       pool.query(`SELECT COALESCE(SUM(total::numeric), 0) as total FROM purchases WHERE status != 'cancelled'${rangeClause}`, rangeParams),
-      pool.query(`SELECT COALESCE(SUM(amount::numeric), 0) as total FROM expenses`),
+      pool.query(`SELECT COALESCE(SUM(amount::numeric), 0) as total FROM expenses${rangeClause}`, rangeParams),
     ]);
 
     const revenue = parseFloat(revenueRes.rows[0].total);

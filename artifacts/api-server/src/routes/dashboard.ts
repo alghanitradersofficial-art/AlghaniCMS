@@ -190,10 +190,9 @@ router.get("/summary", async (req, res) => {
       inventoryValueRes,
     ] = await Promise.all([
       pool.query(`
-        SELECT COALESCE(SUM((item->>'quantity')::numeric * (item->>'unitPrice')::numeric), 0) AS revenue
-        FROM sales s
-        LEFT JOIN LATERAL jsonb_array_elements(s.items) AS item ON TRUE
-        WHERE s.status != 'cancelled'
+        SELECT COALESCE(SUM(total::numeric), 0) AS revenue
+        FROM sales
+        WHERE status != 'cancelled'
       `),
       pool.query(`
         SELECT COALESCE(SUM((item->>'quantity')::numeric * p.cost_price::numeric), 0) AS cogs
