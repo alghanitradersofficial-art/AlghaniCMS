@@ -67,37 +67,37 @@
 }
 
 :root {
-  --background: 204 28% 94%;
-  --foreground: 214 18% 18%;
+  --background: 10 10% 98%;
+  --foreground: 210 15% 12%;
 
-  --card: 206 31% 98%;
-  --card-foreground: 212 18% 16%;
-  --card-border: 210 24% 86%;
+  --card: 0 0% 100%;
+  --card-foreground: 210 15% 12%;
+  --card-border: 0 0% 90%;
 
-  --popover: 206 31% 98%;
-  --popover-foreground: 214 18% 18%;
-  --popover-border: 210 24% 86%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 210 15% 12%;
+  --popover-border: 0 0% 90%;
 
-  --primary: 187 84% 42%;
-  --primary-foreground: 210 16% 98%;
+  --primary: 0 85% 50%;
+  --primary-foreground: 0 0% 98%;
 
-  --secondary: 217 75% 46%;
-  --secondary-foreground: 210 16% 98%;
+  --secondary: 359 75% 48%;
+  --secondary-foreground: 0 0% 98%;
 
-  --muted: 210 20% 78%;
-  --muted-foreground: 214 18% 34%;
-  --muted-border: 210 20% 88%;
+  --muted: 0 0% 92%;
+  --muted-foreground: 210 15% 28%;
+  --muted-border: 0 0% 90%;
 
-  --accent: 199 100% 62%;
-  --accent-foreground: 210 16% 98%;
-  --accent-border: 199 100% 50%;
+  --accent: 359 100% 60%;
+  --accent-foreground: 0 0% 98%;
+  --accent-border: 359 100% 50%;
 
-  --destructive: 359 84% 60%;
+  --destructive: 0 80% 55%;
   --destructive-foreground: 0 0% 98%;
 
-  --border: 210 16% 88%;
-  --input: 210 22% 92%;
-  --ring: 187 84% 42%;
+  --border: 0 0% 90%;
+  --input: 0 0% 96%;
+  --ring: 0 80% 50%;
 
   --chart-1: 187 84% 42%;
   --chart-2: 210 18% 56%;
@@ -105,14 +105,14 @@
   --chart-4: 210 24% 84%;
   --chart-5: 0 0% 65%;
 
-  --sidebar: 210 18% 10%;
-  --sidebar-foreground: 210 18% 95%;
-  --sidebar-border: 210 18% 16%;
-  --sidebar-primary: 187 84% 42%;
-  --sidebar-primary-foreground: 210 16% 98%;
-  --sidebar-accent: 210 18% 14%;
-  --sidebar-accent-foreground: 210 18% 95%;
-  --sidebar-ring: 187 84% 42%;
+  --sidebar: 0 0% 10%;
+  --sidebar-foreground: 0 0% 96%;
+  --sidebar-border: 0 0% 16%;
+  --sidebar-primary: 0 85% 50%;
+  --sidebar-primary-foreground: 0 0% 98%;
+  --sidebar-accent: 0 0% 14%;
+  --sidebar-accent-foreground: 0 0% 96%;
+  --sidebar-ring: 0 85% 50%;
 
   --app-font-sans: 'Inter', system-ui, sans-serif;
   --app-font-serif: Georgia, serif;
@@ -192,5 +192,32 @@
   textarea,
   select {
     @apply transition-all duration-300 ease-in-out;
+  }
+
+  .overflow-x-auto {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th,
+  td {
+    min-width: 0;
+    white-space: normal;
+  }
+
+  @media (max-width: 768px) {
+    .responsive-table-wrapper {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .responsive-table-wrapper table {
+      min-width: 720px;
+    }
   }
 }

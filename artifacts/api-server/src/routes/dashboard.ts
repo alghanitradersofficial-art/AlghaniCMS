@@ -5,6 +5,23 @@ import { productsTable, generalLedgerEntriesTable } from "@workspace/db";
 import { lte, sql, and, gte } from "drizzle-orm";
 
 const router = Router();
+const dashboardCache = new Map<string, { expiresAt: number; value: unknown }>();
+
+function getCached<T>(key: string): T | null {
+  const entry = dashboardCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    dashboardCache.delete(key);
+    return null;
+  }
+  return entry.value as T;
+}
+
+function setCached<T>(key: string, value: T, ttlMs = 15000): T {
+  dashboardCache.set(key, { expiresAt: Date.now() + ttlMs, value });
+  return value;
+}
+
 
 /**
  * Resolves a `range` query param (today | week | month | year | all | custom)
@@ -50,6 +67,10 @@ function resolveRange(req: import("express").Request): { start: Date | null; end
 router.get("/summary-range", async (req, res): Promise<any> => {
   try {
     const { start, end } = resolveRange(req);
+    const cacheKey = `dashboard:summary-range:${(req.query.range as string) || "all"}:${start?.toISOString() ?? "all"}:${end?.toISOString() ?? "all"}`;
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
+
     const conditions = [];
     if (start) conditions.push(gte(generalLedgerEntriesTable.date, start));
     if (end) conditions.push(lte(generalLedgerEntriesTable.date, end));
@@ -91,7 +112,7 @@ router.get("/summary-range", async (req, res): Promise<any> => {
       pool.query(`SELECT COALESCE(SUM(current_stock::numeric * cost_price::numeric), 0) AS value FROM products`),
     ]);
 
-    return res.json({
+    return res.json(setCached(cacheKey, {
       range: (req.query.range as string) || "all",
       totalRevenue: Math.round(totalRevenue * 100) / 100,
       totalPurchases: Math.round(totalPurchases * 100) / 100,
@@ -103,7 +124,7 @@ router.get("/summary-range", async (req, res): Promise<any> => {
       totalCustomers: parseInt(customersRes.rows[0].count, 10),
       totalSuppliers: parseInt(suppliersRes.rows[0].count, 10),
       inventoryValue: parseFloat(inventoryValueRes.rows[0].value),
-    });
+    }, 10000));
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to fetch range-aware dashboard summary" });
@@ -145,6 +166,10 @@ router.get("/recent-activity-range", async (req, res): Promise<any> => {
 
 router.get("/summary", async (req, res) => {
   try {
+    const cacheKey = "dashboard:summary";
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
+
     const [
       revenueRes,
       cogsRes,
@@ -216,7 +241,7 @@ router.get("/summary", async (req, res) => {
     const grossProfit = totalRevenue - purchaseCost;
     const netProfit = grossProfit - totalExpenses;
 
-    return res.json({
+    return res.json(setCached(cacheKey, {
       totalRevenue,
       purchaseCost,
       totalPurchases,
@@ -236,7 +261,7 @@ router.get("/summary", async (req, res) => {
       weeklyPurchases: parseFloat(weeklyPurchasesRes.rows[0].total),
       monthlyPurchases: parseFloat(monthlyPurchasesRes.rows[0].total),
       inventoryValue: parseFloat(inventoryValueRes.rows[0].value),
-    });
+    }, 15000));
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to fetch dashboard summary" });
@@ -246,6 +271,10 @@ router.get("/summary", async (req, res) => {
 router.get("/sales-chart", async (req, res) => {
   try {
     const months = parseInt(req.query.months as string) || 6;
+    const cacheKey = `dashboard:sales-chart:${months}`;
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
+
     const result = await pool.query(
       `WITH month_series AS (
           SELECT generate_series(
@@ -283,12 +312,12 @@ router.get("/sales-chart", async (req, res) => {
       [months],
     );
 
-    return res.json(result.rows.map((row: Record<string, unknown>) => ({
+    return res.json(setCached(cacheKey, result.rows.map((row: Record<string, unknown>) => ({
       label: String(row.label),
       sales: parseFloat(row.sales as string || "0"),
       purchases: parseFloat(row.purchases as string || "0"),
       profit: parseFloat(row.profit as string || "0"),
-    })));
+    })), 15000));
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to fetch sales chart" });
@@ -297,6 +326,9 @@ router.get("/sales-chart", async (req, res) => {
 
 router.get("/recent-activity", async (req, res) => {
   try {
+    const cacheKey = "dashboard:recent-activity";
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
     const [salesRes, purchasesRes, expensesRes] = await Promise.all([
       pool.query(`SELECT id, 'sale' as type, 'Sale #' || invoice_number || ' - ' || customer_name as description, total::numeric as amount, created_at FROM sales ORDER BY created_at DESC LIMIT 5`),
       pool.query(`SELECT id, 'purchase' as type, 'PO #' || po_number || ' - ' || supplier_name as description, total::numeric as amount, created_at FROM purchases ORDER BY created_at DESC LIMIT 5`),
@@ -309,7 +341,7 @@ router.get("/recent-activity", async (req, res) => {
       ...expensesRes.rows.map((r: Record<string, unknown>) => ({ id: r.id, type: r.type, description: r.description, amount: parseFloat(r.amount as string), createdAt: (r.created_at as Date).toISOString() })),
     ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10);
 
-    return res.json(all);
+    return res.json(setCached(cacheKey, all, 10000));
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to fetch recent activity" });
@@ -318,6 +350,9 @@ router.get("/recent-activity", async (req, res) => {
 
 router.get("/top-products", async (req, res) => {
   try {
+    const cacheKey = "dashboard:top-products";
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
     const result = await pool.query(`
       SELECT p.id, p.name, p.sku,
         COALESCE(SUM((item->>'quantity')::int), 0) as total_sold,
@@ -330,18 +365,18 @@ router.get("/top-products", async (req, res) => {
       ORDER BY revenue DESC
       LIMIT 5
     `);
-    return res.json(result.rows.map((r: Record<string, unknown>) => ({
+    return res.json(setCached(cacheKey, result.rows.map((r: Record<string, unknown>) => ({
       id: r.id,
       name: r.name,
       sku: r.sku,
       totalSold: parseInt(r.total_sold as string) || 0,
       revenue: parseFloat(r.revenue as string) || 0,
-    })));
+    })), 15000));
   } catch (error) {
     console.error(error);
     try {
       const fallback = await pool.query(`SELECT id, name, sku, sale_price FROM products ORDER BY sale_price::numeric DESC LIMIT 5`);
-      return res.json(fallback.rows.map((r: Record<string, unknown>) => ({ id: r.id, name: r.name, sku: r.sku, totalSold: 0, revenue: parseFloat(r.sale_price as string) })));
+      return res.json(setCached(cacheKey, fallback.rows.map((r: Record<string, unknown>) => ({ id: r.id, name: r.name, sku: r.sku, totalSold: 0, revenue: parseFloat(r.sale_price as string) })), 15000));
     } catch (e) {
       return res.status(500).json({ error: "Failed to fetch top products" });
     }
@@ -350,12 +385,15 @@ router.get("/top-products", async (req, res) => {
 
 router.get("/low-stock", async (req, res) => {
   try {
+    const cacheKey = "dashboard:low-stock";
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
     const result = await pool.query(`SELECT id, name, sku, current_stock, min_stock FROM products WHERE current_stock <= min_stock ORDER BY current_stock ASC LIMIT 10`);
-    return res.json(result.rows.map((r: Record<string, unknown>) => ({
+    return res.json(setCached(cacheKey, result.rows.map((r: Record<string, unknown>) => ({
       id: r.id, name: r.name, sku: r.sku,
       currentStock: Number(r.current_stock),
       minStock: Number(r.min_stock),
-    })));
+    })), 15000));
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to fetch low stock" });

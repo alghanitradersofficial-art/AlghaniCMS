@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useGetPurchases, useCreatePurchase, useUpdatePurchase, useGetProducts, useGetSuppliers, getGetPurchasesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Truck, X } from "lucide-react";
+import { Plus, Search, Truck, X, Edit, Trash2 } from "lucide-react";
+import { apiDelete } from "@/lib/api";
 
 type LineItem = { productId: number; productName: string; quantity: number; unitCost: number; };
 
@@ -24,6 +25,10 @@ export default function Purchases() {
   const [notes, setNotes] = useState("");
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10));
   const [items, setItems] = useState<LineItem[]>([]);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editPurchaseId, setEditPurchaseId] = useState<number | null>(null);
+  const [editStatus, setEditStatus] = useState<"pending" | "received" | "cancelled">("pending");
+  const [editNotes, setEditNotes] = useState("");
 
   const { data, isLoading } = useGetPurchases({ search: search || undefined, status: statusFilter as "pending" | "received" | "cancelled" | undefined, page, limit: 20 });
   const { data: products } = useGetProducts({ limit: 100 });
@@ -78,6 +83,27 @@ export default function Purchases() {
 
   const statusColor = (s: string) => s === "received" ? "bg-green-500/10 text-green-400 border-0" : s === "pending" ? "bg-yellow-500/10 text-yellow-400 border-0" : "bg-red-500/10 text-red-400 border-0";
 
+  const openEditPurchase = (purchase: NonNullable<typeof data>['data'][0]) => {
+    setEditPurchaseId(purchase.id);
+    setEditStatus(purchase.status);
+    setEditNotes(purchase.notes || "");
+    setEditOpen(true);
+  };
+
+  const handleSavePurchaseEdit = async () => {
+    if (!editPurchaseId) return;
+    await updatePurchase.mutateAsync({ id: editPurchaseId, data: { status: editStatus, notes: editNotes || undefined } });
+    invalidate();
+    setEditOpen(false);
+    setEditPurchaseId(null);
+  };
+
+  const handleDeletePurchase = async (id: number) => {
+    if (!confirm("Delete this purchase?")) return;
+    await apiDelete(`/api/purchases/${id}`);
+    invalidate();
+  };
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -116,11 +142,12 @@ export default function Purchases() {
                     <th className="px-4 py-3 text-right">Total</th>
                     <th className="px-4 py-3 text-center">Status</th>
                     <th className="px-4 py-3 text-left">Date</th>
+                    <th className="px-4 py-3 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {isLoading ? <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">Loading...</td></tr>
-                    : data?.data.length === 0 ? <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">No purchases found</td></tr>
+                  {isLoading ? <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">Loading...</td></tr>
+                    : data?.data.length === 0 ? <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No purchases found</td></tr>
                     : data?.data.map(p => (
                       <tr key={p.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
                         <td className="px-4 py-3 font-mono text-xs text-primary">{p.poNumber}</td>
@@ -139,6 +166,12 @@ export default function Purchases() {
                           </Select>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground text-xs">{new Date((p as any).purchaseDate ?? p.createdAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex gap-2 justify-center">
+                        <Button size="sm" variant="ghost" onClick={() => openEditPurchase(p)} className="hover:bg-accent w-8 h-8 p-0"><Edit className="w-4 h-4" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleDeletePurchase(p.id)} className="hover:bg-destructive/20 hover:text-destructive w-8 h-8 p-0"><Trash2 className="w-4 h-4" /></Button>
+                      </div>
+                    </td>
                       </tr>
                     ))}
                 </tbody>
@@ -213,6 +246,31 @@ export default function Purchases() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Layout>
-  );
+
+      <Dialog open={editOpen} onOpenChange={(open) => { setEditOpen(open); if (!open) setEditPurchaseId(null); }}>
+        <DialogContent className="bg-card border-border max-w-md">
+          <DialogHeader><DialogTitle>Edit Purchase</DialogTitle></DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Status</Label>
+              <Select value={editStatus} onValueChange={v => setEditStatus(v as "pending" | "received" | "cancelled") }>
+                <SelectTrigger className="bg-background/50 border-border"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="received">Received</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
+              <Input value={editNotes} onChange={e => setEditNotes(e.target.value)} className="bg-background/50 border-border" />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setEditOpen(false); setEditPurchaseId(null); }} className="border-border">Cancel</Button>
+            <Button onClick={handleSavePurchaseEdit} disabled={updatePurchase.isPending} className="bg-primary hover:bg-primary/90">Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 }

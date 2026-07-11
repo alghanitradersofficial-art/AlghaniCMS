@@ -21,7 +21,6 @@ export default function Sales() {
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
   const [customerName, setCustomerName] = useState("");
   const [customerId, setCustomerId] = useState<number | undefined>(undefined);
   const [discount, setDiscount] = useState("0");
@@ -29,6 +28,10 @@ export default function Sales() {
   const [saleDate, setSaleDate] = useState(new Date().toISOString().slice(0, 10));
   const [items, setItems] = useState<LineItem[]>([]);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [editSaleOpen, setEditSaleOpen] = useState(false);
+  const [editingSale, setEditingSale] = useState<NonNullable<typeof data>['data'][0] | null>(null);
+  const [editSaleStatus, setEditSaleStatus] = useState<"pending" | "completed" | "cancelled">("pending");
+  const [editSaleNotes, setEditSaleNotes] = useState("");
 
   const { data, isLoading } = useGetSales({ search: search || undefined, status: statusFilter as "pending" | "completed" | "cancelled" | undefined, page, limit: 20 });
   const { data: products } = useGetProducts({ limit: 100 });
@@ -113,6 +116,21 @@ export default function Sales() {
     invalidate();
   };
 
+  const openEditSale = (sale: NonNullable<typeof data>['data'][0]) => {
+    setEditingSale(sale);
+    setEditSaleStatus(sale.status);
+    setEditSaleNotes(sale.notes || "");
+    setEditSaleOpen(true);
+  };
+
+  const handleSaveSaleEdit = async () => {
+    if (!editingSale) return;
+    await updateSale.mutateAsync({ id: editingSale.id, data: { status: editSaleStatus, notes: editSaleNotes || undefined } });
+    invalidate();
+    setEditSaleOpen(false);
+    setEditingSale(null);
+  };
+
   const handleDelete = async (id: number) => {
     if (!confirm("Delete this sale?")) return;
     await deleteSale.mutateAsync({ id }); invalidate();
@@ -183,7 +201,10 @@ export default function Sales() {
                         </td>
                         <td className="px-4 py-3 text-muted-foreground text-xs">{new Date((s as any).saleDate ?? s.createdAt).toLocaleDateString()}</td>
                         <td className="px-4 py-3 text-center">
-                          <Button size="sm" variant="ghost" onClick={() => handleDelete(s.id)} className="hover:bg-destructive/20 hover:text-destructive w-8 h-8 p-0"><Trash2 className="w-4 h-4" /></Button>
+                          <div className="flex gap-2 justify-center">
+                            <Button size="sm" variant="ghost" onClick={() => openEditSale(s)} className="hover:bg-accent w-8 h-8 p-0"><Edit className="w-4 h-4" /></Button>
+                            <Button size="sm" variant="ghost" onClick={() => handleDelete(s.id)} className="hover:bg-destructive/20 hover:text-destructive w-8 h-8 p-0"><Trash2 className="w-4 h-4" /></Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -283,6 +304,30 @@ export default function Sales() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Layout>
-  );
-}
+
+        <Dialog open={editSaleOpen} onOpenChange={(open) => { setEditSaleOpen(open); if (!open) setEditingSale(null); }}>
+          <DialogContent className="bg-card border-border max-w-md">
+            <DialogHeader><DialogTitle>Edit Sale</DialogTitle></DialogHeader>
+            <div className="grid gap-3 py-2">
+              <div className="space-y-1">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Status</Label>
+                <Select value={editSaleStatus} onValueChange={v => setEditSaleStatus(v as "pending" | "completed" | "cancelled") }>
+                  <SelectTrigger className="bg-background/50 border-border"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
+                <Input value={editSaleNotes} onChange={e => setEditSaleNotes(e.target.value)} className="bg-background/50 border-border" />
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => { setEditSaleOpen(false); setEditingSale(null); }} className="border-border">Cancel</Button>
+              <Button onClick={handleSaveSaleEdit} disabled={updateSale.isPending} className="bg-primary hover:bg-primary/90">Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>

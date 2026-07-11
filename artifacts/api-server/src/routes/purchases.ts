@@ -183,4 +183,22 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
+router.delete("/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [existingPurchase] = await db.select().from(purchasesTable).where(eq(purchasesTable.id, id));
+    if (!existingPurchase) return res.status(404).json({ error: "Purchase not found" });
+
+    if (existingPurchase.status === "received") {
+      await adjustPurchaseStock(existingPurchase, -1);
+    }
+
+    await db.delete(purchasesTable).where(eq(purchasesTable.id, id));
+    return res.status(204).send();
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to delete purchase" });
+  }
+});
+
 export default router;
