@@ -14,15 +14,18 @@ export default function MonthsPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const qc = useQueryClient();
 
-  const { data: overview, error: overviewError } = useQuery({ queryKey: ["financial-period-overview"], queryFn: () => apiGet(`/api/months/overview`) });
-  const { data: closures, error: closuresError } = useQuery({ queryKey: ["months-closures"], queryFn: () => apiGet(`/api/months`) });
+  const { data: overview, error: overviewError } = useQuery({ queryKey: ["financial-period-overview"], queryFn: () => apiGet(`/api/months/overview`), retry: false });
+  const { data: closures, error: closuresError } = useQuery({ queryKey: ["months-closures"], queryFn: () => apiGet(`/api/months`), retry: false });
 
+  const overviewWarnings = Array.isArray((overview as any)?.warnings) ? (overview as any).warnings : [];
+  const closureRows = Array.isArray((closures as any)?.data) ? (closures as any).data : [];
+  const overviewSummary = (overview as any)?.summary && typeof (overview as any).summary === "object" ? (overview as any).summary : {};
   const summaryCards = useMemo(() => [
     { label: "Current financial month", value: `${monthNames[(month - 1) % 12]} ${year}` },
-    { label: "Current status", value: overview?.period?.status ?? "open" },
-    { label: "Closing progress", value: `${overview?.warnings?.length ? "Needs attention" : "Ready to close"}` },
-    { label: "Last closed month", value: closures?.data?.[0] ? `${closures.data[0].year}-${String(closures.data[0].month).padStart(2, "0")}` : "None" },
-  ], [closures, month, overview, year]);
+    { label: "Current status", value: (overview as any)?.period?.status ?? "open" },
+    { label: "Closing progress", value: `${overviewWarnings.length ? "Needs attention" : "Ready to close"}` },
+    { label: "Last closed month", value: closureRows[0] ? `${closureRows[0].year}-${String(closureRows[0].month).padStart(2, "0")}` : "None" },
+  ], [closureRows, month, overviewWarnings.length, year]);
 
   async function handleClose() {
     try {
@@ -96,15 +99,15 @@ export default function MonthsPage() {
               <div className="rounded-lg border p-4">
                 <div className="text-sm font-semibold">Warnings</div>
                 <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
-                  {(overview?.warnings ?? []).length ? overview.warnings.map((warning: string) => <li key={warning}>• {warning}</li>) : <li>No critical warnings.</li>}
+                  {overviewWarnings.length ? overviewWarnings.map((warning: string) => <li key={warning}>• {warning}</li>) : <li>No critical warnings.</li>}
                 </ul>
               </div>
               <div className="rounded-lg border p-4">
                 <div className="text-sm font-semibold">Snapshot summary</div>
                 <div className="mt-2 space-y-2 text-sm text-muted-foreground">
-                  <div>Sales: Rs. {Number(overview?.summary?.salesSummary?.totalSales ?? 0).toLocaleString()}</div>
-                  <div>Net profit: Rs. {Number(overview?.summary?.profitSummary?.netProfit ?? 0).toLocaleString()}</div>
-                  <div>Closing stock: Rs. {Number(overview?.summary?.inventorySummary?.closingStockValue ?? 0).toLocaleString()}</div>
+                  <div>Sales: Rs. {Number(overviewSummary?.salesSummary?.totalSales ?? 0).toLocaleString()}</div>
+                  <div>Net profit: Rs. {Number(overviewSummary?.profitSummary?.netProfit ?? 0).toLocaleString()}</div>
+                  <div>Closing stock: Rs. {Number(overviewSummary?.inventorySummary?.closingStockValue ?? 0).toLocaleString()}</div>
                 </div>
               </div>
             </div>
@@ -117,7 +120,7 @@ export default function MonthsPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {closures?.data?.map((c: any) => (
+              {closureRows.map((c: any) => (
                 <div key={c.id} className="flex flex-col gap-2 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <div className="font-semibold">{c.year}-{String(c.month).padStart(2, "0")}</div>
@@ -129,7 +132,7 @@ export default function MonthsPage() {
                   </div>
                 </div>
               ))}
-              {!closures?.data?.length && <div className="text-muted-foreground">No closures yet.</div>}
+              {!closureRows.length && <div className="text-muted-foreground">No closures yet.</div>}
             </div>
           </CardContent>
         </Card>
