@@ -327,7 +327,6 @@ router.get("/recent-activity", async (req, res) => {
   try {
     const cacheKey = "dashboard:recent-activity";
     const cached = getCached(cacheKey);
-    const cacheKey = "dashboard:recent-activity";
     if (cached) return res.json(cached);
     const [salesRes, purchasesRes, expensesRes] = await Promise.all([
       pool.query(`SELECT id, 'sale' as type, 'Sale #' || invoice_number || ' - ' || customer_name as description, total::numeric as amount, created_at FROM sales ORDER BY created_at DESC LIMIT 5`),
