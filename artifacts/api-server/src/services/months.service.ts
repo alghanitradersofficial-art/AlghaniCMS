@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import {
   salesTable,
   purchasesTable,
@@ -51,8 +51,8 @@ export async function closeMonth(year: number, month: number, actorUserId: numbe
     throw new Error(`Month closure for ${year}-${month} already exists`);
   }
 
-  const [inserted] = await db.transaction(async (tx) => {
-    const [row] = await tx.insert(monthClosuresTable).values({
+  const inserted = await db.transaction(async (tx) => {
+    const row = await tx.insert(monthClosuresTable).values({
       year,
       month,
       periodStart,
