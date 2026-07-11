@@ -165,7 +165,12 @@ router.patch("/:id/ledger/:entryId", async (req, res): Promise<any> => {
       return res.status(400).json({ error: "Only manual return/adjustment entries can be edited" });
     }
 
-    const updateValues: Record<string, unknown> = {};
+    const updateValues: Partial<{
+      type: "return" | "adjustment";
+      amount: string;
+      description: string | null;
+      entryDate: Date;
+    }> = {};
     if (body.type) updateValues.type = body.type;
     if (body.amount !== undefined) updateValues.amount = String(round2(-body.amount));
     if (body.description !== undefined) updateValues.description = body.description ?? null;
@@ -174,6 +179,8 @@ router.patch("/:id/ledger/:entryId", async (req, res): Promise<any> => {
     if (Object.keys(updateValues).length === 0) {
       return res.status(400).json({ error: "No changes provided" });
     }
+
+    const effectiveEntryDate = updateValues.entryDate ?? new Date(existingEntry.entryDate);
 
     await db.transaction(async (tx) => {
       await tx
@@ -187,7 +194,7 @@ router.patch("/:id/ledger/:entryId", async (req, res): Promise<any> => {
         .update(generalLedgerEntriesTable)
         .set({
           amount: String(round2(body.amount !== undefined ? body.amount : Math.abs(parseFloat(existingEntry.amount as string)))),
-          date: updateValues.entryDate ?? existingEntry.entryDate,
+          date: effectiveEntryDate,
           note: body.description ?? existingEntry.description,
           type: "adjustment",
         })
