@@ -74,12 +74,12 @@ export function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-screen bg-transparent text-foreground transition-all duration-300 ease-in-out">
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col lg:flex-row">
-        <aside className={`hidden md:flex ${collapsed ? "w-20" : "w-72 xl:w-80"} h-screen flex-col sticky top-0 overflow-hidden border-r border-border/70 bg-card/90 shadow-inner backdrop-blur-xl`}>
+        <aside className={`hidden lg:flex ${collapsed ? "w-20" : "w-72 xl:w-80"} h-screen flex-col sticky top-0 overflow-hidden border-r border-border/70 bg-card/90 shadow-inner backdrop-blur-xl`}>
           <SidebarContent collapsed={collapsed} />
         </aside>
 
         {mobileOpen && (
-          <div className="fixed inset-0 z-50 md:hidden">
+          <div className="fixed inset-0 z-50 lg:hidden">
             <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
             <aside className="absolute left-0 top-0 bottom-0 w-72 bg-card/95 border-r border-border/70 shadow-2xl backdrop-blur-xl flex flex-col overflow-hidden">
               <div className="flex items-center justify-between px-4 py-4 border-b border-border/60">
@@ -97,18 +97,18 @@ export function Layout({ children }: LayoutProps) {
           </div>
         )}
 
-        <main className="flex-1 flex flex-col min-w-0 pb-28 md:pb-6">
+        <main className="flex-1 flex flex-col min-w-0 pb-28 lg:pb-6">
           <header className="sticky top-0 z-20 border-b border-border/60 bg-background/80 backdrop-blur-xl transition-all duration-300 ease-in-out">
             <div className="mx-auto flex h-16 max-w-[1800px] items-center gap-3 px-4 sm:px-6 lg:px-8">
               <button
                 onClick={() => setMobileOpen(true)}
-                className="md:hidden inline-flex h-11 w-11 items-center justify-center rounded-[20px] border border-border/70 bg-card/90 text-foreground transition-all duration-300 ease-in-out hover:bg-primary/10"
+                className="lg:hidden inline-flex h-11 w-11 items-center justify-center rounded-[20px] border border-border/70 bg-card/90 text-foreground transition-all duration-300 ease-in-out hover:bg-primary/10"
                 aria-label="Open navigation menu"
               >
                 <Menu className="h-5 w-5" />
               </button>
 
-              <div className="hidden md:flex items-center gap-2 rounded-[999px] border border-border/60 bg-card/80 px-2 py-2 shadow-sm backdrop-blur-xl">
+              <div className="hidden lg:flex items-center gap-2 rounded-[999px] border border-border/60 bg-card/80 px-2 py-2 shadow-sm backdrop-blur-xl">
                 <button
                   type="button"
                   onClick={() => setCollapsed((value) => !value)}
@@ -121,7 +121,7 @@ export function Layout({ children }: LayoutProps) {
               </div>
 
               <div className="ml-auto flex items-center gap-3">
-                <div className="hidden md:flex items-center gap-2 rounded-[20px] border border-border/60 bg-card/90 px-3 py-2 shadow-sm">
+                <div className="hidden lg:flex items-center gap-2 rounded-[20px] border border-border/60 bg-card/90 px-3 py-2 shadow-sm">
                   <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_18px_rgba(34,197,94,0.26)]" />
                   <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Live</span>
                 </div>
@@ -134,13 +134,13 @@ export function Layout({ children }: LayoutProps) {
             {children}
           </motion.div>
 
-          <div className="fixed inset-x-0 bottom-0 z-30 md:hidden border-t border-border/80 bg-background/95 px-3 py-3 backdrop-blur-xl">
+          <div className="fixed inset-x-0 bottom-0 z-30 lg:hidden border-t border-border/80 bg-background/95 px-3 py-3 backdrop-blur-xl">
             <nav className="mx-auto grid max-w-[900px] grid-cols-5 gap-2">
               {mobileNavItems.map(({ href, label, icon: Icon }) => {
                 const isActive = href !== "#more" && (location === href || location.startsWith(href));
                 if (href === "#more") {
                   return (
-                    <button key={href} type="button" onClick={() => setShowMoreSheet(true)} className="inline-flex flex-col items-center justify-center rounded-[22px] border border-border/60 bg-card/90 px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground transition-all duration-300 hover:border-primary/40 hover:text-primary hover:shadow-sm">
+                    <button key={href} type="button" onClick={() => { setShowMoreSheet(true); setShowFabMenu(false); setMobileOpen(false); }} className="inline-flex flex-col items-center justify-center rounded-[22px] border border-border/60 bg-card/90 px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground transition-all duration-300 hover:border-primary/40 hover:text-primary hover:shadow-sm">
                       <Icon className="h-5 w-5" />
                       {label}
                     </button>
@@ -148,7 +148,7 @@ export function Layout({ children }: LayoutProps) {
                 }
 
                 return (
-                  <Link key={href} href={href} className={`inline-flex flex-col items-center justify-center rounded-[22px] border px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] transition-all duration-300 ${isActive ? "border-primary/40 bg-primary/10 text-primary shadow-sm" : "border-border/60 bg-card/90 text-muted-foreground hover:border-primary/40 hover:text-primary hover:shadow-sm"}`}>
+                  <Link key={href} href={href} onClick={() => { setShowMoreSheet(false); setShowFabMenu(false); setMobileOpen(false); }} className={`inline-flex flex-col items-center justify-center rounded-[22px] border px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] transition-all duration-300 ${isActive ? "border-primary/40 bg-primary/10 text-primary shadow-sm" : "border-border/60 bg-card/90 text-muted-foreground hover:border-primary/40 hover:text-primary hover:shadow-sm"}`}>
                     <Icon className="h-5 w-5" />
                     {label}
                   </Link>
@@ -160,7 +160,7 @@ export function Layout({ children }: LayoutProps) {
           <button
             type="button"
             onClick={() => setShowFabMenu((value) => !value)}
-            className="fixed bottom-24 right-4 z-40 inline-flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_20px_45px_rgba(0,0,0,0.22)] transition-all duration-300 hover:scale-105 md:bottom-6"
+            className="fixed bottom-24 right-4 z-40 inline-flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_20px_45px_rgba(0,0,0,0.22)] transition-all duration-300 hover:scale-105 lg:bottom-6"
             aria-label="Open quick actions"
           >
             <Plus className="h-6 w-6" />
