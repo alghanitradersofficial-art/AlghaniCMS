@@ -11,6 +11,7 @@ import { useGetSales, useCreateSale, useUpdateSale, useDeleteSale, useGetProduct
 import { apiGet } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit, Trash2, ShoppingCart, X, Info } from "lucide-react";
+import DataTable, { Column } from "@/components/ui/data-table";
 import { PriceHistoryPanel } from "@/components/price-history-panel";
 
 type LineItem = { productId: number; productName: string; quantity: number; unitPrice: number; };
@@ -167,50 +168,34 @@ export default function Sales() {
 
         <Card className="border-border bg-card">
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-muted-foreground uppercase text-xs tracking-wider">
-                    <th className="px-4 py-3 text-left">Invoice</th>
-                    <th className="px-4 py-3 text-left">Customer</th>
-                    <th className="px-4 py-3 text-right">Total</th>
-                    <th className="px-4 py-3 text-center">Status</th>
-                    <th className="px-4 py-3 text-left">Date</th>
-                    <th className="px-4 py-3 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">Loading...</td></tr>
-                    : data?.data.length === 0 ? <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No sales found</td></tr>
-                    : data?.data.map(s => (
-                      <tr key={s.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
-                        <td className="px-4 py-3 font-mono text-xs text-primary">{s.invoiceNumber}</td>
-                        <td className="px-4 py-3 font-medium">{s.customerName}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-secondary">Rs. {s.total?.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-center">
-                          <Select value={s.status} onValueChange={(v) => handleStatusUpdate(s.id, v as "pending" | "completed" | "cancelled")}>
-                            <SelectTrigger className="w-32 h-7 text-xs border-0 p-0 bg-transparent">
-                              <Badge className={statusColor(s.status)}>{s.status}</Badge>
-                            </SelectTrigger>
-                            <SelectContent className="bg-card border-border">
-                              <SelectItem value="pending">Pending</SelectItem>
-                              <SelectItem value="completed">Completed</SelectItem>
-                              <SelectItem value="cancelled">Cancelled</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">{new Date((s as any).saleDate ?? s.createdAt).toLocaleDateString()}</td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex gap-2 justify-center">
-                            <Button size="sm" variant="ghost" onClick={() => openEditSale(s)} className="hover:bg-accent w-8 h-8 p-0"><Edit className="w-4 h-4" /></Button>
-                            <Button size="sm" variant="ghost" onClick={() => handleDelete(s.id)} className="hover:bg-destructive/20 hover:text-destructive w-8 h-8 p-0"><Trash2 className="w-4 h-4" /></Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              loading={isLoading}
+              data={data?.data || []}
+              columns={[
+                { key: 'invoiceNumber', title: 'Invoice', render: (r) => <span className="font-mono text-xs text-primary">{r.invoiceNumber}</span> },
+                { key: 'customerName', title: 'Customer', render: (r) => <span className="font-medium">{r.customerName}</span> },
+                { key: 'total', title: 'Total', align: 'right', render: (r) => <span className="font-semibold text-secondary">Rs. {Number(r.total).toLocaleString()}</span> },
+                { key: 'status', title: 'Status', align: 'center', render: (r) => (
+                    <Select value={r.status} onValueChange={(v) => handleStatusUpdate(r.id, v as "pending" | "completed" | "cancelled") }>
+                      <SelectTrigger className="w-32 h-7 text-xs border-0 p-0 bg-transparent">
+                        <Badge className={statusColor(r.status)}>{r.status}</Badge>
+                      </SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                ) },
+                { key: 'saleDate', title: 'Date', render: (r) => new Date(r.saleDate ?? r.createdAt).toLocaleDateString() },
+                { key: 'actions', title: 'Actions', align: 'center', render: (r) => (
+                  <div className="flex gap-2 justify-center">
+                    <Button size="sm" variant="ghost" onClick={() => openEditSale(r)} className="hover:bg-accent w-8 h-8 p-0"><Edit className="w-4 h-4" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => handleDelete(r.id)} className="hover:bg-destructive/20 hover:text-destructive w-8 h-8 p-0"><Trash2 className="w-4 h-4" /></Button>
+                  </div>
+                ) },
+              ]}
+            />
             {data && data.total > 20 && (
               <div className="flex justify-center gap-2 p-4 border-t border-border">
                 <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="border-border">Prev</Button>

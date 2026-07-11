@@ -1,69 +1,24 @@
 import { Router } from "express";
-import { pool } from "@workspace/db";
+import settingsService from "../services/settings.service.js";
 
 const router = Router();
 
-const DEFAULT_SETTINGS = {
-  company: {
-    name: "Al Ghani Wholesale Traders",
-    address: "Shop No. 12, Hafeez Centre, Gulberg III, Lahore, Pakistan",
-    phone: "+92-42-35761234",
-    email: "info@alghani.com",
-    website: "www.alghani.com",
-    ntn: "1234567-8",
-    strn: "12-34-5678-001-23",
-    branch: "Main Branch - Lahore",
-    ceoName: "Mr. Abdul Ghani",
-    ceoPhone: "+92-300-1234567",
-    ceoEmail: "ceo@alghani.com",
-  },
-  branding: {
-    primaryColor: "#DC2626",
-    accentColor: "#D97706",
-    footerText: "Al Ghani Wholesale Traders - Your Trusted Partner in Motorcycle Parts",
-  },
-  reports: {
-    schedules: [],
-  },
-};
-
-function parseDbValue(value: unknown) {
-  if (typeof value !== "string") return value;
-  const trimmed = value.trim();
-  if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
-    try {
-      return JSON.parse(trimmed);
-    } catch {
-      return value;
-    }
-  }
-  return value;
-}
-
 router.get("/", async (req, res) => {
   try {
-    const result = await pool.query(`SELECT key, value FROM company_settings`);
-    const settings: Record<string, unknown> = { ...DEFAULT_SETTINGS };
-    for (const row of result.rows) {
-      settings[row.key] = parseDbValue(row.value);
-    }
+    const settings = await settingsService.getCompanySettings();
     return res.json(settings);
   } catch (error) {
     console.error(error);
-    return res.json(DEFAULT_SETTINGS);
+    return res.json(settingsService.DEFAULT_SETTINGS);
   }
 });
 
 router.patch("/", async (req, res) => {
   try {
     const updates = req.body as Record<string, unknown>;
-    for (const [key, value] of Object.entries(updates)) {
-      await pool.query(
-        `INSERT INTO company_settings (key, value, updated_at) VALUES ($1, $2, NOW())
-         ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
-        [key, JSON.stringify(value)]
-      );
-    }
+    const actorUserId = (req as any).auth?.id ?? null;
+    const ipAddr = req.ip || (req.headers["x-forwarded-for"] as string) || null;
+    await settingsService.upsertCompanySettings(updates, actorUserId, ipAddr);
     return res.json({ success: true });
   } catch (error) {
     console.error(error);

@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "artifacts/erp/package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "dist", "buildCommand": "pnpm --filter @workspace/erp run build" }
+    },
+    { "src": "api/index.js", "use": "@vercel/node" }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/index.js" },
+    { "src": "/(.*)", "dest": "/artifacts/erp/dist/$1" }
+  ]
+}

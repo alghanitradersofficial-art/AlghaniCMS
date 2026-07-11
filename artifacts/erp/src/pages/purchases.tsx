@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useGetPurchases, useCreatePurchase, useUpdatePurchase, useGetProducts, useGetSuppliers, getGetPurchasesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Truck, X, Edit, Trash2 } from "lucide-react";
+import DataTable from "@/components/ui/data-table";
 import { apiDelete } from "@/lib/api";
 
 type LineItem = { productId: number; productName: string; quantity: number; unitCost: number; };
@@ -133,50 +134,34 @@ export default function Purchases() {
 
         <Card className="border-border bg-card">
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-muted-foreground uppercase text-xs tracking-wider">
-                    <th className="px-4 py-3 text-left">PO Number</th>
-                    <th className="px-4 py-3 text-left">Supplier</th>
-                    <th className="px-4 py-3 text-right">Total</th>
-                    <th className="px-4 py-3 text-center">Status</th>
-                    <th className="px-4 py-3 text-left">Date</th>
-                    <th className="px-4 py-3 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">Loading...</td></tr>
-                    : data?.data.length === 0 ? <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No purchases found</td></tr>
-                    : data?.data.map(p => (
-                      <tr key={p.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
-                        <td className="px-4 py-3 font-mono text-xs text-primary">{p.poNumber}</td>
-                        <td className="px-4 py-3 font-medium">{p.supplierName}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-secondary">Rs. {p.total?.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-center">
-                          <Select value={p.status} onValueChange={(v) => handleStatusUpdate(p.id, v as "pending" | "received" | "cancelled")}>
-                            <SelectTrigger className="w-32 h-7 text-xs border-0 p-0 bg-transparent">
-                              <Badge className={statusColor(p.status)}>{p.status}</Badge>
-                            </SelectTrigger>
-                            <SelectContent className="bg-card border-border">
-                              <SelectItem value="pending">Pending</SelectItem>
-                              <SelectItem value="received">Received</SelectItem>
-                              <SelectItem value="cancelled">Cancelled</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">{new Date((p as any).purchaseDate ?? p.createdAt).toLocaleDateString()}</td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex gap-2 justify-center">
-                        <Button size="sm" variant="ghost" onClick={() => openEditPurchase(p)} className="hover:bg-accent w-8 h-8 p-0"><Edit className="w-4 h-4" /></Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleDeletePurchase(p.id)} className="hover:bg-destructive/20 hover:text-destructive w-8 h-8 p-0"><Trash2 className="w-4 h-4" /></Button>
-                      </div>
-                    </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              loading={isLoading}
+              data={data?.data || []}
+              columns={[
+                { key: 'poNumber', title: 'PO Number', render: (r) => <span className="font-mono text-xs text-primary">{r.poNumber}</span> },
+                { key: 'supplierName', title: 'Supplier', render: (r) => <span className="font-medium">{r.supplierName}</span> },
+                { key: 'total', title: 'Total', align: 'right', render: (r) => <span className="font-semibold text-secondary">Rs. {Number(r.total).toLocaleString()}</span> },
+                { key: 'status', title: 'Status', align: 'center', render: (r) => (
+                  <Select value={r.status} onValueChange={(v) => handleStatusUpdate(r.id, v as "pending" | "received" | "cancelled") }>
+                    <SelectTrigger className="w-32 h-7 text-xs border-0 p-0 bg-transparent">
+                      <Badge className={statusColor(r.status)}>{r.status}</Badge>
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border">
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="received">Received</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) },
+                { key: 'purchaseDate', title: 'Date', render: (r) => new Date(r.purchaseDate ?? r.createdAt).toLocaleDateString() },
+                { key: 'actions', title: 'Actions', align: 'center', render: (r) => (
+                  <div className="flex gap-2 justify-center">
+                    <Button size="sm" variant="ghost" onClick={() => openEditPurchase(r)} className="hover:bg-accent w-8 h-8 p-0"><Edit className="w-4 h-4" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => handleDeletePurchase(r.id)} className="hover:bg-destructive/20 hover:text-destructive w-8 h-8 p-0"><Trash2 className="w-4 h-4" /></Button>
+                  </div>
+                ) },
+              ]}
+            />
           </CardContent>
         </Card>
       </div>

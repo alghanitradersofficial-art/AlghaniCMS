@@ -1111,9 +1111,6 @@ components:
           type: string
         barcode:
           type: string
-        createdAt:
-          type: string
-          format: date-time
 
     ProductUpdate:
       type: object

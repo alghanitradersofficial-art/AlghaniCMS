@@ -7,21 +7,19 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useGetProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useGetCategories, useGetBrands, useGetInventoryReport, getGetProductsQueryKey, ProductInput, ProductUpdate } from "@workspace/api-client-react";
+import { useGetProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useGetCategories, useGetBrands, useGetInventoryReport, getGetProductsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit, Trash2, AlertTriangle, Package } from "lucide-react";
 
 type ProductForm = {
   name: string; sku: string; description: string; categoryId: string; brandId: string;
   costPrice: string; currentStock: string; minStock: string; unit: string; oemNumber: string;
-  createdAt: string;
 };
 
-const getEmptyForm = (): ProductForm => ({
+const emptyForm: ProductForm = {
   name: "", sku: "", description: "", categoryId: "", brandId: "",
   costPrice: "", currentStock: "0", minStock: "5", unit: "pcs", oemNumber: "",
-  createdAt: new Date().toISOString().slice(0, 10),
-});
+};
 
 export default function Inventory() {
   const qc = useQueryClient();
@@ -31,7 +29,7 @@ export default function Inventory() {
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
-  const [form, setForm] = useState<ProductForm>(getEmptyForm());
+  const [form, setForm] = useState<ProductForm>(emptyForm);
 
   const { data, isLoading } = useGetProducts({
     search: search || undefined,
@@ -47,39 +45,32 @@ export default function Inventory() {
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getGetProductsQueryKey(), exact: false });
+  const invalidate = () => qc.invalidateQueries({ queryKey: getGetProductsQueryKey() });
 
-  const openNew = () => { setForm(getEmptyForm()); setEditing(null); setOpen(true); };
-  const openEdit = (p: NonNullable<typeof data>['data'][0]) => {
+  const openNew = () => { setForm(emptyForm); setEditing(null); setOpen(true); };
+  const openEdit = (p: NonNullable<typeof data>["data"][0]) => {
     setForm({
       name: p.name, sku: p.sku, description: p.description || "", categoryId: p.categoryId ? String(p.categoryId) : "",
       brandId: p.brandId ? String(p.brandId) : "", costPrice: String(p.costPrice),
       currentStock: String(p.currentStock), minStock: String(p.minStock), unit: p.unit, oemNumber: p.oemNumber || "",
-      createdAt: p.createdAt ? p.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
     });
     setEditing(p.id);
     setOpen(true);
   };
 
   const handleSave = async () => {
-    const basePayload = {
+    const payload = {
       name: form.name, sku: form.sku, description: form.description || undefined,
       categoryId: form.categoryId ? parseInt(form.categoryId) : null,
       brandId: form.brandId ? parseInt(form.brandId) : null,
       costPrice: parseFloat(form.costPrice),
-      salePrice: parseFloat(form.costPrice),
       currentStock: parseInt(form.currentStock), minStock: parseInt(form.minStock),
       unit: form.unit, oemNumber: form.oemNumber || undefined,
     };
-
     if (editing) {
-      await updateProduct.mutateAsync({ id: editing, data: basePayload as ProductUpdate });
+      await updateProduct.mutateAsync({ id: editing, data: payload });
     } else {
-      const createPayload: ProductInput = {
-        ...basePayload,
-        createdAt: new Date(form.createdAt).toISOString(),
-      };
-      await createProduct.mutateAsync({ data: createPayload });
+      await createProduct.mutateAsync({ data: payload });
     }
     invalidate();
     setOpen(false);
@@ -148,7 +139,6 @@ export default function Inventory() {
                   <tr className="border-b border-border text-muted-foreground uppercase text-xs tracking-wider">
                     <th className="px-4 py-3 text-left">Product</th>
                     <th className="px-4 py-3 text-left">SKU</th>
-                    <th className="px-4 py-3 text-left">Added</th>
                     <th className="px-4 py-3 text-left">Category</th>
                     <th className="px-4 py-3 text-left">Brand</th>
                     <th className="px-4 py-3 text-right">Cost</th>
@@ -165,9 +155,6 @@ export default function Inventory() {
                     <tr key={p.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
                       <td className="px-4 py-3 font-medium">{p.name}</td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{p.sku}</td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs">{p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "—"}</td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs">{p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "—"}</td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs">{p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{p.categoryName || "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{p.brandName || "—"}</td>
                       <td className="px-4 py-3 text-right">Rs. {p.costPrice?.toLocaleString()}</td>
@@ -234,14 +221,10 @@ export default function Inventory() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Cost Price (Rs.)</Label>
                 <Input type="number" value={form.costPrice} onChange={e => setForm(f => ({ ...f, costPrice: e.target.value }))} className="bg-background/50 border-border" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Created At</Label>
-                <Input type="date" value={form.createdAt} onChange={e => setForm(f => ({ ...f, createdAt: e.target.value }))} disabled={Boolean(editing)} className="bg-background/50 border-border" />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">

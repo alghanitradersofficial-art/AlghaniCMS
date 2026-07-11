@@ -32,6 +32,7 @@ import generalLedgerRouter from "./general-ledger.js";
 import calendarRouter from "./calendar.js";
 import stockAdjustmentsRouter from "./stock-adjustments.js";
 import remindersRouter from "./reminders.js";
+import monthsRouter from "./months.js";
 import { authenticate, requirePermission } from "../lib/auth-middleware.js";
 
 const router: IRouter = Router();
@@ -59,6 +60,7 @@ router.use("/general-ledger", requirePermission("ledger"), generalLedgerRouter);
 router.use("/calendar", requirePermission("settings"), calendarRouter);
 router.use("/stock-adjustments", requirePermission("inventory"), stockAdjustmentsRouter);
 router.use("/reminders", requirePermission("notifications"), remindersRouter);
+router.use("/months", requirePermission("settings"), monthsRouter);
 router.use("/users", requirePermission("users"), usersRouter);
 router.use("/expenses", requirePermission("expenses"), expensesRouter);
 router.use("/reports", requirePermission("reports"), reportsRouter);

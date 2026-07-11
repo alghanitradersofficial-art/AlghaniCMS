@@ -11,6 +11,7 @@ import { useGetCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustome
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit, Trash2, Users, Wallet } from "lucide-react";
 import { CustomerLedgerDialog } from "@/components/customer-ledger-dialog";
+import DataTable from "@/components/ui/data-table";
 
 type CustForm = { name: string; phone: string; email: string; address: string; city: string; type: string; };
 const emptyForm: CustForm = { name: "", phone: "", email: "", address: "", city: "", type: "retail" };
@@ -72,42 +73,25 @@ export default function Customers() {
 
         <Card className="border-border bg-card">
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-muted-foreground uppercase text-xs tracking-wider">
-                    <th className="px-4 py-3 text-left">Name</th>
-                    <th className="px-4 py-3 text-left">Phone</th>
-                    <th className="px-4 py-3 text-left">City</th>
-                    <th className="px-4 py-3 text-center">Type</th>
-                    <th className="px-4 py-3 text-right">Orders</th>
-                    <th className="px-4 py-3 text-right">Total Spent</th>
-                    <th className="px-4 py-3 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? <tr><td colSpan={7} className="text-center py-12 text-muted-foreground">Loading...</td></tr>
-                    : data?.data.length === 0 ? <tr><td colSpan={7} className="text-center py-12 text-muted-foreground">No customers found</td></tr>
-                    : data?.data.map(c => (
-                      <tr key={c.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
-                        <td className="px-4 py-3 font-medium">{c.name}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{c.phone}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{c.city || "—"}</td>
-                        <td className="px-4 py-3 text-center"><Badge className={typeColor(c.type ?? "retail")}>{c.type || "retail"}</Badge></td>
-                        <td className="px-4 py-3 text-right">{c.totalOrders}</td>
-                        <td className="px-4 py-3 text-right text-secondary font-medium">Rs. {c.totalSpent?.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex gap-2 justify-center">
-                            <Button size="sm" variant="ghost" onClick={() => setLedgerCustomer({ id: c.id, name: c.name })} className="hover:bg-primary/10 hover:text-primary w-8 h-8 p-0" title="Khata (Ledger)"><Wallet className="w-4 h-4" /></Button>
-                            <Button size="sm" variant="ghost" onClick={() => openEdit(c)} className="hover:bg-accent w-8 h-8 p-0"><Edit className="w-4 h-4" /></Button>
-                            <Button size="sm" variant="ghost" onClick={() => handleDelete(c.id)} className="hover:bg-destructive/20 hover:text-destructive w-8 h-8 p-0"><Trash2 className="w-4 h-4" /></Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              loading={isLoading}
+              data={data?.data || []}
+              columns={[
+                { key: 'name', title: 'Name', render: (r) => <span className="font-medium">{r.name}</span> },
+                { key: 'phone', title: 'Phone', render: (r) => <span className="text-muted-foreground">{r.phone}</span> },
+                { key: 'city', title: 'City', render: (r) => r.city || '—' },
+                { key: 'type', title: 'Type', align: 'center', render: (r) => <Badge className={typeColor(r.type ?? 'retail')}>{r.type || 'retail'}</Badge> },
+                { key: 'orders', title: 'Orders', align: 'right', render: (r) => r.totalOrders },
+                { key: 'totalSpent', title: 'Total Spent', align: 'right', render: (r) => <span className="text-secondary font-medium">Rs. {Number(r.totalSpent || 0).toLocaleString()}</span> },
+                { key: 'actions', title: 'Actions', align: 'center', render: (r) => (
+                  <div className="flex gap-2 justify-center">
+                    <Button size="sm" variant="ghost" onClick={() => setLedgerCustomer({ id: r.id, name: r.name })} className="hover:bg-primary/10 hover:text-primary w-8 h-8 p-0" title="Khata (Ledger)"><Wallet className="w-4 h-4" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(r)} className="hover:bg-accent w-8 h-8 p-0"><Edit className="w-4 h-4" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => handleDelete(r.id)} className="hover:bg-destructive/20 hover:text-destructive w-8 h-8 p-0"><Trash2 className="w-4 h-4" /></Button>
+                  </div>
+                ) },
+              ]}
+            />
           </CardContent>
         </Card>
       </div>
