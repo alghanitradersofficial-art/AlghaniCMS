@@ -2,6 +2,8 @@ import { Router } from "express";
 import { pool } from "@workspace/db";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import nodemailer from "nodemailer";
+import { bot } from "./telegram.js";
 
 const router = Router();
 
@@ -105,23 +107,65 @@ router.post("/change-password", async (req, res) => {
   }
 });
 
+function createTransporter() {
+  const host = process.env.SMTP_HOST || "smtp.gmail.com";
+  const port = parseInt(process.env.SMTP_PORT || "587");
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  if (!user || !pass) return null;
+  return nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+}
+
 // ─── FORGOT PASSWORD REQUEST ──────────────────────────────────────────────────
 router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required" });
+
     const result = await pool.query(`SELECT id, name, email FROM users WHERE email = $1`, [email]);
     if (!result.rows.length) return res.status(404).json({ error: "No account found with that email" });
     const user = result.rows[0];
 
-    // Notify CEO and developer
+    const message = `${user.name} (${user.email}) has requested a password reset. Please update their password from User Management.`;
+
+    // Web notifications for CEO and developer
     await pool.query(
       `INSERT INTO notifications (type, title, message, recipient_role) VALUES ($1,$2,$3,$4),($1,$2,$3,$5)`,
-      ["forgot_password", "Password Reset Request",
-        `${user.name} (${user.email}) has requested a password reset. Please update their password from User Management.`,
-        "ceo", "developer"]
+      ["forgot_password", "Password Reset Request", message, "ceo", "developer"]
     );
+
+    const transporter = createTransporter();
+    if (transporter) {
+      const toList = [process.env.CEO_EMAIL || "junaid@alghani.pk"];
+      try {
+        await transporter.sendMail({
+          from: `"Al Ghani ERP" <${process.env.SMTP_USER}>`,
+          to: toList.join(", "),
+          subject: "Al Ghani ERP Password Reset Request",
+          text: message,
+          html: `<p>${message}</p>`,
+        });
+      } catch (emailError) {
+        console.error("[Auth] Forgot password email failed:", emailError);
+      }
+    }
+
+    const telegramChatId = process.env.TELEGRAM_CHAT_ID;
+    if (bot && telegramChatId) {
+      try {
+        await bot.sendMessage(
+          telegramChatId,
+          `🔐 *Password Reset Request*\n${message}`,
+          { parse_mode: "Markdown" }
+        );
+      } catch (telegramError) {
+        console.error("[Auth] Forgot password Telegram failed:", telegramError);
+      }
+    }
+
     return res.json({ success: true, message: "Your request has been sent to the administrator." });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({ error: "Failed to process request" });
   }
 });

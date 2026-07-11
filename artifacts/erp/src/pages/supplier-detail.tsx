@@ -13,10 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { SectionLoading, PageLoading } from "@/components/loading-state";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
 import { useGetSuppliers } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Package, Receipt, ShoppingCart, CalendarIcon, Wallet } from "lucide-react";
+import { ArrowLeft, Plus, Package, Receipt, ShoppingCart, CalendarIcon, Wallet, Edit, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -241,9 +241,21 @@ export default function SupplierDetail() {
 function LedgerTab({ supplierId, data, isLoading, onChanged }: { supplierId: number; data?: SupplierLedgerResponse; isLoading: boolean; onChanged: () => void }) {
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
+  const [editEntry, setEditEntry] = useState<LedgerEntry | null>(null);
 
   if (isLoading) return <SectionLoading label="Loading ledger" />;
   if (!data) return null;
+
+  const handleDelete = async (entry: LedgerEntry) => {
+    if (!window.confirm("Delete this ledger entry?")) return;
+    try {
+      await apiDelete(`/api/suppliers/${supplierId}/ledger/${entry.id}`);
+      toast({ title: "Ledger entry deleted" });
+      onChanged();
+    } catch (e: any) {
+      toast({ title: "Failed to delete entry", description: e.message, variant: "destructive" });
+    }
+  };
 
   return (
     <>
@@ -268,22 +280,38 @@ function LedgerTab({ supplierId, data, isLoading, onChanged }: { supplierId: num
                 <th className="px-4 py-3 text-left">Description</th>
                 <th className="px-4 py-3 text-right">Amount</th>
                 <th className="px-4 py-3 text-right">Balance</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {data.entries.length === 0 ? (
-                <tr><td colSpan={5} className="text-center py-10 text-muted-foreground">No ledger entries yet</td></tr>
-              ) : data.entries.map((e) => (
-                <tr key={e.id} className="border-b border-border/50 hover:bg-accent/30">
-                  <td className="px-4 py-3 text-muted-foreground">{format(new Date(e.entryDate), "d MMM yyyy")}</td>
-                  <td className="px-4 py-3"><Badge variant="outline" className="capitalize">{e.type.replace("_", " ")}</Badge></td>
-                  <td className="px-4 py-3 text-muted-foreground">{e.description || "—"}</td>
-                  <td className={cn("px-4 py-3 text-right font-medium", e.amount < 0 ? "text-emerald-500" : "text-foreground")}>
-                    {e.amount < 0 ? "-" : "+"}Rs {Math.abs(e.amount).toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 text-right font-semibold">Rs {e.runningBalance.toLocaleString()}</td>
-                </tr>
-              ))}
+                <tr><td colSpan={6} className="text-center py-10 text-muted-foreground">No ledger entries yet</td></tr>
+              ) : data.entries.map((e) => {
+                const isEditable = e.type === "return" || e.type === "adjustment";
+                return (
+                  <tr key={e.id} className="border-b border-border/50 hover:bg-accent/30">
+                    <td className="px-4 py-3 text-muted-foreground">{format(new Date(e.entryDate), "d MMM yyyy")}</td>
+                    <td className="px-4 py-3"><Badge variant="outline" className="capitalize">{e.type.replace("_", " ")}</Badge></td>
+                    <td className="px-4 py-3 text-muted-foreground">{e.description || "—"}</td>
+                    <td className={cn("px-4 py-3 text-right font-medium", e.amount < 0 ? "text-emerald-500" : "text-foreground")}>
+                      {e.amount < 0 ? "-" : "+"}Rs {Math.abs(e.amount).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold">Rs {e.runningBalance.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right">
+                      {isEditable ? (
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setEditEntry(e)}>
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(e)}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </CardContent>
@@ -302,6 +330,30 @@ function LedgerTab({ supplierId, data, isLoading, onChanged }: { supplierId: num
             }
           }}
         />
+      </Dialog>
+
+      <Dialog open={!!editEntry} onOpenChange={(open) => { if (!open) setEditEntry(null); }}>
+        {editEntry ? (
+          <AdjustmentForm
+            initial={{
+              type: editEntry.type as "return" | "adjustment",
+              amount: Math.abs(editEntry.amount).toString(),
+              description: editEntry.description ?? "",
+              entryDate: new Date(editEntry.entryDate),
+            }}
+            submitLabel="Save changes"
+            onSubmit={async (payload) => {
+              try {
+                await apiPatch(`/api/suppliers/${supplierId}/ledger/${editEntry.id}`, payload);
+                toast({ title: "Ledger entry updated" });
+                onChanged();
+                setEditEntry(null);
+              } catch (e: any) {
+                toast({ title: "Failed to update entry", description: e.message, variant: "destructive" });
+              }
+            }}
+          />
+        ) : null}
       </Dialog>
     </>
   );
@@ -343,15 +395,23 @@ function DatePickerField({ date, onChange }: { date: Date; onChange: (d: Date) =
   );
 }
 
-function AdjustmentForm({ onSubmit }: { onSubmit: (payload: any) => void }) {
-  const [type, setType] = useState<"return" | "adjustment">("return");
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  const [date, setDate] = useState<Date>(new Date());
+function AdjustmentForm({
+  initial,
+  onSubmit,
+  submitLabel = "Add Entry",
+}: {
+  initial?: { type: "return" | "adjustment"; amount: string; description: string; entryDate: Date };
+  onSubmit: (payload: any) => void;
+  submitLabel?: string;
+}) {
+  const [type, setType] = useState<"return" | "adjustment">(initial?.type ?? "return");
+  const [amount, setAmount] = useState(initial?.amount ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [date, setDate] = useState<Date>(initial?.entryDate ?? new Date());
 
   return (
     <DialogContent className="bg-card border-border max-w-md">
-      <DialogHeader><DialogTitle>Add Return / Adjustment</DialogTitle></DialogHeader>
+      <DialogHeader><DialogTitle>{initial ? "Edit Return / Adjustment" : "Add Return / Adjustment"}</DialogTitle></DialogHeader>
       <div className="grid gap-3 py-2">
         <div className="space-y-1">
           <Label className="text-xs uppercase tracking-wider text-muted-foreground">Type</Label>
@@ -381,7 +441,7 @@ function AdjustmentForm({ onSubmit }: { onSubmit: (payload: any) => void }) {
           disabled={!amount}
           onClick={() => onSubmit({ type, amount: parseFloat(amount), description: description || undefined, entryDate: date.toISOString() })}
         >
-          Add Entry
+          {submitLabel}
         </Button>
       </DialogFooter>
     </DialogContent>

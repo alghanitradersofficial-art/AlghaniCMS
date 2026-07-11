@@ -142,6 +142,32 @@ export async function allocateSupplierPayment(
   return applied;
 }
 
+export async function recomputeSupplierLedgerRunningBalances(tx: DbTx, supplierId: number) {
+  const [supplier] = await tx
+    .select({ openingBalance: suppliersTable.openingBalance })
+    .from(suppliersTable)
+    .where(eq(suppliersTable.id, supplierId));
+
+  if (!supplier) {
+    throw new Error(`Supplier ${supplierId} not found`);
+  }
+
+  const entries = await tx
+    .select()
+    .from(supplierLedgerEntriesTable)
+    .where(eq(supplierLedgerEntriesTable.supplierId, supplierId))
+    .orderBy(asc(supplierLedgerEntriesTable.entryDate), asc(supplierLedgerEntriesTable.id));
+
+  let runningBalance = parseFloat(supplier.openingBalance as string);
+  for (const entry of entries) {
+    runningBalance = round2(runningBalance + parseFloat(entry.amount as string));
+    await tx
+      .update(supplierLedgerEntriesTable)
+      .set({ runningBalance: String(runningBalance) })
+      .where(eq(supplierLedgerEntriesTable.id, entry.id));
+  }
+}
+
 /**
  * Read-side summary for a supplier's ledger — balance + totals. Safe to
  * call outside a transaction.

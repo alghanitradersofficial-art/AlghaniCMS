@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { z } from "zod";
-import { db, suppliersTable, supplierLedgerEntriesTable, supplierPaymentsTable, purchasesTable } from "@workspace/db";
-import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
-import { appendSupplierLedgerEntry, allocateSupplierPayment, getSupplierLedgerSummary } from "../lib/supplier-ledger.js";
+import { db, suppliersTable, supplierLedgerEntriesTable, supplierPaymentsTable, purchasesTable, generalLedgerEntriesTable } from "@workspace/db";
+import { eq, and, gte, lte, desc, asc, sql } from "drizzle-orm";
+import { appendSupplierLedgerEntry, allocateSupplierPayment, getSupplierLedgerSummary, recomputeSupplierLedgerRunningBalances } from "../lib/supplier-ledger.js";
 import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
 import { getUserIdFromRequest } from "../lib/auth-context.js";
+import { round2 } from "../lib/ledger.js";
 
 const router = Router();
 
@@ -25,6 +26,13 @@ const CreateSupplierPaymentBody = z.object({
 const AddAdjustmentBody = z.object({
   type: z.enum(["return", "adjustment"]),
   amount: z.number().positive(),
+  description: z.string().optional(),
+  entryDate: z.string().optional(),
+});
+
+const EditAdjustmentBody = z.object({
+  type: z.enum(["return", "adjustment"]).optional(),
+  amount: z.number().positive().optional(),
   description: z.string().optional(),
   entryDate: z.string().optional(),
 });
@@ -134,6 +142,116 @@ router.post("/:id/ledger", async (req, res): Promise<any> => {
     console.error(error);
     if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues });
     return res.status(500).json({ error: "Failed to add ledger entry" });
+  }
+});
+
+// PATCH /api/suppliers/:id/ledger/:entryId — edit a manual return/adjustment ledger entry
+router.patch("/:id/ledger/:entryId", async (req, res): Promise<any> => {
+  try {
+    const supplierId = parseInt(req.params.id);
+    const entryId = parseInt(req.params.entryId);
+    const body = EditAdjustmentBody.parse(req.body);
+
+    const [existingEntry] = await db
+      .select()
+      .from(supplierLedgerEntriesTable)
+      .where(and(eq(supplierLedgerEntriesTable.id, entryId), eq(supplierLedgerEntriesTable.supplierId, supplierId)));
+
+    if (!existingEntry) {
+      return res.status(404).json({ error: "Ledger entry not found" });
+    }
+
+    if (existingEntry.purchaseId || existingEntry.paymentId || !["return", "adjustment"].includes(existingEntry.type)) {
+      return res.status(400).json({ error: "Only manual return/adjustment entries can be edited" });
+    }
+
+    const updateValues: Record<string, unknown> = {};
+    if (body.type) updateValues.type = body.type;
+    if (body.amount !== undefined) updateValues.amount = String(round2(-body.amount));
+    if (body.description !== undefined) updateValues.description = body.description ?? null;
+    if (body.entryDate !== undefined) updateValues.entryDate = new Date(body.entryDate);
+
+    if (Object.keys(updateValues).length === 0) {
+      return res.status(400).json({ error: "No changes provided" });
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(supplierLedgerEntriesTable)
+        .set(updateValues)
+        .where(eq(supplierLedgerEntriesTable.id, entryId));
+
+      await recomputeSupplierLedgerRunningBalances(tx, supplierId);
+
+      await tx
+        .update(generalLedgerEntriesTable)
+        .set({
+          amount: String(round2(body.amount !== undefined ? body.amount : Math.abs(parseFloat(existingEntry.amount as string)))),
+          date: updateValues.entryDate ?? existingEntry.entryDate,
+          note: body.description ?? existingEntry.description,
+          type: "adjustment",
+        })
+        .where(and(
+          eq(generalLedgerEntriesTable.referenceId, entryId),
+          eq(generalLedgerEntriesTable.partyType, "supplier"),
+          eq(generalLedgerEntriesTable.partyId, supplierId),
+          eq(generalLedgerEntriesTable.type, "adjustment"),
+        ));
+    });
+
+    const [updatedEntry] = await db
+      .select()
+      .from(supplierLedgerEntriesTable)
+      .where(eq(supplierLedgerEntriesTable.id, entryId));
+
+    return res.json(fmtLedgerEntry(updatedEntry));
+  } catch (error) {
+    console.error(error);
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues });
+    return res.status(500).json({ error: "Failed to edit ledger entry" });
+  }
+});
+
+// DELETE /api/suppliers/:id/ledger/:entryId — delete a manual return/adjustment ledger entry
+router.delete("/:id/ledger/:entryId", async (req, res): Promise<any> => {
+  try {
+    const supplierId = parseInt(req.params.id);
+    const entryId = parseInt(req.params.entryId);
+
+    const [existingEntry] = await db
+      .select()
+      .from(supplierLedgerEntriesTable)
+      .where(and(eq(supplierLedgerEntriesTable.id, entryId), eq(supplierLedgerEntriesTable.supplierId, supplierId)));
+
+    if (!existingEntry) {
+      return res.status(404).json({ error: "Ledger entry not found" });
+    }
+
+    if (existingEntry.purchaseId || existingEntry.paymentId || !["return", "adjustment"].includes(existingEntry.type)) {
+      return res.status(400).json({ error: "Only manual return/adjustment entries can be deleted" });
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(supplierLedgerEntriesTable)
+        .where(eq(supplierLedgerEntriesTable.id, entryId));
+
+      await tx
+        .delete(generalLedgerEntriesTable)
+        .where(and(
+          eq(generalLedgerEntriesTable.referenceId, entryId),
+          eq(generalLedgerEntriesTable.partyType, "supplier"),
+          eq(generalLedgerEntriesTable.partyId, supplierId),
+          eq(generalLedgerEntriesTable.type, "adjustment"),
+        ));
+
+      await recomputeSupplierLedgerRunningBalances(tx, supplierId);
+    });
+
+    return res.status(204).send();
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to delete ledger entry" });
   }
 });
 

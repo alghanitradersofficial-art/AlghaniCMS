@@ -103,11 +103,8 @@ export default function Login() {
                 <div className="text-center">
                   <button type="button" onClick={() => { setForgotMode(true); setError(""); }}
                     className="text-xs text-muted-foreground hover:text-primary transition-colors">
-                    Forgot password? Request reset from CEO
+                    Forgot password? Request reset
                   </button>
-                </div>
-                <div className="text-center text-xs text-muted-foreground/40 pt-2">
-                  CEO Login: junaid@alghani.pk · admin123
                 </div>
               </form>
             ) : (
@@ -119,7 +116,7 @@ export default function Login() {
                     </div>
                     <div>
                       <p className="font-medium text-white">Request Sent!</p>
-                      <p className="text-sm text-muted-foreground mt-1">Your request has been sent to the CEO and developer. They will reset your password shortly.</p>
+                      <p className="text-sm text-muted-foreground mt-1">Your request has been sent to the administrator. They will reset your password shortly.</p>
                     </div>
                     <Button onClick={() => { setForgotMode(false); setForgotSent(false); setError(""); }} className="w-full bg-primary hover:bg-primary/90">
                       Back to Login
@@ -129,7 +126,7 @@ export default function Login() {
                   <form onSubmit={handleForgotPassword} className="space-y-4">
                     <div className="text-center mb-2">
                       <p className="font-medium text-white text-sm">Password Reset Request</p>
-                      <p className="text-xs text-muted-foreground mt-1">Enter your email — CEO & developer will be notified to reset it.</p>
+                      <p className="text-xs text-muted-foreground mt-1">Enter your email — administrator will be notified to reset it.</p>
                     </div>
                     <div className="space-y-2">
                       <Label className="uppercase text-xs tracking-wider text-muted-foreground">Your Email</Label>
