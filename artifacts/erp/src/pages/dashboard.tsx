@@ -21,7 +21,9 @@ type RecentActivityItem = {
 };
 
 export default function Dashboard() {
+  const [range, setRange] = useState<DateRangeValue>({ preset: "all" });
   const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary();
+
   const monthsFromRange = (r: DateRangeValue) => {
     if (!r) return 6;
     if (r.preset === "all") return 24;
@@ -38,12 +40,10 @@ export default function Dashboard() {
     return 6;
   };
 
+  const params = dateRangeToParams(range);
   const { data: chartData } = useGetSalesChart({ months: monthsFromRange(range) });
   const { data: topProducts } = useGetTopProducts();
   const { data: lowStock } = useGetLowStockAlerts();
-
-  const [range, setRange] = useState<DateRangeValue>({ preset: "all" });
-  const params = dateRangeToParams(range);
 
   const { data: rangeSummary, isLoading: loadingRangeSummary } = useQuery({
     queryKey: ["dashboard-summary-range", params.toString()],
