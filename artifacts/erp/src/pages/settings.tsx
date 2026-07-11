@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Settings2, Building2, Palette, Bell, Calendar, Plus, Trash2, Check, Clock, Bot, Mail, Key, Download, Upload, Database, Send, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { customFetch } from "@workspace/api-client-react";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
@@ -153,8 +154,20 @@ export default function Settings() {
     } catch { toast({ title: "Error", variant: "destructive" }); }
   };
 
-  const exportDB = (format: "json" | "sql") => {
-    window.open(`${BASE}/api/backup/export/${format}`, "_blank");
+  const exportDB = async (format: "json" | "sql") => {
+    try {
+      const blob = await customFetch<Blob>(`${BASE}/api/backup/export/${format}`, { responseType: "blob" });
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = `alghani-backup-${new Date().toISOString().slice(0, 10)}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      toast({ title: "Export failed", variant: "destructive" });
+    }
   };
 
   const importDB = async (e: React.ChangeEvent<HTMLInputElement>) => {

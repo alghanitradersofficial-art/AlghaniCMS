@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Layout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useGetProfitLossReport, useGetInventoryReport, useGetDashboardSummary } from "@workspace/api-client-react";
+import { customFetch, useGetProfitLossReport, useGetInventoryReport, useGetDashboardSummary } from "@workspace/api-client-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { FileBarChart, TrendingUp, TrendingDown, Package, Download, Send, Mail, MessageSquare } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -30,19 +30,18 @@ export default function Reports() {
   const handleExcelExport = async () => {
     setExporting(true);
     try {
-      const url = `${BASE}/api/export/report/excel?period=${period}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Export failed");
-      const blob = await res.blob();
+      const blob = await customFetch<Blob>(`/api/export/report/excel?period=${period}`, { responseType: "blob" });
+      const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
+      a.href = objectUrl;
       a.download = `AlGhani_Report_${period}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(a.href);
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
       toast({ title: "✅ Excel exported successfully!" });
     } catch {
-      // Fallback: open in new tab
-      window.open(`${BASE}/api/export/report/excel?period=${period}`, "_blank");
+      toast({ title: "Export failed", variant: "destructive" });
     } finally {
       setExporting(false);
     }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Download, FileText, FileSpreadsheet, FileDown } from "lucide-react";
+import { customFetch } from "@workspace/api-client-react";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
@@ -20,17 +21,28 @@ export function ExportButtons({ type, invoiceId, compact }: ExportButtonsProps) 
     setLoading(format);
     try {
       let url = "";
+      let filename = "alghani-export";
+
       if (invoiceId && format === "invoice-pdf") {
         url = `${BASE}/api/export/invoice/${invoiceId}/pdf`;
+        filename = `invoice-${invoiceId}.pdf`;
       } else {
         url = `${BASE}/api/export/${type}/${format}`;
+        const extension = format === "excel" ? "xlsx" : format;
+        filename = `alghani-${type}.${extension}`;
       }
+
+      const blob = await customFetch<Blob>(url, { responseType: "blob" });
+      const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.target = "_blank";
+      a.href = objectUrl;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      // Keep loading state for a short time to show action feedback.
     } finally {
       setTimeout(() => setLoading(null), 2000);
     }
