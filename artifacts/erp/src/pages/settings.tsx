@@ -50,35 +50,29 @@ export default function Settings() {
   const [legacyImporting, setLegacyImporting] = useState(false);
   const [legacyImportResult, setLegacyImportResult] = useState<{ message?: string; importedProducts?: number; importedCustomers?: number; importedSuppliers?: number; importedPurchases?: number; importedSales?: number } | null>(null);
 
-  const fetchJson = async <T = unknown>(url: string, options?: RequestInit): Promise<T> => {
-    const res = await fetch(url, options);
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      throw new Error((data && typeof data === "object" && "error" in data ? (data as any).error : `Request failed with status ${res.status}`) as string);
+  const loadSettings = async () => {
+    try {
+      const data = await customFetch<{ company?: Partial<CompanySettings> }>("/api/settings");
+      if (data.company) setCompany(c => ({ ...c, ...data.company }));
+    } catch (error) {
+      console.warn("Settings load failed:", error);
     }
-    return data as T;
   };
 
   useEffect(() => {
     const load = async () => {
-      try {
-        const data = await fetchJson<{ company?: Partial<CompanySettings> }>(`${BASE}/api/settings`);
-        if (data.company) setCompany(c => ({ ...c, ...data.company }));
-      } catch (error) {
-        console.warn("Settings load failed:", error);
-      }
-
-      loadSchedules();
+      await loadSettings();
+      await loadSchedules();
 
       try {
-        const status = await fetchJson<typeof telegramStatus>(`${BASE}/api/telegram/status`);
+        const status = await customFetch<typeof telegramStatus>("/api/telegram/status");
         setTelegramStatus(status);
       } catch (error) {
         console.warn("Telegram status load failed:", error);
       }
 
       try {
-        const stats = await fetchJson<{ tables: Record<string, number> }>(`${BASE}/api/backup/stats`);
+        const stats = await customFetch<{ tables: Record<string, number> }>("/api/backup/stats");
         setDbStats(stats.tables || null);
       } catch (error) {
         console.warn("Backup stats load failed:", error);
@@ -90,7 +84,7 @@ export default function Settings() {
 
   const loadSchedules = async () => {
     try {
-      const data = await fetchJson<Schedule[]>(`${BASE}/api/settings/report-schedules`);
+      const data = await customFetch<Schedule[]>("/api/settings/report-schedules");
       setSchedules(Array.isArray(data) ? data : []);
     } catch (error) {
       console.warn("Schedule load failed:", error);
@@ -101,15 +95,27 @@ export default function Settings() {
   const saveCompany = async () => {
     setSaving(true);
     try {
-      await fetch(`${BASE}/api/settings`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company }) });
+      await customFetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company }),
+      });
       toast({ title: "✅ Saved", description: "Company details updated." });
-    } catch { toast({ title: "Error", description: "Failed to save.", variant: "destructive" }); }
-    finally { setSaving(false); }
+      await loadSettings();
+    } catch {
+      toast({ title: "Error", description: "Failed to save.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const addSchedule = async () => {
     try {
-      await fetch(`${BASE}/api/settings/report-schedules`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reportType: newSchedule.reportType, frequency: newSchedule.frequency, sendTo: newSchedule.sendTo, whatsappNumbers: newSchedule.whatsappNumbers }) });
+      await customFetch("/api/settings/report-schedules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportType: newSchedule.reportType, frequency: newSchedule.frequency, sendTo: newSchedule.sendTo, whatsappNumbers: newSchedule.whatsappNumbers }),
+      });
       toast({ title: "Schedule created" }); setScheduleOpen(false); loadSchedules();
     } catch { toast({ title: "Error", variant: "destructive" }); }
   };
@@ -117,8 +123,11 @@ export default function Settings() {
   const sendTelegramTest = async () => {
     setTelegramSending(true);
     try {
-      const res = await fetch(`${BASE}/api/telegram/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chatId: telegramChatId || undefined }) });
-      const d = await res.json();
+      const d = await customFetch<{ success: boolean; error?: string }>("/api/telegram/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId: telegramChatId || undefined }),
+      });
       if (d.success) toast({ title: "✅ Telegram Sent!", description: "Test message delivered." });
       else toast({ title: "Failed", description: d.error, variant: "destructive" });
     } catch { toast({ title: "Network error", variant: "destructive" }); }
@@ -128,8 +137,11 @@ export default function Settings() {
   const sendTelegramReport = async (type: string) => {
     setTelegramSending(true);
     try {
-      const res = await fetch(`${BASE}/api/telegram/send`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reportType: type }) });
-      const d = await res.json();
+      const d = await customFetch<{ success: boolean; error?: string }>("/api/telegram/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportType: type }),
+      });
       if (d.success) toast({ title: "✅ Report Sent to Telegram!" });
       else toast({ title: "Failed", description: d.error, variant: "destructive" });
     } catch { toast({ title: "Error", variant: "destructive" }); }
@@ -139,16 +151,23 @@ export default function Settings() {
   const previewEmail = async () => {
     setEmailPreviewLoading(true);
     try {
-      const res = await fetch(`${BASE}/api/email/preview-report`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reportType: "daily-summary" }) });
-      setEmailPreview(await res.json());
+      const data = await customFetch<{ subject: string; body: string }>("/api/email/preview-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportType: "daily-summary" }),
+      });
+      setEmailPreview(data);
     } catch { toast({ title: "Preview failed", variant: "destructive" }); }
     finally { setEmailPreviewLoading(false); }
   };
 
   const sendEmail = async () => {
     try {
-      const res = await fetch(`${BASE}/api/email/send-report`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reportType: "daily-summary", recipients: [company.ceoEmail] }) });
-      const d = await res.json();
+      const d = await customFetch<{ success: boolean; message?: string }>("/api/email/send-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportType: "daily-summary", recipients: [company.ceoEmail] }),
+      });
       if (d.success) toast({ title: "✅ Email sent!" });
       else toast({ title: d.message || "SMTP not configured", description: "Set SMTP_HOST, SMTP_USER, SMTP_PASS in server env vars.", variant: "destructive" });
     } catch { toast({ title: "Error", variant: "destructive" }); }
@@ -177,8 +196,11 @@ export default function Settings() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      const res = await fetch(`${BASE}/api/backup/import/json`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
-      const d = await res.json();
+      const d = await customFetch<{ imported: number; errors?: string[] }>(`${BASE}/api/backup/import/json`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
       toast({ title: `✅ Import done`, description: `${d.imported} records restored. ${d.errors?.length ? d.errors.length + " errors." : ""}` });
     } catch (err) { toast({ title: "Import failed", description: (err as Error).message, variant: "destructive" }); }
     finally { setImporting(false); e.target.value = ""; }
@@ -191,8 +213,10 @@ export default function Settings() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(`${BASE}/api/import/legacy`, { method: "POST", body: formData });
-      const d = await res.json();
+      const d = await customFetch<{ message?: string; importedProducts?: number; importedCustomers?: number; importedSuppliers?: number; importedPurchases?: number; importedSales?: number }>(`${BASE}/api/import/legacy`, {
+        method: "POST",
+        body: formData,
+      });
       setLegacyImportResult(d);
       toast({ title: "✅ Legacy data imported", description: d.message || "Your historical records are now available in ERP." });
     } catch (err) {
@@ -282,8 +306,20 @@ export default function Settings() {
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <Button size="sm" variant="ghost" onClick={async () => { await fetch(`${BASE}/api/settings/report-schedules/${s.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive: !s.is_active }) }); loadSchedules(); }} className="h-8 text-xs">{s.is_active ? "Pause" : "Resume"}</Button>
-                          <Button size="sm" variant="ghost" onClick={async () => { await fetch(`${BASE}/api/settings/report-schedules/${s.id}`, { method: "DELETE" }); loadSchedules(); }} className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><Trash2 className="w-3 h-3" /></Button>
+                          <Button size="sm" variant="ghost" onClick={async () => {
+                              await customFetch(`/api/settings/report-schedules/${s.id}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ isActive: !s.is_active }),
+                              });
+                              loadSchedules();
+                            }} className="h-8 text-xs">{s.is_active ? "Pause" : "Resume"}</Button>
+                          <Button size="sm" variant="ghost" onClick={async () => {
+                              await customFetch(`/api/settings/report-schedules/${s.id}`, {
+                                method: "DELETE",
+                              });
+                              loadSchedules();
+                            }} className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><Trash2 className="w-3 h-3" /></Button>
                         </div>
                       </div>
                     ))}
