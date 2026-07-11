@@ -2,6 +2,11 @@ import { pool } from "@workspace/db";
 import { logger } from "./logger.js";
 
 export async function initializeDatabase() {
+  if (!pool) {
+    logger.warn("Database is not configured; skipping schema initialization.");
+    return;
+  }
+
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS company_settings (

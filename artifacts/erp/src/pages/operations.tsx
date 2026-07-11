@@ -42,9 +42,45 @@ export default function Operations() {
   const [reminderDescription, setReminderDescription] = useState("");
 
   const loadData = async () => {
-    const [adjRes, remRes] = await Promise.all([apiGet<{ data: Adjustment[] }>('/api/stock-adjustments'), apiGet<{ data: Reminder[] }>('/api/reminders')]);
-    setAdjustments(adjRes.data);
-    setReminders(remRes.data);
+    try {
+      const [adjRes, remRes] = await Promise.all([
+        apiGet<unknown>('/api/stock-adjustments'),
+        apiGet<unknown>('/api/reminders'),
+      ]);
+
+      const normalizeArray = (value: unknown): any[] => {
+        if (Array.isArray(value)) return value;
+        if (value && typeof value === 'object') {
+          const container = value as Record<string, unknown>;
+          if (Array.isArray(container.data)) return container.data;
+          if (Array.isArray(container.items)) return container.items;
+        }
+        return [];
+      };
+
+      setAdjustments(normalizeArray(adjRes).map((item: any) => ({
+        id: item.id ?? 0,
+        productId: item.productId ?? item.product_id ?? 0,
+        productName: item.productName ?? item.product_name,
+        direction: item.direction ?? 'increase',
+        quantity: Number(item.quantity ?? 0),
+        reason: item.reason ?? '',
+        notes: item.notes ?? null,
+        createdAt: item.createdAt ?? item.created_at ?? new Date().toISOString(),
+      })) as Adjustment[]);
+
+      setReminders(normalizeArray(remRes).map((item: any) => ({
+        id: item.id ?? 0,
+        title: item.title ?? 'Reminder',
+        description: item.description ?? item.notes ?? null,
+        dueDate: item.dueDate ?? item.due_date ?? new Date().toISOString(),
+        isCompleted: Boolean(item.isCompleted ?? item.is_completed ?? false),
+      })) as Reminder[]);
+    } catch (error) {
+      console.error('[Operations] Failed to load data', error);
+      setAdjustments([]);
+      setReminders([]);
+    }
   };
 
   useEffect(() => { loadData(); }, []);
@@ -116,9 +152,11 @@ export default function Operations() {
               </div>
               <Button onClick={handleSaveAdjustment} className="bg-primary hover:bg-primary/90">Save adjustment</Button>
               <div className="space-y-2">
-                {adjustments.map((item) => (
+                {adjustments.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border/70 p-3 text-sm text-muted-foreground">No stock adjustments yet.</div>
+                ) : adjustments.map((item) => (
                   <div key={item.id} className="rounded-lg border border-border p-3 text-sm">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <div>
                         <p className="font-medium">{item.productName || `Product ${item.productId}`}</p>
                         <p className="text-muted-foreground">{item.direction} by {item.quantity} — {item.reason}</p>
@@ -148,7 +186,9 @@ export default function Operations() {
               </div>
               <Button onClick={handleSaveReminder} className="bg-primary hover:bg-primary/90">Add reminder</Button>
               <div className="space-y-2">
-                {reminders.map((item) => (
+                {reminders.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border/70 p-3 text-sm text-muted-foreground">No reminders yet.</div>
+                ) : reminders.map((item) => (
                   <div key={item.id} className="rounded-lg border border-border p-3 text-sm">
                     <div className="flex items-center justify-between gap-2">
                       <div>

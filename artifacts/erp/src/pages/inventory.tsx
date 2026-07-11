@@ -12,19 +12,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit, Trash2, AlertTriangle, Package } from "lucide-react";
 
 type ProductForm = {
-  name: string; sku: string; description: string; categoryId: string; brandId: string;
-  costPrice: string; salePrice: string; currentStock: string; minStock: string; unit: string; oemNumber: string;
+  name: string; sku: string; description: string; brandId: string;
+  costPrice: string; salePrice: string; currentStock: string; minStock: string; unit: string; oemNumber: string; createdAt?: string;
 };
 
 const emptyForm: ProductForm = {
-  name: "", sku: "", description: "", categoryId: "", brandId: "",
-  costPrice: "", salePrice: "", currentStock: "0", minStock: "5", unit: "pcs", oemNumber: "",
+  name: "", sku: "", description: "", brandId: "",
+  costPrice: "", salePrice: "", currentStock: "0", minStock: "5", unit: "pcs", oemNumber: "", createdAt: new Date().toISOString().split('T')[0],
 };
 
 export default function Inventory() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
@@ -33,12 +32,11 @@ export default function Inventory() {
 
   const { data, isLoading } = useGetProducts({
     search: search || undefined,
-    categoryId: categoryFilter ? parseInt(categoryFilter) : undefined,
     lowStock: lowStockOnly || undefined,
     page,
     limit: 20,
   });
-  const { data: categories } = useGetCategories();
+
   const { data: brands } = useGetBrands();
   const { data: inventoryReport } = useGetInventoryReport();
   const createProduct = useCreateProduct();
@@ -50,9 +48,9 @@ export default function Inventory() {
   const openNew = () => { setForm(emptyForm); setEditing(null); setOpen(true); };
   const openEdit = (p: NonNullable<typeof data>["data"][0]) => {
     setForm({
-      name: p.name, sku: p.sku, description: p.description || "", categoryId: p.categoryId ? String(p.categoryId) : "",
+      name: p.name, sku: p.sku, description: p.description || "",
       brandId: p.brandId ? String(p.brandId) : "", costPrice: String(p.costPrice), salePrice: String(p.salePrice),
-      currentStock: String(p.currentStock), minStock: String(p.minStock), unit: p.unit, oemNumber: p.oemNumber || "",
+      currentStock: String(p.currentStock), minStock: String(p.minStock), unit: p.unit, oemNumber: p.oemNumber || "", createdAt: new Date().toISOString().split('T')[0],
     });
     setEditing(p.id);
     setOpen(true);
@@ -61,7 +59,6 @@ export default function Inventory() {
   const handleSave = async () => {
     const payload = {
       name: form.name, sku: form.sku, description: form.description || undefined,
-      categoryId: form.categoryId ? parseInt(form.categoryId) : null,
       brandId: form.brandId ? parseInt(form.brandId) : null,
       costPrice: parseFloat(form.costPrice), salePrice: parseFloat(form.salePrice),
       currentStock: parseInt(form.currentStock), minStock: parseInt(form.minStock),
@@ -98,13 +95,6 @@ export default function Inventory() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Search products..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="pl-9 bg-card border-border" />
           </div>
-          <Select value={categoryFilter} onValueChange={v => { setCategoryFilter(v === "all" ? "" : v); setPage(1); }}>
-            <SelectTrigger className="w-48 bg-card border-border"><SelectValue placeholder="All Categories" /></SelectTrigger>
-            <SelectContent className="bg-card border-border">
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories?.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
           <Button variant={lowStockOnly ? "default" : "outline"} onClick={() => setLowStockOnly(!lowStockOnly)} className={lowStockOnly ? "bg-primary" : "border-border"}>
             <AlertTriangle className="w-4 h-4 mr-2" /> Low Stock
           </Button>
@@ -139,7 +129,6 @@ export default function Inventory() {
                   <tr className="border-b border-border text-muted-foreground uppercase text-xs tracking-wider">
                     <th className="px-4 py-3 text-left">Product</th>
                     <th className="px-4 py-3 text-left">SKU</th>
-                    <th className="px-4 py-3 text-left">Category</th>
                     <th className="px-4 py-3 text-left">Brand</th>
                     <th className="px-4 py-3 text-right">Cost</th>
                     <th className="px-4 py-3 text-center">Stock</th>
@@ -148,14 +137,13 @@ export default function Inventory() {
                 </thead>
                 <tbody>
                   {isLoading ? (
-                    <tr><td colSpan={8} className="text-center py-12 text-muted-foreground">Loading...</td></tr>
+                    <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">Loading...</td></tr>
                   ) : data?.data.length === 0 ? (
-                    <tr><td colSpan={8} className="text-center py-12 text-muted-foreground">No products found</td></tr>
+                    <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No products found</td></tr>
                   ) : data?.data.map(p => (
                     <tr key={p.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
                       <td className="px-4 py-3 font-medium">{p.name}</td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{p.sku}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{p.categoryName || "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{p.brandName || "—"}</td>
                       <td className="px-4 py-3 text-right">Rs. {p.costPrice?.toLocaleString()}</td>
                       <td className="px-4 py-3 text-center">
@@ -203,15 +191,6 @@ export default function Inventory() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Category</Label>
-                <Select value={form.categoryId} onValueChange={v => setForm(f => ({ ...f, categoryId: v }))}>
-                  <SelectTrigger className="bg-background/50 border-border"><SelectValue placeholder="Select..." /></SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    {categories?.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Brand</Label>
                 <Select value={form.brandId} onValueChange={v => setForm(f => ({ ...f, brandId: v }))}>
                   <SelectTrigger className="bg-background/50 border-border"><SelectValue placeholder="Select..." /></SelectTrigger>
@@ -219,6 +198,10 @@ export default function Inventory() {
                     {brands?.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Date</Label>
+                <Input type="date" value={form.createdAt} onChange={e => setForm(f => ({ ...f, createdAt: e.target.value }))} className="bg-background/50 border-border" />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">

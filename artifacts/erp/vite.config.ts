@@ -5,7 +5,7 @@ import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 // Only required for local dev server; Vercel's build step never touches these.
-const rawPort = process.env.PORT ?? "5000";
+const rawPort = process.env.PORT ?? process.env.VITE_PORT ?? "5173";
 const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
@@ -55,7 +55,7 @@ export default defineConfig({
     },
     proxy: {
       "/api": {
-        target: process.env.VITE_API_URL ?? "http://localhost:8080",
+        target: process.env.VITE_API_URL ?? "http://localhost:5000",
         changeOrigin: true,
         secure: false,
       },

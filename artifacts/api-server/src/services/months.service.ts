@@ -1,6 +1,7 @@
 import { db } from "@workspace/db";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { initializeDatabase } from "../lib/init-db.js";
+import { logger } from "../lib/logger.js";
 import {
   salesTable,
   purchasesTable,
@@ -21,12 +22,63 @@ function toNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function createFallbackSummary() {
+  return {
+    salesSummary: {
+      totalSales: 0,
+      cashSales: 0,
+      creditSales: 0,
+      returnedSales: 0,
+      discounts: 0,
+      netSales: 0,
+    },
+    purchaseSummary: {
+      totalPurchases: 0,
+      purchaseReturns: 0,
+      netPurchases: 0,
+    },
+    profitSummary: {
+      grossProfit: 0,
+      totalExpenses: 0,
+      netProfit: 0,
+    },
+    inventorySummary: {
+      openingStock: 0,
+      purchasedStock: 0,
+      soldStock: 0,
+      adjustments: 0,
+      damagedStock: 0,
+      closingStock: 0,
+      closingStockValue: 0,
+    },
+    customerSummary: {
+      totalCustomerReceivables: 0,
+      outstandingCustomers: 0,
+      paymentsReceived: 0,
+    },
+    supplierSummary: {
+      totalSupplierPayables: 0,
+      paymentsMade: 0,
+      outstandingSupplierBalance: 0,
+    },
+    cashSummary: {
+      openingCash: 0,
+      cashReceived: 0,
+      cashPaid: 0,
+      expenses: 0,
+      closingCashInHand: 0,
+    },
+  };
+}
+
 async function ensureFinancialTablesReady() {
+  if (!db) return;
   await initializeDatabase();
 }
 
 export async function computeMonthSummary(periodStart: Date, periodEnd: Date) {
   await ensureFinancialTablesReady();
+  if (!db) return createFallbackSummary();
   const [{ total_sales }] = await db.select({ total_sales: sql<number>`coalesce(sum(${salesTable.total}::numeric), 0)` }).from(salesTable).where(sql`${salesTable.saleDate} >= ${periodStart} AND ${salesTable.saleDate} <= ${periodEnd} AND ${salesTable.status} = 'completed'`);
   const [{ total_sales_discount }] = await db.select({ total_sales_discount: sql<number>`coalesce(sum(${salesTable.discount}::numeric), 0)` }).from(salesTable).where(sql`${salesTable.saleDate} >= ${periodStart} AND ${salesTable.saleDate} <= ${periodEnd} AND ${salesTable.status} = 'completed'`);
   const [{ total_purchases }] = await db.select({ total_purchases: sql<number>`coalesce(sum(${purchasesTable.total}::numeric), 0)` }).from(purchasesTable).where(sql`${purchasesTable.purchaseDate} >= ${periodStart} AND ${purchasesTable.purchaseDate} <= ${periodEnd}`);
@@ -104,6 +156,8 @@ async function getPreviousPeriod(year: number, month: number) {
 }
 
 async function buildWarnings(periodStart: Date, periodEnd: Date) {
+  if (!db) return [];
+
   const pendingCustomerPayments = await db.select({ count: sql<number>`count(*)` }).from(salesTable).where(sql`${salesTable.saleDate} <= ${periodEnd} AND ${salesTable.status} = 'completed' AND (${salesTable.total}::numeric - ${salesTable.amountPaid}::numeric) > 0.005`);
   const pendingSupplierPayments = await db.select({ count: sql<number>`count(*)` }).from(purchasesTable).where(sql`${purchasesTable.purchaseDate} <= ${periodEnd} AND (${purchasesTable.total}::numeric - ${purchasesTable.amountPaid}::numeric) > 0.005`);
   const negativeStock = await db.select({ count: sql<number>`count(*)` }).from(productsTable).where(sql`${productsTable.currentStock} < 0`);
@@ -123,12 +177,22 @@ async function buildWarnings(periodStart: Date, periodEnd: Date) {
 
 export async function closeMonth(year: number, month: number, actorUserId: number | null, periodStart: Date, periodEnd: Date) {
   await ensureFinancialTablesReady();
+  if (!db) throw new Error("Database unavailable");
   const summary = await computeMonthSummary(periodStart, periodEnd);
   const warnings = await buildWarnings(periodStart, periodEnd);
 
   const [existingClosure] = await db.select().from(monthClosuresTable).where(and(eq(monthClosuresTable.year, year), eq(monthClosuresTable.month, month)));
   if (existingClosure) {
-    throw new Error(`Month closure for ${year}-${month} already exists`);
+    const [existingPeriod] = await db.select().from(financialPeriodsTable).where(and(eq(financialPeriodsTable.year, year), eq(financialPeriodsTable.month, month)));
+    return {
+      ok: true,
+      alreadyClosed: true,
+      message: `Month ${year}-${month} is already closed`,
+      closure: existingClosure,
+      period: existingPeriod ?? null,
+      summary,
+      warnings,
+    };
   }
 
   const previousPeriod = await getPreviousPeriod(year, month);
@@ -263,17 +327,35 @@ export async function closeMonth(year: number, month: number, actorUserId: numbe
 }
 
 export async function listClosures() {
+  if (!db) return [];
   const rows = await db.select().from(monthClosuresTable).orderBy(desc(monthClosuresTable.year), desc(monthClosuresTable.month));
   return rows;
 }
 
 export async function getClosure(id: number) {
+  if (!db) return null;
   const [row] = await db.select().from(monthClosuresTable).where(eq(monthClosuresTable.id, id));
   return row ?? null;
 }
 
 export async function getCurrentPeriodOverview() {
+  logger.info({ dbPresent: Boolean(db), databaseEnvPresent: Boolean(process.env.DATABASE_URL) }, "months overview: db present?");
   await ensureFinancialTablesReady();
+  if (!db) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    return {
+      year,
+      month,
+      period: null,
+      lastClosure: null,
+      snapshot: null,
+      summary: createFallbackSummary(),
+      warnings: [],
+      degraded: true,
+    };
+  }
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
@@ -297,6 +379,7 @@ export async function getCurrentPeriodOverview() {
 
 export async function reopenMonth(year: number, month: number, actorUserId: number | null, reason: string) {
   await ensureFinancialTablesReady();
+  if (!db) throw new Error("Database unavailable");
   const [period] = await db.select().from(financialPeriodsTable).where(and(eq(financialPeriodsTable.year, year), eq(financialPeriodsTable.month, month)));
   if (!period) throw new Error("Period not found");
   await db.transaction(async (tx) => {

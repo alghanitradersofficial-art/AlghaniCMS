@@ -13,10 +13,10 @@ export type DateRangeValue = {
 };
 
 const PRESETS: { key: DateRangeValue["preset"]; label: string }[] = [
-  { key: "today", label: "Today" },
-  { key: "week", label: "This Week" },
-  { key: "month", label: "This Month" },
-  { key: "year", label: "This Year" },
+  { key: "today", label: "Daily" },
+  { key: "week", label: "Weekly" },
+  { key: "month", label: "Monthly" },
+  { key: "year", label: "Yearly" },
   { key: "all", label: "All Time" },
 ];
 

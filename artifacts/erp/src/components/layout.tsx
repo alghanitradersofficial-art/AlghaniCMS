@@ -57,12 +57,18 @@ export function Layout({ children }: LayoutProps) {
   const [showMoreSheet, setShowMoreSheet] = useState(false);
   const [showFabMenu, setShowFabMenu] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(() => typeof window !== "undefined" ? window.innerWidth < 1024 : true);
   const [location] = useLocation();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const saved = window.localStorage.getItem("erp-sidebar-collapsed");
     if (saved === "true") setCollapsed(true);
+
+    const handleResize = () => setIsMobileView(window.innerWidth < 1024);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   useEffect(() => {
@@ -71,12 +77,23 @@ export function Layout({ children }: LayoutProps) {
     }
   }, [collapsed]);
 
+  useEffect(() => {
+    setShowMoreSheet(false);
+    setShowFabMenu(false);
+    setMobileOpen(false);
+  }, [location]);
+
+  const showDesktopSidebar = !isMobileView;
+  const showMobileBottomNav = isMobileView;
+
   return (
-    <div className="min-h-screen bg-transparent text-foreground transition-all duration-300 ease-in-out">
-      <div className="mx-auto flex min-h-screen max-w-7xl flex-col lg:flex-row">
-        <aside className={`hidden lg:flex ${collapsed ? "w-20" : "w-72 xl:w-80"} h-screen flex-col sticky top-0 overflow-hidden border-r border-border/70 bg-card/90 shadow-inner backdrop-blur-xl`}>
-          <SidebarContent collapsed={collapsed} />
-        </aside>
+    <div className="min-h-screen overflow-x-hidden bg-transparent text-foreground transition-all duration-300 ease-in-out">
+      <div className="mx-auto flex min-h-screen w-full flex-col lg:max-w-7xl lg:flex-row">
+        {showDesktopSidebar && (
+          <aside className={`${collapsed ? "w-20" : "w-72 xl:w-80"} hidden h-screen flex-col sticky top-0 overflow-hidden border-r border-border/70 bg-card/90 shadow-inner backdrop-blur-xl lg:flex`}>
+            <SidebarContent collapsed={collapsed} />
+          </aside>
+        )}
 
         {mobileOpen && (
           <div className="fixed inset-0 z-50 lg:hidden">
@@ -97,9 +114,9 @@ export function Layout({ children }: LayoutProps) {
           </div>
         )}
 
-        <main className="flex-1 flex flex-col min-w-0 pb-28 lg:pb-6">
+        <main className="flex min-w-0 flex-1 flex-col pb-28 lg:pb-6">
           <header className="sticky top-0 z-20 border-b border-border/60 bg-background/80 backdrop-blur-xl transition-all duration-300 ease-in-out">
-            <div className="mx-auto flex h-16 max-w-[1800px] items-center gap-3 px-4 sm:px-6 lg:px-8">
+            <div className="mx-auto flex h-16 w-full items-center gap-3 px-3 sm:px-4 lg:max-w-[1800px] lg:px-8">
               <button
                 onClick={() => setMobileOpen(true)}
                 className="lg:hidden inline-flex h-11 w-11 items-center justify-center rounded-[20px] border border-border/70 bg-card/90 text-foreground transition-all duration-300 ease-in-out hover:bg-primary/10"
@@ -130,32 +147,34 @@ export function Layout({ children }: LayoutProps) {
             </div>
           </header>
 
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="mx-auto flex-1 max-w-[1800px] px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="w-full flex-1 px-3 py-3 sm:px-4 lg:max-w-[1800px] lg:px-8 lg:py-6">
             {children}
           </motion.div>
 
-          <div className="fixed inset-x-0 bottom-0 z-30 lg:hidden border-t border-border/80 bg-background/95 px-3 py-3 backdrop-blur-xl">
-            <nav className="mx-auto grid max-w-[900px] grid-cols-5 gap-2">
-              {mobileNavItems.map(({ href, label, icon: Icon }) => {
-                const isActive = href !== "#more" && (location === href || location.startsWith(href));
-                if (href === "#more") {
+          {showMobileBottomNav && (
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/80 bg-background/95 px-3 py-3 backdrop-blur-xl lg:hidden">
+              <nav className="mx-auto grid max-w-[900px] grid-cols-5 gap-2">
+                {mobileNavItems.map(({ href, label, icon: Icon }) => {
+                  const isActive = href !== "#more" && (location === href || location.startsWith(href));
+                  if (href === "#more") {
+                    return (
+                      <button key={href} type="button" onClick={() => { setShowMoreSheet(true); setShowFabMenu(false); setMobileOpen(false); }} className="inline-flex flex-col items-center justify-center rounded-[22px] border border-border/60 bg-card/90 px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground transition-all duration-300 hover:border-primary/40 hover:text-primary hover:shadow-sm">
+                        <Icon className="h-5 w-5" />
+                        {label}
+                      </button>
+                    );
+                  }
+
                   return (
-                    <button key={href} type="button" onClick={() => { setShowMoreSheet(true); setShowFabMenu(false); setMobileOpen(false); }} className="inline-flex flex-col items-center justify-center rounded-[22px] border border-border/60 bg-card/90 px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground transition-all duration-300 hover:border-primary/40 hover:text-primary hover:shadow-sm">
+                    <Link key={href} href={href} onClick={() => { setShowMoreSheet(false); setShowFabMenu(false); setMobileOpen(false); }} className={`inline-flex flex-col items-center justify-center rounded-[22px] border px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] transition-all duration-300 ${isActive ? "border-primary/40 bg-primary/10 text-primary shadow-sm" : "border-border/60 bg-card/90 text-muted-foreground hover:border-primary/40 hover:text-primary hover:shadow-sm"}`}>
                       <Icon className="h-5 w-5" />
                       {label}
-                    </button>
+                    </Link>
                   );
-                }
-
-                return (
-                  <Link key={href} href={href} onClick={() => { setShowMoreSheet(false); setShowFabMenu(false); setMobileOpen(false); }} className={`inline-flex flex-col items-center justify-center rounded-[22px] border px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] transition-all duration-300 ${isActive ? "border-primary/40 bg-primary/10 text-primary shadow-sm" : "border-border/60 bg-card/90 text-muted-foreground hover:border-primary/40 hover:text-primary hover:shadow-sm"}`}>
-                    <Icon className="h-5 w-5" />
-                    {label}
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
+                })}
+              </nav>
+            </div>
+          )}
 
           <button
             type="button"

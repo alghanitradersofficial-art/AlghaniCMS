@@ -58,9 +58,13 @@ router.post("/close", async (req, res) => {
     const periodEnd = to ? new Date(to) : new Date(year, month, 0, 23, 59, 59, 999);
 
     const inserted = await monthsService.closeMonth(year, month, actorUserId, periodStart, periodEnd);
-    return res.status(201).json(inserted);
-  } catch (error) {
+    return res.status(inserted?.alreadyClosed ? 200 : 201).json(inserted);
+  } catch (error: any) {
     console.error(error);
+    // If the month is already closed, return a success response instead of an error
+    if (error?.message?.includes("already exists")) {
+      return res.status(200).json({ ok: true, message: "Month is already closed" });
+    }
     return res.status(500).json({ error: "Failed to close month" });
   }
 });

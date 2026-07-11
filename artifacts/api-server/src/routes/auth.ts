@@ -4,20 +4,30 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { bot } from "./telegram.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET environment variable is required");
+const JWT_SECRET = process.env.JWT_SECRET || "development-fallback-secret";
+if (!process.env.JWT_SECRET) {
+  logger.warn("JWT_SECRET is not configured; using a local fallback secret for development.");
 }
 const JWT_EXPIRES = "30d";
+
+function requireDatabase(res: any) {
+  if (!pool) {
+    res.status(503).json({ error: "Database unavailable" });
+    return false;
+  }
+  return true;
+}
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+    if (!requireDatabase(res)) return;
 
     const result = await pool.query(
       `SELECT id, name, email, role, password, is_active, permissions FROM users WHERE email = $1`,
@@ -74,6 +84,7 @@ router.get("/me", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) return res.status(401).json({ error: "No token" });
+    if (!requireDatabase(res)) return;
     const token = authHeader.slice(7);
     const decoded = jwt.verify(token, JWT_SECRET) as { id: number };
     const result = await pool.query(
@@ -93,6 +104,7 @@ router.post("/change-password", async (req, res) => {
   try {
     const { userId, newPassword, requestedBy } = req.body;
     if (!userId || !newPassword) return res.status(400).json({ error: "userId and newPassword required" });
+    if (!requireDatabase(res)) return;
     const hashed = await bcrypt.hash(newPassword, 10);
     await pool.query(`UPDATE users SET password = $1 WHERE id = $2`, [hashed, userId]);
 
@@ -121,6 +133,7 @@ router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email is required" });
+    if (!requireDatabase(res)) return;
 
     const result = await pool.query(`SELECT id, name, email FROM users WHERE email = $1`, [email]);
     if (!result.rows.length) return res.status(404).json({ error: "No account found with that email" });

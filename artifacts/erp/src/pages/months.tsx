@@ -8,6 +8,18 @@ import { format } from "date-fns";
 
 const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+function formatSafeDate(value: unknown) {
+  if (!value) return "Not available";
+
+  const date = value instanceof Date ? value : new Date(value as string | number);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Not available";
+  }
+
+  return format(date, "d MMM yyyy HH:mm");
+}
+
 export default function MonthsPage() {
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
@@ -30,12 +42,14 @@ export default function MonthsPage() {
   async function handleClose() {
     try {
       setStatusMessage(null);
-      await apiPost(`/api/months/close`, { year, month });
+      const result = await apiPost<any>(`/api/months/close`, { year, month });
       qc.invalidateQueries({ queryKey: ["months-closures"] });
       qc.invalidateQueries({ queryKey: ["financial-period-overview"] });
-      setStatusMessage("Month closed successfully.");
+      const msg = result?.message || "Month closed successfully.";
+      setStatusMessage(msg);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Unable to close month right now.");
+      const errMsg = error instanceof Error ? error.message : "Unable to close month right now.";
+      setStatusMessage(errMsg);
     }
   }
 
@@ -124,7 +138,7 @@ export default function MonthsPage() {
                 <div key={c.id} className="flex flex-col gap-2 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <div className="font-semibold">{c.year}-{String(c.month).padStart(2, "0")}</div>
-                    <div className="text-sm text-muted-foreground">Created: {format(new Date(c.created_at), "d MMM yyyy HH:mm")}</div>
+                    <div className="text-sm text-muted-foreground">Created: {formatSafeDate(c.created_at)}</div>
                   </div>
                   <div className="text-right text-sm">
                     <div>Total Sales: Rs. {Number(c.total_sales).toLocaleString()}</div>
