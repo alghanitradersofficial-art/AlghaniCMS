@@ -273,4 +273,7 @@ export default function Purchases() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  </Layout>
+  );
 }
