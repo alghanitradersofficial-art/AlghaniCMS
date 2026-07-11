@@ -14,3 +14,4 @@ export * from "./general-ledger.js";
 export * from "./notifications.js";
 export * from "./stock-adjustments.js";
 export * from "./reminders.js";
+export * from "./month-closures.js";

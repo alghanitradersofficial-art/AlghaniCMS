@@ -8,6 +8,7 @@ import {
   supplierPaymentsTable,
   productsTable,
   auditLogTable,
+  monthClosuresTable,
 } from "@workspace/db";
 
 export async function computeMonthSummary(periodStart: Date, periodEnd: Date) {
@@ -19,7 +20,7 @@ export async function computeMonthSummary(periodStart: Date, periodEnd: Date) {
 
   const [{ cash_in }] = await db.select({ cash_in: sql<number>`coalesce(sum(${paymentsTable.amount}::numeric), 0)` }).from(paymentsTable).where(sql`${paymentsTable.paymentDate} >= ${periodStart} AND ${paymentsTable.paymentDate} <= ${periodEnd}`);
 
-  const [{ supplier_payments }] = await db.select({ supplier_payments: sql<number>`coalesce(sum(${supplierPaymentsTable.amount}::numeric), 0)` }).from(supplierPaymentsTable).where(sql`${supplierPaymentsTable.payment_date} >= ${periodStart} AND ${supplierPaymentsTable.payment_date} <= ${periodEnd}`);
+  const [{ supplier_payments }] = await db.select({ supplier_payments: sql<number>`coalesce(sum(${supplierPaymentsTable.amount}::numeric), 0)` }).from(supplierPaymentsTable).where(sql`${supplierPaymentsTable.paymentDate} >= ${periodStart} AND ${supplierPaymentsTable.paymentDate} <= ${periodEnd}`);
 
   // Closing stock: rough snapshot using current stock * cost price
   const [{ closing_stock_value }] = await db.select({ closing_stock_value: sql<number>`coalesce(sum(${productsTable.currentStock}::numeric * ${productsTable.costPrice}::numeric), 0)` }).from(productsTable);
@@ -45,25 +46,25 @@ export async function closeMonth(year: number, month: number, actorUserId: numbe
   const summary = await computeMonthSummary(periodStart, periodEnd);
 
   // Prevent duplicate closures for same year/month unless forced
-  const [existing] = await db.select().from(sql`month_closures`).where(sql`year = ${year} AND month = ${month}`);
+  const [existing] = await db.select().from(monthClosuresTable).where(sql`${monthClosuresTable.year} = ${year} AND ${monthClosuresTable.month} = ${month}`);
   if (existing) {
     throw new Error(`Month closure for ${year}-${month} already exists`);
   }
 
   const [inserted] = await db.transaction(async (tx) => {
-    const [row] = await tx.insert(sql`month_closures`).values({
+    const [row] = await tx.insert(monthClosuresTable).values({
       year,
       month,
-      period_start: periodStart,
-      period_end: periodEnd,
-      total_sales: String(summary.total_sales),
-      total_purchases: String(summary.total_purchases),
-      total_expenses: String(summary.total_expenses),
-      cash_in_hand: String(summary.cash_in),
-      closing_stock_value: String(summary.closing_stock_value),
-      customer_outstanding: String(summary.customer_outstanding),
-      supplier_outstanding: String(summary.supplier_outstanding),
-      created_by_user_id: actorUserId,
+      periodStart,
+      periodEnd,
+      totalSales: String(summary.total_sales),
+      totalPurchases: String(summary.total_purchases),
+      totalExpenses: String(summary.total_expenses),
+      cashInHand: String(summary.cash_in),
+      closingStockValue: String(summary.closing_stock_value),
+      customerOutstanding: String(summary.customer_outstanding),
+      supplierOutstanding: String(summary.supplier_outstanding),
+      createdByUserId: actorUserId,
     }).returning();
 
     // Write audit log entry for this closure
@@ -86,12 +87,12 @@ export async function closeMonth(year: number, month: number, actorUserId: numbe
 }
 
 export async function listClosures() {
-  const rows = await db.select().from(sql`month_closures`).orderBy(sql`year DESC, month DESC`);
+  const rows = await db.select().from(monthClosuresTable).orderBy(sql`${monthClosuresTable.year} DESC, ${monthClosuresTable.month} DESC`);
   return rows;
 }
 
 export async function getClosure(id: number) {
-  const [row] = await db.select().from(sql`month_closures`).where(sql`id = ${id}`);
+  const [row] = await db.select().from(monthClosuresTable).where(eq(monthClosuresTable.id, id));
   return row ?? null;
 }
 
