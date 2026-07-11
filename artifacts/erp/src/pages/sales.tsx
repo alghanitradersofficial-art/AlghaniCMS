@@ -331,7 +331,6 @@ export default function Sales() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
     </Layout>
   );
 }
