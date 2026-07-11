@@ -43,7 +43,6 @@ Path: artifacts/erp
 - Suppliers
 - Expenses
 - Reports
-- Staff
 - Users
 - Settings
 - Quick Entry

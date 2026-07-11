@@ -100,8 +100,7 @@ router.get("/summary-range", async (req, res): Promise<any> => {
     const totalRevenue = totals["sale"] ?? 0;
     const totalPurchases = totals["purchase"] ?? 0;
     const totalExpenses = totals["expense"] ?? 0;
-    const totalSalaries = totals["salary"] ?? 0;
-    const netProfit = totalRevenue - totalPurchases - totalExpenses - totalSalaries;
+    const netProfit = totalRevenue - totalPurchases - totalExpenses;
 
     // Lifetime-only figures that don't make sense to range-filter (current
     // stock value, total counts) are always computed as true "all time".
@@ -117,7 +116,6 @@ router.get("/summary-range", async (req, res): Promise<any> => {
       totalRevenue: Math.round(totalRevenue * 100) / 100,
       totalPurchases: Math.round(totalPurchases * 100) / 100,
       totalExpenses: Math.round(totalExpenses * 100) / 100,
-      totalSalaries: Math.round(totalSalaries * 100) / 100,
       netProfit: Math.round(netProfit * 100) / 100,
       salesCount,
       totalProducts: parseInt(productsRes.rows[0].count, 10),

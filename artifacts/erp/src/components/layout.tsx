@@ -22,7 +22,6 @@ const moreItems = [
   { href: "/customers", label: "Contacts", icon: Users },
   { href: "/reports", label: "Reports", icon: BarChart2 },
   { href: "/financial-periods", label: "Financial Periods", icon: Wallet },
-  { href: "/staff", label: "Staff", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings2 },
 ];
 
@@ -188,7 +187,7 @@ export function Layout({ children }: LayoutProps) {
           <AnimatePresence>
             {showFabMenu && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-35 bg-slate-950/25 backdrop-blur-sm" onClick={() => setShowFabMenu(false)}>
-                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute bottom-36 right-4 w-[290px] rounded-[28px] border border-border/70 bg-card/95 p-3 shadow-2xl backdrop-blur-xl" onClick={(event) => event.stopPropagation()}>
+                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute bottom-24 right-4 max-h-[calc(100vh-140px)] w-[290px] overflow-auto rounded-[28px] border border-border/70 bg-card/95 p-3 shadow-2xl backdrop-blur-xl lg:bottom-12" onClick={(event) => event.stopPropagation()}>
                   <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Quick Actions</div>
                   <div className="grid gap-2">
                     {fabActions.map(({ href, label, icon: Icon }) => (

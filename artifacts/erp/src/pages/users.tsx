@@ -23,7 +23,6 @@ const ALL_MODULES = [
   { id: "customers", label: "Customers" },
   { id: "suppliers", label: "Suppliers" },
   { id: "expenses", label: "Expenses" },
-  { id: "staff", label: "Staff" },
   { id: "ledger", label: "Ledger" },
   { id: "reports", label: "Reports & Analytics" },
   { id: "users", label: "Users" },

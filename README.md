@@ -257,7 +257,7 @@ alghani-erp/
 │       │   │   ├── login.tsx      # DB auth login
 │       │   │   ├── dashboard.tsx
 │       │   │   ├── inventory.tsx
-│       │   │   ├── employees.tsx  # Users + permissions
+│       │   │   ├── users.tsx  # Users + permissions
 │       │   │   └── settings.tsx   # 7-tab settings
 │       │   ├── components/
 │       │   │   ├── sidebar.tsx

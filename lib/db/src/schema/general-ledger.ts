@@ -22,12 +22,12 @@ import { z } from "zod/v4";
 // module-specific ledger it already writes to), purely so the Dashboard,
 // Calendar view, and a global "Ledger" report page can show one unified,
 // filterable, date-ranged timeline across sales, purchases, expenses,
-// staff salary, and supplier payments without having to UNION five
-// different tables with five different shapes on every request.
+// supplier payments, and customer payments without having to UNION multiple
+// different tables with different shapes on every request.
 //
-// type: "sale" | "purchase" | "expense" | "salary" | "supplier_payment" |
-//       "customer_payment" | "staff_advance" | "adjustment"
-// partyType: "customer" | "supplier" | "staff" | "none"
+// type: "sale" | "purchase" | "expense" | "supplier_payment" |
+//       "customer_payment" | "adjustment"
+// partyType: "customer" | "supplier" | "none"
 // direction: "credit" | "debit" (from the business's point of view —
 //   credit = money in / receivable increases; debit = money out / payable increases)
 // ---------------------------------------------------------------------------

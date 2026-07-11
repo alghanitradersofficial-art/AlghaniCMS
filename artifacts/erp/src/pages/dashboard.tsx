@@ -13,7 +13,7 @@ import { format } from "date-fns";
 import { Link } from "wouter";
 
 type RangeSummary = {
-  range: string; totalRevenue: number; totalPurchases: number; totalExpenses: number; totalSalaries: number;
+  range: string; totalRevenue: number; totalPurchases: number; totalExpenses: number;
   netProfit: number; salesCount: number; totalProducts: number; totalCustomers: number; totalSuppliers: number; inventoryValue: number;
 };
 

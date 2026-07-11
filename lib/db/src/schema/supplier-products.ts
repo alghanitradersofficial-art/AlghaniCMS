@@ -47,7 +47,7 @@ export type InsertSupplierProduct = z.infer<typeof insertSupplierProductSchema>;
 
 // ---------------------------------------------------------------------------
 // Supplier Ledger (Khata) — same immutable-entry + running-balance pattern
-// as customer_ledger_entries / staff_ledger_entries.
+// as customer_ledger_entries / supplier_ledger_entries.
 // Sign convention: positive = increases what we owe the supplier (a
 // purchase). Negative = decreases what we owe (a payment made to them, or a
 // return/credit adjustment in our favor).

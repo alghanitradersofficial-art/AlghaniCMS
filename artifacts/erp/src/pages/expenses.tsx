@@ -12,7 +12,7 @@ import { Plus, Edit, Trash2, Receipt } from "lucide-react";
 type ExpForm = { title: string; category: string; amount: string; date: string; notes: string; };
 const emptyForm: ExpForm = { title: "", category: "", amount: "", date: new Date().toISOString().split("T")[0], notes: "" };
 
-const EXPENSE_CATEGORIES = ["Rent", "Utilities", "Payroll", "Transport", "Marketing", "Operations", "Maintenance", "Miscellaneous"];
+const EXPENSE_CATEGORIES = ["Rent", "Utilities", "Transport", "Marketing", "Operations", "Maintenance", "Miscellaneous"];
 
 export default function Expenses() {
   const qc = useQueryClient();

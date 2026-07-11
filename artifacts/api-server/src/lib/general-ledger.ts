@@ -6,21 +6,19 @@ export type GeneralLedgerType =
   | "sale"
   | "purchase"
   | "expense"
-  | "salary"
-  | "staff_advance"
   | "supplier_payment"
   | "customer_payment"
   | "adjustment";
 
-export type PartyType = "customer" | "supplier" | "staff" | "none";
+export type PartyType = "customer" | "supplier" | "none";
 
 /**
  * Appends one row to the unified cross-module ledger feed. This is a
  * denormalized, read-oriented log — it does NOT compute or maintain a
- * running balance (unlike customer_ledger_entries / staff_ledger_entries /
- * supplier_ledger_entries, which remain the source of truth for balances).
- * Call this in addition to, never instead of, the module-specific ledger
- * writer. Safe to call inside or outside a transaction.
+ * running balance (unlike customer_ledger_entries / supplier_ledger_entries,
+ * which remain the source of truth for balances). Call this in addition to,
+ * never instead of, the module-specific ledger writer. Safe to call inside
+ * or outside a transaction.
  */
 export async function appendGeneralLedgerEntry(
   tx: DbTx,

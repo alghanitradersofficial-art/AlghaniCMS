@@ -27,7 +27,6 @@ export const MENU_ITEMS = [
   { icon: Receipt, label: "Expenses", href: "/expenses", permission: "expenses" },
   { icon: Zap, label: "Quick Entry", href: "/quick-entry", permission: "sales" },
   { icon: Package, label: "Operations", href: "/operations", permission: "inventory" },
-  { icon: HardHat, label: "Staff", href: "/staff", permission: "staff" },
   { icon: FileBarChart, label: "Reports & Analytics", href: "/reports", permission: "reports" },
   { icon: BookText, label: "Financial Periods", href: "/financial-periods", permission: "settings" },
   { icon: Users2, label: "Users", href: "/users", permission: "users" },

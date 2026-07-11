@@ -15,8 +15,6 @@ import Customers from "@/pages/customers";
 import Suppliers from "@/pages/suppliers";
 import Expenses from "@/pages/expenses";
 import Users from "@/pages/users";
-import StaffPage from "@/pages/staff";
-import StaffDetail from "@/pages/staff-detail";
 import SupplierDetail from "@/pages/supplier-detail";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
@@ -55,8 +53,6 @@ function Router() {
       <Route path="/suppliers">{() => <AuthGuard component={Suppliers} permission="suppliers" />}</Route>
       <Route path="/suppliers/:id">{() => <AuthGuard component={SupplierDetail} permission="suppliers" />}</Route>
       <Route path="/expenses">{() => <AuthGuard component={Expenses} permission="expenses" />}</Route>
-      <Route path="/staff">{() => <AuthGuard component={StaffPage} permission="staff" />}</Route>
-      <Route path="/staff/:id">{() => <AuthGuard component={StaffDetail} permission="staff" />}</Route>
       <Route path="/users">{() => <AuthGuard component={Users} permission="users" />}</Route>
       <Route path="/reports">{() => <AuthGuard component={Reports} permission="reports" />}</Route>
       <Route path="/quick-entry">{() => <AuthGuard component={QuickEntry} permission="sales" />}</Route>
