@@ -93,7 +93,7 @@ export default function Dashboard() {
             <KpiCard title="Total Products" value={summary.totalProducts?.toLocaleString() || "0"} icon={Activity} />
             <KpiCard title="Low Stock Items" value={lowStock?.length?.toString() || "0"} icon={AlertTriangle} alert={!!lowStock?.length} />
             <KpiCard title="Active Customers" value={summary.totalCustomers?.toLocaleString() || "0"} icon={Users} />
-            <KpiCard title="Active Suppliers" value={summary.totalSuppliers?.toLocaleString() || "0"} icon={Truck} />
+            <KpiCard title="Pending Orders" value={summary.pendingOrders?.toLocaleString() || "0"} icon={ShoppingCart} />
           </div>
         )}
 

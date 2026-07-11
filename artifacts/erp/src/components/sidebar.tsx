@@ -30,6 +30,7 @@ export const MENU_ITEMS = [
   { icon: Package, label: "Operations", href: "/operations", permission: "inventory" },
   { icon: HardHat, label: "Staff", href: "/staff", permission: "staff" },
   { icon: FileBarChart, label: "Reports & Analytics", href: "/reports", permission: "reports" },
+  { icon: BookText, label: "Financial Periods", href: "/financial-periods", permission: "settings" },
   { icon: Users2, label: "Users", href: "/users", permission: "users" },
   { icon: Settings2, label: "Settings", href: "/settings", permission: "settings" },
 ];

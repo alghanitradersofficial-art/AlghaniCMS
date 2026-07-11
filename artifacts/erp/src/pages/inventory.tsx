@@ -13,12 +13,12 @@ import { Plus, Search, Edit, Trash2, AlertTriangle, Package } from "lucide-react
 
 type ProductForm = {
   name: string; sku: string; description: string; categoryId: string; brandId: string;
-  costPrice: string; currentStock: string; minStock: string; unit: string; oemNumber: string;
+  costPrice: string; salePrice: string; currentStock: string; minStock: string; unit: string; oemNumber: string;
 };
 
 const emptyForm: ProductForm = {
   name: "", sku: "", description: "", categoryId: "", brandId: "",
-  costPrice: "", currentStock: "0", minStock: "5", unit: "pcs", oemNumber: "",
+  costPrice: "", salePrice: "", currentStock: "0", minStock: "5", unit: "pcs", oemNumber: "",
 };
 
 export default function Inventory() {
@@ -51,7 +51,7 @@ export default function Inventory() {
   const openEdit = (p: NonNullable<typeof data>["data"][0]) => {
     setForm({
       name: p.name, sku: p.sku, description: p.description || "", categoryId: p.categoryId ? String(p.categoryId) : "",
-      brandId: p.brandId ? String(p.brandId) : "", costPrice: String(p.costPrice),
+      brandId: p.brandId ? String(p.brandId) : "", costPrice: String(p.costPrice), salePrice: String(p.salePrice),
       currentStock: String(p.currentStock), minStock: String(p.minStock), unit: p.unit, oemNumber: p.oemNumber || "",
     });
     setEditing(p.id);
@@ -63,7 +63,7 @@ export default function Inventory() {
       name: form.name, sku: form.sku, description: form.description || undefined,
       categoryId: form.categoryId ? parseInt(form.categoryId) : null,
       brandId: form.brandId ? parseInt(form.brandId) : null,
-      costPrice: parseFloat(form.costPrice),
+      costPrice: parseFloat(form.costPrice), salePrice: parseFloat(form.salePrice),
       currentStock: parseInt(form.currentStock), minStock: parseInt(form.minStock),
       unit: form.unit, oemNumber: form.oemNumber || undefined,
     };
@@ -221,10 +221,14 @@ export default function Inventory() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Cost Price (Rs.)</Label>
                 <Input type="number" value={form.costPrice} onChange={e => setForm(f => ({ ...f, costPrice: e.target.value }))} className="bg-background/50 border-border" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Sale Price (Rs.)</Label>
+                <Input type="number" value={form.salePrice} onChange={e => setForm(f => ({ ...f, salePrice: e.target.value }))} className="bg-background/50 border-border" />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">

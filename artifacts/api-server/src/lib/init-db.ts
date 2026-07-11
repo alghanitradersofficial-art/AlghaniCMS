@@ -297,6 +297,76 @@ export async function initializeDatabase() {
         is_locked boolean NOT NULL DEFAULT false
       );
       CREATE INDEX IF NOT EXISTS month_closures_month_idx ON month_closures (year, month);
+
+      CREATE TABLE IF NOT EXISTS financial_periods (
+        id serial PRIMARY KEY,
+        year integer NOT NULL,
+        month integer NOT NULL,
+        status text NOT NULL DEFAULT 'open',
+        opening_cash numeric(14,2) NOT NULL DEFAULT 0,
+        opening_stock_value numeric(14,2) NOT NULL DEFAULT 0,
+        opening_stock_quantity numeric(14,2) NOT NULL DEFAULT 0,
+        opening_customer_balance numeric(14,2) NOT NULL DEFAULT 0,
+        opening_supplier_balance numeric(14,2) NOT NULL DEFAULT 0,
+        closing_cash numeric(14,2) NOT NULL DEFAULT 0,
+        closing_stock_value numeric(14,2) NOT NULL DEFAULT 0,
+        closing_stock_quantity numeric(14,2) NOT NULL DEFAULT 0,
+        closing_customer_balance numeric(14,2) NOT NULL DEFAULT 0,
+        closing_supplier_balance numeric(14,2) NOT NULL DEFAULT 0,
+        closed_at timestamp with time zone,
+        closed_by_user_id integer,
+        updated_after_closing boolean NOT NULL DEFAULT false,
+        created_at timestamp with time zone NOT NULL DEFAULT NOW(),
+        updated_at timestamp with time zone NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS financial_periods_year_month_idx ON financial_periods (year, month);
+
+      CREATE TABLE IF NOT EXISTS financial_period_snapshots (
+        id serial PRIMARY KEY,
+        period_id integer NOT NULL,
+        snapshot_type text NOT NULL DEFAULT 'monthly',
+        summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+        sales_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+        purchase_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+        profit_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+        inventory_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+        customer_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+        supplier_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+        cash_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+        top_products jsonb NOT NULL DEFAULT '[]'::jsonb,
+        top_customers jsonb NOT NULL DEFAULT '[]'::jsonb,
+        top_suppliers jsonb NOT NULL DEFAULT '[]'::jsonb,
+        kpi_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+        created_at timestamp with time zone NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS financial_period_snapshots_period_idx ON financial_period_snapshots (period_id, created_at);
+
+      CREATE TABLE IF NOT EXISTS financial_period_balances (
+        id serial PRIMARY KEY,
+        period_id integer NOT NULL,
+        balance_type text NOT NULL,
+        opening_balance numeric(14,2) NOT NULL DEFAULT 0,
+        closing_balance numeric(14,2) NOT NULL DEFAULT 0,
+        notes text,
+        is_carry_forward boolean NOT NULL DEFAULT false,
+        created_at timestamp with time zone NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS financial_period_balances_period_idx ON financial_period_balances (period_id, balance_type);
+
+      CREATE TABLE IF NOT EXISTS financial_period_audit_logs (
+        id serial PRIMARY KEY,
+        period_id integer NOT NULL,
+        entity_type text NOT NULL,
+        action text NOT NULL,
+        old_value text,
+        new_value text,
+        reason text,
+        performed_by_user_id integer,
+        ip_address text,
+        metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+        created_at timestamp with time zone NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS financial_period_audit_logs_period_idx ON financial_period_audit_logs (period_id, created_at);
     `);
   } catch (error) {
     logger.error({ err: error }, "Failed to initialize database schema");

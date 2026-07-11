@@ -14,6 +14,29 @@ router.get("/", async (req, res) => {
   }
 });
 
+router.get("/overview", async (req, res) => {
+  try {
+    const overview = await monthsService.getCurrentPeriodOverview();
+    return res.json(overview);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to load financial period overview" });
+  }
+});
+
+router.post("/reopen", async (req, res) => {
+  try {
+    const { year, month, reason } = req.body;
+    if (!year || !month) return res.status(400).json({ error: "year and month required" });
+    const actorUserId = getUserIdFromRequest(req);
+    const result = await monthsService.reopenMonth(year, month, actorUserId, reason || "Reopened by administrator");
+    return res.json(result);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to reopen month" });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
