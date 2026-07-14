@@ -43,7 +43,7 @@ router.get('/', async (req, res) => {
       data: rows.map(r => ({ ...r, costPrice: Number(r.costPrice), salePrice: Number(r.salePrice), currentStock: Number(r.currentStock), minStock: Number(r.minStock), createdAt: r.createdAt.toISOString() })),
       total: Number(count), page: Number(page), limit: Number(limit),
     });
-  } catch { res.status(500).json({ error: 'Failed to fetch products' }); }
+  } catch { return res.status(500).json({ error: 'Failed to fetch products' }); }
 });
 
 // GET /api/products/:id
@@ -87,7 +87,7 @@ router.put('/:id', async (req, res) => {
     }).where(eq(products.id, Number(req.params.id))).returning();
     if (!row) return res.status(404).json({ error: 'Not found' });
     return res.json(row);
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 // DELETE /api/products/:id

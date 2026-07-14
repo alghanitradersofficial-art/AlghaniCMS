@@ -37,7 +37,7 @@ router.get('/', async (req, res) => {
       };
     }));
     return res.json({ data, total: Number(count), page: Number(page), limit: Number(limit) });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 router.get('/:id', async (req, res) => {
@@ -90,7 +90,7 @@ router.post('/', async (req, res) => {
     }
 
     return res.status(201).json({ ...purchase, total: toNum(purchase.total) });
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 router.put('/:id', async (req, res) => {
@@ -106,7 +106,7 @@ router.put('/:id', async (req, res) => {
     }).where(eq(purchases.id, Number(req.params.id))).returning();
     if (!row) return res.status(404).json({ error: 'Not found' });
     return res.json(row);
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 router.delete('/:id', async (req, res) => {

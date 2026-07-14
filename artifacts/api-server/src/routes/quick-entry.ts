@@ -43,7 +43,7 @@ router.post('/sales', async (req, res) => {
       results.push({ id: sale.id, invoiceNumber, total });
     }
     return res.status(201).json({ message: `${results.length} sale(s) created`, results });
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 // POST /api/quick-entry/purchases
@@ -73,7 +73,7 @@ router.post('/purchases', async (req, res) => {
       results.push({ id: purchase.id, poNumber, total });
     }
     return res.status(201).json({ message: `${results.length} purchase(s) created`, results });
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 // POST /api/quick-entry/expenses
@@ -90,7 +90,7 @@ router.post('/expenses', async (req, res) => {
       results.push({ id: exp.id, title: exp.title, amount: Number(exp.amount) });
     }
     return res.status(201).json({ message: `${results.length} expense(s) created`, results });
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 export default router;

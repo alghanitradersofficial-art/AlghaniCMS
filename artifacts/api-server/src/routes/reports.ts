@@ -47,7 +47,7 @@ router.get('/profit-loss', async (req, res) => {
     const netProfit = grossProfit - exps;
 
     return res.json({ period: String(period), revenue, costOfGoods: cogs, grossProfit, expenses: exps, netProfit, totalPurchases: cogs, breakdown: [] });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 // GET /api/reports/inventory
@@ -58,7 +58,7 @@ router.get('/inventory', async (_req, res) => {
     const all = await db.select().from(products);
     const total = all.reduce((acc, p) => acc + toNum(p.currentStock) * toNum(p.costPrice), 0);
     return res.json({ totalProducts: all.length, totalStock: all.reduce((a, p) => a + toNum(p.currentStock), 0), totalValue: total, categories: [] });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 // GET /api/reports/monthly-summary - monthly report data
@@ -97,7 +97,7 @@ router.get('/monthly-summary', async (req, res) => {
       customers: custRows.map(c => ({ ...c, currentBalance: toNum(c.currentBalance) })),
       suppliers: suppRows.map(s => ({ ...s, currentBalance: toNum(s.currentBalance) })),
     });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 // POST /api/reports/export-excel - generate Excel report
@@ -235,7 +235,7 @@ router.post('/export-excel', async (req, res) => {
     const fileBuffer = fs.readFileSync(tmpPath);
     return res.send(fileBuffer);
     fs.unlinkSync(tmpPath);
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 // POST /api/reports/send-report - send via email + telegram
@@ -289,7 +289,7 @@ router.post('/send-report', async (req, res) => {
 
     fs.unlinkSync(tmpPath);
     return res.json({ message: 'Report sent', errors: errors.length ? errors : undefined });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 export default router;

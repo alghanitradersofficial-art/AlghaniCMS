@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
     const rows = await db.select().from(expenses).where(where).orderBy(sql`date DESC`).limit(Number(limit)).offset(offset);
     const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(expenses).where(where);
     return res.json({ data: rows.map(e => ({ ...e, amount: Number(e.amount), date: e.date.toISOString(), createdAt: e.createdAt.toISOString() })), total: Number(count), page: Number(page), limit: Number(limit) });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 router.get('/:id', async (req, res) => {
@@ -37,7 +37,7 @@ router.post('/', async (req, res) => {
       notes: body.notes,
     }).returning();
     return res.status(201).json({ ...row, amount: Number(row.amount), date: row.date.toISOString() });
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 router.put('/:id', async (req, res) => {
@@ -51,7 +51,7 @@ router.put('/:id', async (req, res) => {
     }).where(eq(expenses.id, Number(req.params.id))).returning();
     if (!row) return res.status(404).json({ error: 'Not found' });
     return res.json({ ...row, amount: Number(row.amount), date: row.date.toISOString() });
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 router.delete('/:id', async (req, res) => {

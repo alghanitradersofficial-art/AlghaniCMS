@@ -13,7 +13,7 @@ router.get('/', async (_req, res) => {
     const months = await db.select().from(monthClosures).orderBy(sql`year DESC, month DESC`);
     const years = await db.select().from(yearClosures).orderBy(sql`year DESC`);
     return res.json({ months: months.map(m => ({ ...m, totalSales: toNum(m.totalSales), totalPurchases: toNum(m.totalPurchases), totalExpenses: toNum(m.totalExpenses), grossProfit: toNum(m.grossProfit), netProfit: toNum(m.netProfit) })), years: years.map(y => ({ ...y, totalSales: toNum(y.totalSales), totalPurchases: toNum(y.totalPurchases), totalExpenses: toNum(y.totalExpenses), netProfit: toNum(y.netProfit) })) });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 // GET month status for a specific month
@@ -64,7 +64,7 @@ router.post('/close', async (req, res) => {
       netProfit: String(netProfit), notes,
     }).returning();
     return res.json({ message: 'Month closed', closure });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 // POST /api/months/:id/reopen
@@ -79,7 +79,7 @@ router.post('/:id/reopen', async (req, res) => {
     }).where(eq(monthClosures.id, Number(req.params.id))).returning();
     if (!updated) return res.status(404).json({ error: 'Not found' });
     return res.json({ message: 'Month reopened', closure: updated });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 // POST /api/months/year/close
@@ -112,7 +112,7 @@ router.post('/year/close', async (req, res) => {
 
     const [closure] = await db.insert(yearClosures).values(values).returning();
     return res.json({ message: 'Year closed', closure });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 router.post('/year/:id/reopen', async (req, res) => {
@@ -121,7 +121,7 @@ router.post('/year/:id/reopen', async (req, res) => {
     if (!['ceo', 'developer'].includes(user.role)) return res.status(403).json({ error: 'Only CEO or Developer can reopen year' });
     const [updated] = await db.update(yearClosures).set({ status: 'open', reopenedAt: new Date(), reopenedBy: user.email }).where(eq(yearClosures.id, Number(req.params.id))).returning();
     return res.json({ message: 'Year reopened', closure: updated });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 export default router;

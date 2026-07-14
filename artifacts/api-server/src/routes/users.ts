@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
     const rows = await db.select({ id: users.id, name: users.name, email: users.email, role: users.role, isActive: users.isActive, permissions: users.permissions, createdAt: users.createdAt }).from(users).orderBy(users.name).limit(Number(limit)).offset(offset);
     const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(users);
     return res.json({ data: rows.map(u => ({ ...u, createdAt: u.createdAt.toISOString() })), total: Number(count), page: Number(page), limit: Number(limit) });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 router.get('/permissions', (_req, res) => {
@@ -44,7 +44,7 @@ router.post('/', async (req, res) => {
       permissions: body.permissions || [],
     }).returning({ id: users.id, name: users.name, email: users.email, role: users.role, isActive: users.isActive, permissions: users.permissions, createdAt: users.createdAt });
     return res.status(201).json({ ...row, createdAt: row.createdAt.toISOString() });
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 router.put('/:id', async (req, res) => {
@@ -65,7 +65,7 @@ router.put('/:id', async (req, res) => {
     const [row] = await db.update(users).set(updateData).where(eq(users.id, Number(req.params.id))).returning({ id: users.id, name: users.name, email: users.email, role: users.role, isActive: users.isActive, permissions: users.permissions, createdAt: users.createdAt });
     if (!row) return res.status(404).json({ error: 'Not found' });
     return res.json({ ...row, createdAt: row.createdAt.toISOString() });
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 router.delete('/:id', async (req, res) => {
@@ -84,7 +84,7 @@ router.post('/:id/generate-otp', async (req, res) => {
     // Send to user's email
     try { await sendOTPEmail(user.email, otp, user.name); } catch {}
     return res.json({ message: 'OTP generated and sent to user email', otp }); // show OTP to admin too
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 // Admin sets password directly
@@ -94,7 +94,7 @@ router.post('/:id/set-password', async (req, res) => {
     const hashed = await hashPassword(password);
     await db.update(users).set({ password: hashed, otp: null, otpExpiry: null, updatedAt: new Date() }).where(eq(users.id, Number(req.params.id)));
     return res.json({ message: 'Password updated' });
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 export default router;

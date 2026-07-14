@@ -23,7 +23,7 @@ router.get('/', async (req, res) => {
       data: rows.map(c => ({ ...c, openingBalance: toNum(c.openingBalance), currentBalance: toNum(c.currentBalance), totalSpent: toNum(c.totalSpent), createdAt: c.createdAt.toISOString() })),
       total: Number(count), page: Number(page), limit: Number(limit),
     });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 // GET suggestions for quick entry
@@ -60,7 +60,7 @@ router.post('/', async (req, res) => {
       });
     }
     return res.status(201).json({ ...row, openingBalance: toNum(row.openingBalance), currentBalance: toNum(row.currentBalance) });
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 router.put('/:id', async (req, res) => {
@@ -74,7 +74,7 @@ router.put('/:id', async (req, res) => {
     }).where(eq(customers.id, Number(req.params.id))).returning();
     if (!row) return res.status(404).json({ error: 'Not found' });
     return res.json({ ...row, openingBalance: toNum(row.openingBalance), currentBalance: toNum(row.currentBalance) });
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 router.delete('/:id', async (req, res) => {
@@ -101,7 +101,7 @@ router.get('/:id/ledger', async (req, res) => {
       data: rows.map(r => ({ ...r, amount: toNum(r.amount), balance: toNum(r.balance), entryDate: r.entryDate.toISOString() })),
       total: Number(count), page: Number(page), limit: Number(limit),
     });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 // POST payment entry
@@ -118,7 +118,7 @@ router.post('/:id/payment', async (req, res) => {
     });
     await db.update(customers).set({ currentBalance: String(newBal), updatedAt: new Date() }).where(eq(customers.id, cust.id));
     return res.json({ message: 'Payment recorded', newBalance: newBal });
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 export default router;

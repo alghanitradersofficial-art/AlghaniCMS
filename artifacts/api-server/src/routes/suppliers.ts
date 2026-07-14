@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
     const rows = await db.select().from(suppliers).where(where).orderBy(suppliers.name).limit(Number(limit)).offset(offset);
     const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(suppliers).where(where);
     return res.json({ data: rows.map(s => ({ ...s, openingBalance: toNum(s.openingBalance), currentBalance: toNum(s.currentBalance), createdAt: s.createdAt.toISOString() })), total: Number(count), page: Number(page), limit: Number(limit) });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 router.get('/suggestions', async (req, res) => {
@@ -49,7 +49,7 @@ router.post('/', async (req, res) => {
       });
     }
     return res.status(201).json(row);
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 router.put('/:id', async (req, res) => {
@@ -63,7 +63,7 @@ router.put('/:id', async (req, res) => {
     }).where(eq(suppliers.id, Number(req.params.id))).returning();
     if (!row) return res.status(404).json({ error: 'Not found' });
     return res.json(row);
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 router.delete('/:id', async (req, res) => {
@@ -83,7 +83,7 @@ router.get('/:id/ledger', async (req, res) => {
     const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(supplierLedger).where(where);
     const [supp] = await db.select().from(suppliers).where(eq(suppliers.id, Number(req.params.id)));
     return res.json({ supplier: supp ? { ...supp, currentBalance: toNum(supp.currentBalance) } : null, data: rows.map(r => ({ ...r, amount: toNum(r.amount), balance: toNum(r.balance), entryDate: r.entryDate.toISOString() })), total: Number(count), page: Number(page), limit: Number(limit) });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 router.post('/:id/payment', async (req, res) => {
@@ -99,7 +99,7 @@ router.post('/:id/payment', async (req, res) => {
     });
     await db.update(suppliers).set({ currentBalance: String(newBal), updatedAt: new Date() }).where(eq(suppliers.id, supp.id));
     return res.json({ message: 'Payment recorded', newBalance: newBal });
-  } catch (err: any) { res.status(400).json({ error: err.message }); }
+  } catch (err: any) { return res.status(400).json({ error: err.message }); }
 });
 
 export default router;
