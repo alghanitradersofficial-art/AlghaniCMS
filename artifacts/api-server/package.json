@@ -1,0 +1,37 @@
+{
+  "name": "@workspace/api-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=../../.env --enable-source-maps ./dist/index.mjs",
+    "build": "pnpm --filter @workspace/db run build && node ./build.mjs",
+    "start": "node --enable-source-maps ./dist/index.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@workspace/db": "workspace:*",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.6",
+    "drizzle-orm": "catalog:",
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^7.0.3",
+    "node-telegram-bot-api": "^0.66.0",
+    "pino": "^9.14.0",
+    "pino-http": "^10.5.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "catalog:",
+    "@types/nodemailer": "^6.4.17",
+    "@types/node-telegram-bot-api": "^0.64.8",
+    "esbuild": "0.27.3",
+    "esbuild-plugin-pino": "^2.3.3",
+    "pino-pretty": "^13.1.3"
+  }
+}
