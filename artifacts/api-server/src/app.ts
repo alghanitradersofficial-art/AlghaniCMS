@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import helmetPkg from "helmet";
-import rateLimitPkg from "express-rate-limit";
+import { rateLimit } from "express-rate-limit";
 import { pinoHttp } from "pino-http"; // Fixed: Using named import
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
@@ -11,7 +11,6 @@ import { requestSanitizer } from "./lib/security.js";
 
 const app: Express = express();
 const helmet = (helmetPkg as any).default ? (helmetPkg as any).default : helmetPkg;
-const rateLimit = (rateLimitPkg as any).default ? (rateLimitPkg as any).default : rateLimitPkg;
 
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
