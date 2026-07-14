@@ -18,14 +18,14 @@ router.get('/', async (req, res) => {
     const offset = (Number(page) - 1) * Number(limit);
     const rows = await db.select().from(expenses).where(where).orderBy(sql`date DESC`).limit(Number(limit)).offset(offset);
     const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(expenses).where(where);
-    res.json({ data: rows.map(e => ({ ...e, amount: Number(e.amount), date: e.date.toISOString(), createdAt: e.createdAt.toISOString() })), total: Number(count), page: Number(page), limit: Number(limit) });
+    return res.json({ data: rows.map(e => ({ ...e, amount: Number(e.amount), date: e.date.toISOString(), createdAt: e.createdAt.toISOString() })), total: Number(count), page: Number(page), limit: Number(limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 router.get('/:id', async (req, res) => {
   const [e] = await db.select().from(expenses).where(eq(expenses.id, Number(req.params.id)));
   if (!e) return res.status(404).json({ error: 'Not found' });
-  res.json({ ...e, amount: Number(e.amount), date: e.date.toISOString() });
+  return res.json({ ...e, amount: Number(e.amount), date: e.date.toISOString() });
 });
 
 router.post('/', async (req, res) => {
@@ -36,7 +36,7 @@ router.post('/', async (req, res) => {
       amount: String(body.amount), date: body.date ? new Date(body.date) : new Date(),
       notes: body.notes,
     }).returning();
-    res.status(201).json({ ...row, amount: Number(row.amount), date: row.date.toISOString() });
+    return res.status(201).json({ ...row, amount: Number(row.amount), date: row.date.toISOString() });
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
@@ -50,13 +50,13 @@ router.put('/:id', async (req, res) => {
       notes: body.notes, updatedAt: new Date(),
     }).where(eq(expenses.id, Number(req.params.id))).returning();
     if (!row) return res.status(404).json({ error: 'Not found' });
-    res.json({ ...row, amount: Number(row.amount), date: row.date.toISOString() });
+    return res.json({ ...row, amount: Number(row.amount), date: row.date.toISOString() });
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
 router.delete('/:id', async (req, res) => {
   await db.delete(expenses).where(eq(expenses.id, Number(req.params.id)));
-  res.status(204).send();
+  return res.status(204).send();
 });
 
 export default router;

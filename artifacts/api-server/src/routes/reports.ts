@@ -46,7 +46,7 @@ router.get('/profit-loss', async (req, res) => {
     const grossProfit = revenue - cogs;
     const netProfit = grossProfit - exps;
 
-    res.json({ period: String(period), revenue, costOfGoods: cogs, grossProfit, expenses: exps, netProfit, totalPurchases: cogs, breakdown: [] });
+    return res.json({ period: String(period), revenue, costOfGoods: cogs, grossProfit, expenses: exps, netProfit, totalPurchases: cogs, breakdown: [] });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -57,7 +57,7 @@ router.get('/inventory', async (_req, res) => {
     const { categories } = await import('@workspace/db');
     const all = await db.select().from(products);
     const total = all.reduce((acc, p) => acc + toNum(p.currentStock) * toNum(p.costPrice), 0);
-    res.json({ totalProducts: all.length, totalStock: all.reduce((a, p) => a + toNum(p.currentStock), 0), totalValue: total, categories: [] });
+    return res.json({ totalProducts: all.length, totalStock: all.reduce((a, p) => a + toNum(p.currentStock), 0), totalValue: total, categories: [] });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -87,7 +87,7 @@ router.get('/monthly-summary', async (req, res) => {
     const suppRows = await db.select().from(suppliers).where(sql`CAST(current_balance AS NUMERIC) != 0`);
     const totalPayable = suppRows.filter(s => toNum(s.currentBalance) > 0).reduce((a, s) => a + toNum(s.currentBalance), 0);
 
-    res.json({
+    return res.json({
       year: y, month: m, monthName: MONTH_NAMES[m - 1],
       totalSales, totalPurchases, totalExpenses, grossProfit, netProfit,
       totalReceivable, totalPayable,
@@ -233,7 +233,7 @@ router.post('/export-excel', async (req, res) => {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="AlGhani_${monthName}_${y}.xlsx"`);
     const fileBuffer = fs.readFileSync(tmpPath);
-    res.send(fileBuffer);
+    return res.send(fileBuffer);
     fs.unlinkSync(tmpPath);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -288,7 +288,7 @@ router.post('/send-report', async (req, res) => {
     }
 
     fs.unlinkSync(tmpPath);
-    res.json({ message: 'Report sent', errors: errors.length ? errors : undefined });
+    return res.json({ message: 'Report sent', errors: errors.length ? errors : undefined });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

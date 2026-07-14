@@ -27,7 +27,7 @@ router.post('/login', async (req, res) => {
       permissions: (user.permissions as string[]) || [],
     });
 
-    res.json({
+    return res.json({
       token,
       user: {
         id: user.id,
@@ -39,7 +39,7 @@ router.post('/login', async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ error: 'Login failed' });
+    return res.status(500).json({ error: 'Login failed' });
   }
 });
 
@@ -48,7 +48,7 @@ router.get('/me', authMiddleware, async (req, res) => {
   const u = (req as any).user;
   const [user] = await db.select().from(users).where(eq(users.id, u.userId)).limit(1);
   if (!user) return res.status(404).json({ error: 'Not found' });
-  res.json({
+  return res.json({
     id: user.id,
     name: user.name,
     email: user.email,
@@ -71,9 +71,9 @@ router.post('/forgot-password', async (req, res) => {
     await db.update(users).set({ otp, otpExpiry }).where(eq(users.id, user.id));
     await sendOTPEmail(user.email, otp, user.name);
 
-    res.json({ message: 'OTP sent to email' });
+    return res.json({ message: 'OTP sent to email' });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to send OTP' });
+    return res.status(500).json({ error: 'Failed to send OTP' });
   }
 });
 
@@ -84,9 +84,9 @@ router.post('/verify-otp', async (req, res) => {
     const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
     if (!user || user.otp !== otp) return res.status(400).json({ error: 'Invalid OTP' });
     if (!user.otpExpiry || new Date() > user.otpExpiry) return res.status(400).json({ error: 'OTP expired' });
-    res.json({ message: 'OTP verified', userId: user.id });
+    return res.json({ message: 'OTP verified', userId: user.id });
   } catch {
-    res.status(500).json({ error: 'Failed to verify OTP' });
+    return res.status(500).json({ error: 'Failed to verify OTP' });
   }
 });
 
@@ -100,9 +100,9 @@ router.post('/reset-password', async (req, res) => {
 
     const hashed = await hashPassword(newPassword);
     await db.update(users).set({ password: hashed, otp: null, otpExpiry: null }).where(eq(users.id, user.id));
-    res.json({ message: 'Password reset successfully' });
+    return res.json({ message: 'Password reset successfully' });
   } catch {
-    res.status(500).json({ error: 'Failed to reset password' });
+    return res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 

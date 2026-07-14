@@ -39,7 +39,7 @@ router.get('/', async (req, res) => {
 
     const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(products).where(where);
 
-    res.json({
+    return res.json({
       data: rows.map(r => ({ ...r, costPrice: Number(r.costPrice), salePrice: Number(r.salePrice), currentStock: Number(r.currentStock), minStock: Number(r.minStock), createdAt: r.createdAt.toISOString() })),
       total: Number(count), page: Number(page), limit: Number(limit),
     });
@@ -50,7 +50,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const [row] = await db.select().from(products).where(eq(products.id, Number(req.params.id)));
   if (!row) return res.status(404).json({ error: 'Not found' });
-  res.json({ ...row, costPrice: Number(row.costPrice), salePrice: Number(row.salePrice), currentStock: Number(row.currentStock), minStock: Number(row.minStock), createdAt: row.createdAt.toISOString() });
+  return res.json({ ...row, costPrice: Number(row.costPrice), salePrice: Number(row.salePrice), currentStock: Number(row.currentStock), minStock: Number(row.minStock), createdAt: row.createdAt.toISOString() });
 });
 
 // POST /api/products
@@ -65,9 +65,9 @@ router.post('/', async (req, res) => {
       unit: body.unit || 'pcs', oemNumber: body.oemNumber, barcode: body.barcode,
       createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
     }).returning();
-    res.status(201).json(row);
+    return res.status(201).json(row);
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    return res.status(400).json({ error: err.message });
   }
 });
 
@@ -86,42 +86,42 @@ router.put('/:id', async (req, res) => {
       updatedAt: new Date(),
     }).where(eq(products.id, Number(req.params.id))).returning();
     if (!row) return res.status(404).json({ error: 'Not found' });
-    res.json(row);
+    return res.json(row);
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
 // DELETE /api/products/:id
 router.delete('/:id', async (req, res) => {
   await db.delete(products).where(eq(products.id, Number(req.params.id)));
-  res.status(204).send();
+  return res.status(204).send();
 });
 
 // ---- Categories ----
 router.get('/categories/all', async (_req, res) => {
   const rows = await db.select().from(categories).orderBy(categories.name);
-  res.json(rows.map(r => ({ ...r, productCount: 0 })));
+  return res.json(rows.map(r => ({ ...r, productCount: 0 })));
 });
 router.post('/categories/create', async (req, res) => {
   const [row] = await db.insert(categories).values({ name: req.body.name, description: req.body.description }).returning();
-  res.status(201).json({ ...row, productCount: 0 });
+  return res.status(201).json({ ...row, productCount: 0 });
 });
 router.delete('/categories/:id', async (req, res) => {
   await db.delete(categories).where(eq(categories.id, Number(req.params.id)));
-  res.status(204).send();
+  return res.status(204).send();
 });
 
 // ---- Brands ----
 router.get('/brands/all', async (_req, res) => {
   const rows = await db.select().from(brands).orderBy(brands.name);
-  res.json(rows.map(r => ({ ...r, productCount: 0 })));
+  return res.json(rows.map(r => ({ ...r, productCount: 0 })));
 });
 router.post('/brands/create', async (req, res) => {
   const [row] = await db.insert(brands).values({ name: req.body.name, description: req.body.description }).returning();
-  res.status(201).json({ ...row, productCount: 0 });
+  return res.status(201).json({ ...row, productCount: 0 });
 });
 router.delete('/brands/:id', async (req, res) => {
   await db.delete(brands).where(eq(brands.id, Number(req.params.id)));
-  res.status(204).send();
+  return res.status(204).send();
 });
 
 export default router;

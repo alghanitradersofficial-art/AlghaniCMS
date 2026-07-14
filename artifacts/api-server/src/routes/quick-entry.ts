@@ -42,7 +42,7 @@ router.post('/sales', async (req, res) => {
       }
       results.push({ id: sale.id, invoiceNumber, total });
     }
-    res.status(201).json({ message: `${results.length} sale(s) created`, results });
+    return res.status(201).json({ message: `${results.length} sale(s) created`, results });
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
@@ -72,7 +72,7 @@ router.post('/purchases', async (req, res) => {
       }
       results.push({ id: purchase.id, poNumber, total });
     }
-    res.status(201).json({ message: `${results.length} purchase(s) created`, results });
+    return res.status(201).json({ message: `${results.length} purchase(s) created`, results });
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
@@ -89,7 +89,7 @@ router.post('/expenses', async (req, res) => {
       }).returning();
       results.push({ id: exp.id, title: exp.title, amount: Number(exp.amount) });
     }
-    res.status(201).json({ message: `${results.length} expense(s) created`, results });
+    return res.status(201).json({ message: `${results.length} expense(s) created`, results });
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 

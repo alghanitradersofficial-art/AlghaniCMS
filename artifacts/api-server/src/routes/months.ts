@@ -12,7 +12,7 @@ router.get('/', async (_req, res) => {
   try {
     const months = await db.select().from(monthClosures).orderBy(sql`year DESC, month DESC`);
     const years = await db.select().from(yearClosures).orderBy(sql`year DESC`);
-    res.json({ months: months.map(m => ({ ...m, totalSales: toNum(m.totalSales), totalPurchases: toNum(m.totalPurchases), totalExpenses: toNum(m.totalExpenses), grossProfit: toNum(m.grossProfit), netProfit: toNum(m.netProfit) })), years: years.map(y => ({ ...y, totalSales: toNum(y.totalSales), totalPurchases: toNum(y.totalPurchases), totalExpenses: toNum(y.totalExpenses), netProfit: toNum(y.netProfit) })) });
+    return res.json({ months: months.map(m => ({ ...m, totalSales: toNum(m.totalSales), totalPurchases: toNum(m.totalPurchases), totalExpenses: toNum(m.totalExpenses), grossProfit: toNum(m.grossProfit), netProfit: toNum(m.netProfit) })), years: years.map(y => ({ ...y, totalSales: toNum(y.totalSales), totalPurchases: toNum(y.totalPurchases), totalExpenses: toNum(y.totalExpenses), netProfit: toNum(y.netProfit) })) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -20,7 +20,7 @@ router.get('/', async (_req, res) => {
 router.get('/:year/:month/status', async (req, res) => {
   const { year, month } = req.params;
   const [closure] = await db.select().from(monthClosures).where(and(eq(monthClosures.year, Number(year)), eq(monthClosures.month, Number(month))));
-  res.json({ year: Number(year), month: Number(month), status: closure?.status || 'open', closure: closure || null });
+  return res.json({ year: Number(year), month: Number(month), status: closure?.status || 'open', closure: closure || null });
 });
 
 // POST /api/months/close - close a month
@@ -63,7 +63,7 @@ router.post('/close', async (req, res) => {
       totalExpenses: String(totalExpenses), grossProfit: String(grossProfit),
       netProfit: String(netProfit), notes,
     }).returning();
-    res.json({ message: 'Month closed', closure });
+    return res.json({ message: 'Month closed', closure });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -78,7 +78,7 @@ router.post('/:id/reopen', async (req, res) => {
       status: 'open', reopenedAt: new Date(), reopenedBy: user.email,
     }).where(eq(monthClosures.id, Number(req.params.id))).returning();
     if (!updated) return res.status(404).json({ error: 'Not found' });
-    res.json({ message: 'Month reopened', closure: updated });
+    return res.json({ message: 'Month reopened', closure: updated });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -111,7 +111,7 @@ router.post('/year/close', async (req, res) => {
     }
 
     const [closure] = await db.insert(yearClosures).values(values).returning();
-    res.json({ message: 'Year closed', closure });
+    return res.json({ message: 'Year closed', closure });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -120,7 +120,7 @@ router.post('/year/:id/reopen', async (req, res) => {
     const user = (req as any).user;
     if (!['ceo', 'developer'].includes(user.role)) return res.status(403).json({ error: 'Only CEO or Developer can reopen year' });
     const [updated] = await db.update(yearClosures).set({ status: 'open', reopenedAt: new Date(), reopenedBy: user.email }).where(eq(yearClosures.id, Number(req.params.id))).returning();
-    res.json({ message: 'Year reopened', closure: updated });
+    return res.json({ message: 'Year reopened', closure: updated });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

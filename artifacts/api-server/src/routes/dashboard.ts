@@ -51,7 +51,7 @@ router.get('/summary', async (_req, res) => {
     const grossProfit = totalSales - totalPurchases;
     const netProfit = grossProfit - totalExpenses;
 
-    res.json({
+    return res.json({
       totalSales,
       totalPurchases,
       totalExpenses,
@@ -67,7 +67,7 @@ router.get('/summary', async (_req, res) => {
       totalRevenue: totalSales,
     });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to load dashboard' });
+    return res.status(500).json({ error: 'Failed to load dashboard' });
   }
 });
 
@@ -91,9 +91,9 @@ router.get('/sales-chart', async (req, res) => {
       const purchaseAmt = Number(p.total);
       results.push({ label, sales: salesAmt, purchases: purchaseAmt, profit: salesAmt - purchaseAmt });
     }
-    res.json(results);
+    return res.json(results);
   } catch {
-    res.status(500).json({ error: 'Chart failed' });
+    return res.status(500).json({ error: 'Chart failed' });
   }
 });
 
@@ -107,9 +107,9 @@ router.get('/recent-activity', async (_req, res) => {
       amount: Number(s.total),
       createdAt: s.createdAt.toISOString(),
     }));
-    res.json(activity);
+    return res.json(activity);
   } catch {
-    res.status(500).json({ error: 'Failed to load activity' });
+    return res.status(500).json({ error: 'Failed to load activity' });
   }
 });
 
@@ -125,7 +125,7 @@ router.get('/top-products', async (_req, res) => {
       .orderBy(sql`SUM(CAST(total AS NUMERIC)) DESC`)
       .limit(10);
 
-    res.json(rows.map(r => ({
+    return res.json(rows.map(r => ({
       id: r.productId,
       name: r.productName,
       sku: '',
@@ -133,7 +133,7 @@ router.get('/top-products', async (_req, res) => {
       revenue: Number(r.revenue),
     })));
   } catch {
-    res.status(500).json({ error: 'Failed to load top products' });
+    return res.status(500).json({ error: 'Failed to load top products' });
   }
 });
 
@@ -142,7 +142,7 @@ router.get('/low-stock', async (_req, res) => {
     const rows = await db.select().from(products)
       .where(sql`CAST(current_stock AS NUMERIC) <= CAST(min_stock AS NUMERIC)`)
       .limit(20);
-    res.json(rows.map(p => ({
+    return res.json(rows.map(p => ({
       id: p.id,
       name: p.name,
       sku: p.sku,
@@ -150,7 +150,7 @@ router.get('/low-stock', async (_req, res) => {
       minStock: Number(p.minStock),
     })));
   } catch {
-    res.status(500).json({ error: 'Failed to load alerts' });
+    return res.status(500).json({ error: 'Failed to load alerts' });
   }
 });
 

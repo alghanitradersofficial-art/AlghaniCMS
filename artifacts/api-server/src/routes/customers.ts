@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
     const rows = await db.select().from(customers).where(where).orderBy(customers.name).limit(Number(limit)).offset(offset);
     const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(customers).where(where);
 
-    res.json({
+    return res.json({
       data: rows.map(c => ({ ...c, openingBalance: toNum(c.openingBalance), currentBalance: toNum(c.currentBalance), totalSpent: toNum(c.totalSpent), createdAt: c.createdAt.toISOString() })),
       total: Number(count), page: Number(page), limit: Number(limit),
     });
@@ -31,13 +31,13 @@ router.get('/suggestions', async (req, res) => {
   const { q } = req.query;
   const rows = await db.select({ id: customers.id, name: customers.name, phone: customers.phone, type: customers.type })
     .from(customers).where(ilike(customers.name, `%${q || ''}%`)).limit(10);
-  res.json(rows);
+  return res.json(rows);
 });
 
 router.get('/:id', async (req, res) => {
   const [c] = await db.select().from(customers).where(eq(customers.id, Number(req.params.id)));
   if (!c) return res.status(404).json({ error: 'Not found' });
-  res.json({ ...c, openingBalance: toNum(c.openingBalance), currentBalance: toNum(c.currentBalance), totalSpent: toNum(c.totalSpent), createdAt: c.createdAt.toISOString() });
+  return res.json({ ...c, openingBalance: toNum(c.openingBalance), currentBalance: toNum(c.currentBalance), totalSpent: toNum(c.totalSpent), createdAt: c.createdAt.toISOString() });
 });
 
 router.post('/', async (req, res) => {
@@ -59,7 +59,7 @@ router.post('/', async (req, res) => {
         entryDate: body.createdAt ? new Date(body.createdAt) : new Date(),
       });
     }
-    res.status(201).json({ ...row, openingBalance: toNum(row.openingBalance), currentBalance: toNum(row.currentBalance) });
+    return res.status(201).json({ ...row, openingBalance: toNum(row.openingBalance), currentBalance: toNum(row.currentBalance) });
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
@@ -73,13 +73,13 @@ router.put('/:id', async (req, res) => {
       updatedAt: new Date(),
     }).where(eq(customers.id, Number(req.params.id))).returning();
     if (!row) return res.status(404).json({ error: 'Not found' });
-    res.json({ ...row, openingBalance: toNum(row.openingBalance), currentBalance: toNum(row.currentBalance) });
+    return res.json({ ...row, openingBalance: toNum(row.openingBalance), currentBalance: toNum(row.currentBalance) });
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
 router.delete('/:id', async (req, res) => {
   await db.delete(customers).where(eq(customers.id, Number(req.params.id)));
-  res.status(204).send();
+  return res.status(204).send();
 });
 
 // GET /api/customers/:id/ledger
@@ -96,7 +96,7 @@ router.get('/:id/ledger', async (req, res) => {
     const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(customerLedger).where(where);
     const [cust] = await db.select().from(customers).where(eq(customers.id, Number(req.params.id)));
 
-    res.json({
+    return res.json({
       customer: cust ? { ...cust, currentBalance: toNum(cust.currentBalance) } : null,
       data: rows.map(r => ({ ...r, amount: toNum(r.amount), balance: toNum(r.balance), entryDate: r.entryDate.toISOString() })),
       total: Number(count), page: Number(page), limit: Number(limit),
@@ -117,7 +117,7 @@ router.post('/:id/payment', async (req, res) => {
       refType: 'payment', entryDate: body.date ? new Date(body.date) : new Date(),
     });
     await db.update(customers).set({ currentBalance: String(newBal), updatedAt: new Date() }).where(eq(customers.id, cust.id));
-    res.json({ message: 'Payment recorded', newBalance: newBal });
+    return res.json({ message: 'Payment recorded', newBalance: newBal });
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 

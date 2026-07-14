@@ -36,7 +36,7 @@ router.get('/', async (req, res) => {
         items: items.map(i => ({ ...i, quantity: toNum(i.quantity), unitCost: toNum(i.unitCost), total: toNum(i.total) })),
       };
     }));
-    res.json({ data, total: Number(count), page: Number(page), limit: Number(limit) });
+    return res.json({ data, total: Number(count), page: Number(page), limit: Number(limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -44,7 +44,7 @@ router.get('/:id', async (req, res) => {
   const [p] = await db.select().from(purchases).where(eq(purchases.id, Number(req.params.id)));
   if (!p) return res.status(404).json({ error: 'Not found' });
   const items = await db.select().from(purchaseItems).where(eq(purchaseItems.purchaseId, p.id));
-  res.json({ ...p, subtotal: toNum(p.subtotal), total: toNum(p.total), paidAmount: toNum(p.paidAmount), purchaseDate: p.purchaseDate.toISOString(), createdAt: p.createdAt.toISOString(), items: items.map(i => ({ ...i, quantity: toNum(i.quantity), unitCost: toNum(i.unitCost), total: toNum(i.total) })) });
+  return res.json({ ...p, subtotal: toNum(p.subtotal), total: toNum(p.total), paidAmount: toNum(p.paidAmount), purchaseDate: p.purchaseDate.toISOString(), createdAt: p.createdAt.toISOString(), items: items.map(i => ({ ...i, quantity: toNum(i.quantity), unitCost: toNum(i.unitCost), total: toNum(i.total) })) });
 });
 
 router.post('/', async (req, res) => {
@@ -89,7 +89,7 @@ router.post('/', async (req, res) => {
       }
     }
 
-    res.status(201).json({ ...purchase, total: toNum(purchase.total) });
+    return res.status(201).json({ ...purchase, total: toNum(purchase.total) });
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
@@ -105,14 +105,14 @@ router.put('/:id', async (req, res) => {
       purchaseDate: body.purchaseDate ? new Date(body.purchaseDate) : undefined,
     }).where(eq(purchases.id, Number(req.params.id))).returning();
     if (!row) return res.status(404).json({ error: 'Not found' });
-    res.json(row);
+    return res.json(row);
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
 router.delete('/:id', async (req, res) => {
   await db.delete(purchaseItems).where(eq(purchaseItems.purchaseId, Number(req.params.id)));
   await db.delete(purchases).where(eq(purchases.id, Number(req.params.id)));
-  res.status(204).send();
+  return res.status(204).send();
 });
 
 export default router;

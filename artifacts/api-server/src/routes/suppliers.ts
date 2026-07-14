@@ -14,20 +14,20 @@ router.get('/', async (req, res) => {
     const offset = (Number(page) - 1) * Number(limit);
     const rows = await db.select().from(suppliers).where(where).orderBy(suppliers.name).limit(Number(limit)).offset(offset);
     const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(suppliers).where(where);
-    res.json({ data: rows.map(s => ({ ...s, openingBalance: toNum(s.openingBalance), currentBalance: toNum(s.currentBalance), createdAt: s.createdAt.toISOString() })), total: Number(count), page: Number(page), limit: Number(limit) });
+    return res.json({ data: rows.map(s => ({ ...s, openingBalance: toNum(s.openingBalance), currentBalance: toNum(s.currentBalance), createdAt: s.createdAt.toISOString() })), total: Number(count), page: Number(page), limit: Number(limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 router.get('/suggestions', async (req, res) => {
   const { q } = req.query;
   const rows = await db.select({ id: suppliers.id, name: suppliers.name, phone: suppliers.phone }).from(suppliers).where(ilike(suppliers.name, `%${q || ''}%`)).limit(10);
-  res.json(rows);
+  return res.json(rows);
 });
 
 router.get('/:id', async (req, res) => {
   const [s] = await db.select().from(suppliers).where(eq(suppliers.id, Number(req.params.id)));
   if (!s) return res.status(404).json({ error: 'Not found' });
-  res.json({ ...s, openingBalance: toNum(s.openingBalance), currentBalance: toNum(s.currentBalance), createdAt: s.createdAt.toISOString() });
+  return res.json({ ...s, openingBalance: toNum(s.openingBalance), currentBalance: toNum(s.currentBalance), createdAt: s.createdAt.toISOString() });
 });
 
 router.post('/', async (req, res) => {
@@ -48,7 +48,7 @@ router.post('/', async (req, res) => {
         entryDate: body.createdAt ? new Date(body.createdAt) : new Date(),
       });
     }
-    res.status(201).json(row);
+    return res.status(201).json(row);
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
@@ -62,13 +62,13 @@ router.put('/:id', async (req, res) => {
       updatedAt: new Date(),
     }).where(eq(suppliers.id, Number(req.params.id))).returning();
     if (!row) return res.status(404).json({ error: 'Not found' });
-    res.json(row);
+    return res.json(row);
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
 router.delete('/:id', async (req, res) => {
   await db.delete(suppliers).where(eq(suppliers.id, Number(req.params.id)));
-  res.status(204).send();
+  return res.status(204).send();
 });
 
 router.get('/:id/ledger', async (req, res) => {
@@ -82,7 +82,7 @@ router.get('/:id/ledger', async (req, res) => {
     const rows = await db.select().from(supplierLedger).where(where).orderBy(sql`entry_date DESC`).limit(Number(limit)).offset(offset);
     const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(supplierLedger).where(where);
     const [supp] = await db.select().from(suppliers).where(eq(suppliers.id, Number(req.params.id)));
-    res.json({ supplier: supp ? { ...supp, currentBalance: toNum(supp.currentBalance) } : null, data: rows.map(r => ({ ...r, amount: toNum(r.amount), balance: toNum(r.balance), entryDate: r.entryDate.toISOString() })), total: Number(count), page: Number(page), limit: Number(limit) });
+    return res.json({ supplier: supp ? { ...supp, currentBalance: toNum(supp.currentBalance) } : null, data: rows.map(r => ({ ...r, amount: toNum(r.amount), balance: toNum(r.balance), entryDate: r.entryDate.toISOString() })), total: Number(count), page: Number(page), limit: Number(limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -98,7 +98,7 @@ router.post('/:id/payment', async (req, res) => {
       refType: 'payment', entryDate: body.date ? new Date(body.date) : new Date(),
     });
     await db.update(suppliers).set({ currentBalance: String(newBal), updatedAt: new Date() }).where(eq(suppliers.id, supp.id));
-    res.json({ message: 'Payment recorded', newBalance: newBal });
+    return res.json({ message: 'Payment recorded', newBalance: newBal });
   } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
