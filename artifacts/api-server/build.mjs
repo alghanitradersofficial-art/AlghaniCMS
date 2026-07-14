@@ -6,17 +6,18 @@ await build({
   outfile: './dist/index.mjs',
   platform: 'node',
   format: 'esm',
-  sourcemap: true,
-  target: 'node22',
+  sourcemap: false,
+  target: 'node20',
+  // Only exclude truly native/binary modules
   external: [
     'pg-native',
     'fsevents',
-    'form-data',
     '@mapbox/node-pre-gyp',
     'mock-aws-s3',
     'aws-sdk',
     'nock',
-    'node-telegram-bot-api',
+    'cpu-features',
+    'ssh2',
   ],
   banner: {
     js: `import { createRequire } from 'module'; const require = createRequire(import.meta.url);`,

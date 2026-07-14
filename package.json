@@ -11,7 +11,7 @@
     "build:erp": "pnpm --filter @workspace/erp run build",
     "migrate": "node scripts/migrate.mjs",
     "seed": "node scripts/seed-admin.mjs",
-    "start": "node artifacts/api-server/dist/index.js"
+    "start": "node artifacts/api-server/dist/index.mjs"
   },
   "engines": {
     "node": ">=18",
