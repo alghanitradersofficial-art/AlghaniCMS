@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
-import { rateLimit } from "express-rate-limit";
+import rateLimit from "express-rate-limit";
 import { validatePassword, getRequestMetadata, createSecureToken, hashToken } from "../lib/security.js";
 import { pool } from "@workspace/db";
 import { bot } from "./telegram.js";
