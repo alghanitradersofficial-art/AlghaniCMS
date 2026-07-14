@@ -1,36 +1,9 @@
-import app from "./app.js";
-import { logger } from "./lib/logger.js";
-import { initializeDatabase } from "./lib/init-db.js";
+import app from './app.js';
 
-const rawPort = process.env["PORT"];
+const PORT = process.env.PORT || 3001;
 
-// Initialize DB immediately for the serverless function environment
-initializeDatabase()
-  .then(() => {
-    logger.info("Database initialized successfully");
-  })
-  .catch((err) => {
-    logger.error({ err }, "Database initialization failed");
-  });
+app.listen(PORT, () => {
+  console.log(`Al Ghani ERP API running on port ${PORT}`);
+});
 
-// ONLY call app.listen if we are NOT running on Vercel (local development)
-if (!process.env["VERCEL"]) {
-  if (!rawPort) {
-    throw new Error(
-      "PORT environment variable is required but was not provided.",
-    );
-  }
-
-  const port = Number(rawPort);
-
-  if (Number.isNaN(port) || port <= 0) {
-    throw new Error(`Invalid PORT value: "${rawPort}"`);
-  }
-
-  app.listen(port, () => {
-    logger.info({ port }, "Server listening locally");
-  });
-}
-
-// CRITICAL: Vercel needs the express app exported as default
 export default app;

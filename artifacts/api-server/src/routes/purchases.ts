@@ -1,103 +1,118 @@
-import { Router } from "express";
-import { db, purchasesTable, productsTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
-import { CreatePurchaseBody, UpdatePurchaseBody } from "@workspace/api-zod";
-import { z } from "zod";
-import purchasesService from "../services/purchases.service.js";
-import { getUserIdFromRequest } from "../lib/auth-context.js";
+import { Router } from 'express';
+import { db, purchases, purchaseItems, suppliers, supplierLedger, products } from '@workspace/db';
+import { eq, ilike, and, sql, gte, lte } from 'drizzle-orm';
+import { authMiddleware } from '../lib/auth.js';
 
 const router = Router();
+router.use(authMiddleware);
 
-// Optional backdating field, layered on top of the generated CreatePurchaseBody
-// (not yet part of the OpenAPI spec) so old purchase records can be entered
-// with a real historical date instead of always defaulting to "now".
-const PurchaseDateExtension = z.object({ purchaseDate: z.string().optional() });
+function toNum(v: any) { return Number(v) || 0; }
 
-function formatPurchase(p: typeof purchasesTable.$inferSelect) {
-  return {
-    ...p,
-    subtotal: parseFloat(p.subtotal as string),
-    total: parseFloat(p.total as string),
-    amountPaid: parseFloat((p.amountPaid ?? "0") as string),
-    items: (p.items as unknown[]) || [],
-    purchaseDate: (p.purchaseDate ?? p.createdAt).toISOString(),
-    createdAt: p.createdAt.toISOString(),
-  };
+async function genPONumber(): Promise<string> {
+  const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(purchases);
+  return `PO-${String(Number(count) + 1).padStart(5, '0')}`;
 }
 
-async function adjustPurchaseStock(purchase: typeof purchasesTable.$inferSelect, delta: 1 | -1) {
-  const items = (purchase.items as unknown[]) || [];
-  for (const item of items as Array<{ productId: number; quantity: number }>) {
-    await db.update(productsTable).set({
-      currentStock: sql`${productsTable.currentStock} + ${item.quantity * delta}`,
-    }).where(eq(productsTable.id, item.productId));
-  }
-}
-
-router.get("/", async (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const result = await purchasesService.listPurchases(req.query as any);
-    return res.json({ data: result.data.map(formatPurchase), total: result.total, page: result.page, limit: result.limit });
-  } catch (error) {
-    return res.status(500).json({ error: "Failed to fetch purchases" });
-  }
+    const { search, status, supplierId, startDate, endDate, page = 1, limit = 20 } = req.query;
+    const conditions: any[] = [];
+    if (search) conditions.push(ilike(purchases.supplierName, `%${search}%`));
+    if (status) conditions.push(eq(purchases.status, String(status)));
+    if (supplierId) conditions.push(eq(purchases.supplierId, Number(supplierId)));
+    if (startDate) conditions.push(gte(purchases.purchaseDate, new Date(String(startDate))));
+    if (endDate) conditions.push(lte(purchases.purchaseDate, new Date(String(endDate))));
+    const where = conditions.length ? and(...conditions) : undefined;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    const rows = await db.select().from(purchases).where(where).orderBy(sql`purchase_date DESC`).limit(Number(limit)).offset(offset);
+    const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(purchases).where(where);
+
+    const data = await Promise.all(rows.map(async (p) => {
+      const items = await db.select().from(purchaseItems).where(eq(purchaseItems.purchaseId, p.id));
+      return {
+        ...p, subtotal: toNum(p.subtotal), total: toNum(p.total), paidAmount: toNum(p.paidAmount),
+        purchaseDate: p.purchaseDate.toISOString(), createdAt: p.createdAt.toISOString(),
+        items: items.map(i => ({ ...i, quantity: toNum(i.quantity), unitCost: toNum(i.unitCost), total: toNum(i.total) })),
+      };
+    }));
+    res.json({ data, total: Number(count), page: Number(page), limit: Number(limit) });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post("/", async (req, res) => {
+router.get('/:id', async (req, res) => {
+  const [p] = await db.select().from(purchases).where(eq(purchases.id, Number(req.params.id)));
+  if (!p) return res.status(404).json({ error: 'Not found' });
+  const items = await db.select().from(purchaseItems).where(eq(purchaseItems.purchaseId, p.id));
+  res.json({ ...p, subtotal: toNum(p.subtotal), total: toNum(p.total), paidAmount: toNum(p.paidAmount), purchaseDate: p.purchaseDate.toISOString(), createdAt: p.createdAt.toISOString(), items: items.map(i => ({ ...i, quantity: toNum(i.quantity), unitCost: toNum(i.unitCost), total: toNum(i.total) })) });
+});
+
+router.post('/', async (req, res) => {
   try {
-    const body = CreatePurchaseBody.parse(req.body);
-    const actorUserId = getUserIdFromRequest(req);
-    const purchase = await purchasesService.createPurchase({ ...body, purchaseDate: (req.body as any).purchaseDate }, actorUserId);
-    return res.status(201).json(formatPurchase(purchase));
-  } catch (error) {
-    console.error(error);
-    if (error instanceof Error && (error.message.includes("already closed") || error.message.includes("not found"))) {
-      return res.status(400).json({ error: error.message });
+    const body = req.body;
+    const poNumber = body.poNumber || await genPONumber();
+    const purchaseDate = body.purchaseDate ? new Date(body.purchaseDate) : new Date();
+
+    const [purchase] = await db.insert(purchases).values({
+      poNumber, supplierId: body.supplierId || null,
+      supplierName: body.supplierName, status: body.status || 'received',
+      subtotal: String(body.subtotal || 0), total: String(body.total || 0),
+      paidAmount: String(body.paidAmount || body.total || 0),
+      notes: body.notes, purchaseDate,
+    }).returning();
+
+    if (body.items?.length) {
+      await db.insert(purchaseItems).values(body.items.map((i: any) => ({
+        purchaseId: purchase.id, productId: i.productId || null,
+        productName: i.productName, quantity: String(i.quantity),
+        unitCost: String(i.unitCost), total: String(i.total),
+      })));
+      // Update stock
+      for (const item of body.items) {
+        if (item.productId) {
+          await db.update(products).set({ currentStock: sql`CAST(current_stock AS NUMERIC) + ${item.quantity}`, updatedAt: new Date() }).where(eq(products.id, item.productId));
+        }
+      }
     }
-    return res.status(500).json({ error: "Failed to create purchase" });
-  }
-});
 
-router.get("/:id", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const purchase = (await purchasesService.listPurchases({ id })).data?.[0] ?? null;
-    if (!purchase) return res.status(404).json({ error: "Purchase not found" });
-    return res.json(formatPurchase(purchase));
-  } catch (error) {
-    return res.status(500).json({ error: "Failed to fetch purchase" });
-  }
-});
-
-router.patch("/:id", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const body = UpdatePurchaseBody.parse(req.body);
-    const actorUserId = getUserIdFromRequest(req);
-    const purchase = await purchasesService.updatePurchase(id, body, actorUserId);
-    return res.json(formatPurchase(purchase));
-  } catch (error) {
-    console.error(error);
-    if (error instanceof Error && (error.message.includes("already closed") || error.message.includes("not found"))) {
-      return res.status(400).json({ error: error.message });
+    if (body.supplierId) {
+      const [supp] = await db.select().from(suppliers).where(eq(suppliers.id, body.supplierId));
+      if (supp) {
+        const prevBal = toNum(supp.currentBalance);
+        const newBal = prevBal + toNum(body.total) - toNum(body.paidAmount || body.total);
+        await db.insert(supplierLedger).values({
+          supplierId: body.supplierId, type: 'credit', amount: String(body.total),
+          balance: String(newBal), description: `Purchase Order ${poNumber}`,
+          refId: purchase.id, refType: 'purchase', entryDate: purchaseDate,
+        });
+        await db.update(suppliers).set({ currentBalance: String(newBal), updatedAt: new Date() }).where(eq(suppliers.id, body.supplierId));
+      }
     }
-    return res.status(500).json({ error: "Failed to update purchase" });
-  }
+
+    res.status(201).json({ ...purchase, total: toNum(purchase.total) });
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
-router.delete("/:id", async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const actorUserId = getUserIdFromRequest(req);
-    await purchasesService.deletePurchase(id, actorUserId);
-    return res.status(204).send();
-  } catch (error) {
-    console.error(error);
-    if (error instanceof Error && (error.message.includes("already closed") || error.message.includes("not found"))) {
-      return res.status(400).json({ error: error.message });
-    }
-    return res.status(500).json({ error: "Failed to delete purchase" });
-  }
+    const body = req.body;
+    const [row] = await db.update(purchases).set({
+      supplierName: body.supplierName, status: body.status,
+      subtotal: body.subtotal !== undefined ? String(body.subtotal) : undefined,
+      total: body.total !== undefined ? String(body.total) : undefined,
+      paidAmount: body.paidAmount !== undefined ? String(body.paidAmount) : undefined,
+      notes: body.notes, updatedAt: new Date(),
+      purchaseDate: body.purchaseDate ? new Date(body.purchaseDate) : undefined,
+    }).where(eq(purchases.id, Number(req.params.id))).returning();
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json(row);
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
+});
+
+router.delete('/:id', async (req, res) => {
+  await db.delete(purchaseItems).where(eq(purchaseItems.purchaseId, Number(req.params.id)));
+  await db.delete(purchases).where(eq(purchases.id, Number(req.params.id)));
+  res.status(204).send();
 });
 
 export default router;

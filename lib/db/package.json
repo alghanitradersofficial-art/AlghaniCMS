@@ -6,24 +6,20 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js",
-    "./schema": "./dist/schema/index.js"
+    ".": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "push": "drizzle-kit push --config ./drizzle.config.ts",
-    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts"
+    "push": "drizzle-kit push",
+    "generate": "drizzle-kit generate"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
-    "drizzle-zod": "^0.8.3",
-    "pg": "^8.22.0",
-    "zod": "catalog:"
+    "postgres": "^3.4.5"
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "@types/pg": "^8.20.0",
-    "drizzle-kit": "^0.31.10",
+    "drizzle-kit": "catalog:",
     "typescript": "~5.9.3"
   }
 }

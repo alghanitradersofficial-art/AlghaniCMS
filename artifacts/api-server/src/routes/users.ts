@@ -1,130 +1,100 @@
-import { Router } from "express";
-import { pool } from "@workspace/db";
-import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
-import bcrypt from "bcryptjs";
+import { Router } from 'express';
+import { db, users } from '@workspace/db';
+import { eq, ilike, sql } from 'drizzle-orm';
+import { authMiddleware, hashPassword, generateOTP, requireRole } from '../lib/auth.js';
+import { sendOTPEmail } from '../lib/email.js';
 
 const router = Router();
+router.use(authMiddleware);
 
-function parseJson(value: unknown) {
-  if (typeof value !== "string") return value;
+const ALL_PERMISSIONS = [
+  'dashboard', 'inventory', 'sales', 'purchases', 'customers', 'suppliers',
+  'expenses', 'reports', 'users', 'settings', 'quick-entry', 'operations',
+  'months', 'customer-ledger', 'supplier-ledger',
+];
+
+router.get('/', async (req, res) => {
   try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
-
-function sanitizeUser(user: Record<string, unknown>) {
-  const { password, photo_url, created_at, is_active, permissions, ...rest } = user;
-  return {
-    ...rest,
-    cnic: user.cnic as string | null,
-    address: user.address as string | null,
-    photoUrl: photo_url as string | null,
-    documents: parseJson(user.documents) as Array<{ url: string; name: string; type: string; publicId?: string }> | [],
-    createdAt: created_at instanceof Date ? created_at.toISOString() : created_at,
-    isActive: is_active,
-    permissions: parseJson(permissions) as string[] || [],
-  };
-}
-
-router.get("/", async (req, res) => {
-  try {
-    const result = await pool.query(`SELECT id, name, email, role, is_active, permissions, phone, cnic, address, photo_url, documents, created_at FROM users ORDER BY id`);
-    return res.json(result.rows.map(sanitizeUser));
-  } catch (error) {
-    return res.status(500).json({ error: "Failed to fetch users" });
-  }
+    const { search, role, page = 1, limit = 20 } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+    const rows = await db.select({ id: users.id, name: users.name, email: users.email, role: users.role, isActive: users.isActive, permissions: users.permissions, createdAt: users.createdAt }).from(users).orderBy(users.name).limit(Number(limit)).offset(offset);
+    const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(users);
+    res.json({ data: rows.map(u => ({ ...u, createdAt: u.createdAt.toISOString() })), total: Number(count), page: Number(page), limit: Number(limit) });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.get("/:id", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const result = await pool.query(`SELECT id, name, email, role, is_active, permissions, phone, cnic, address, photo_url, documents, created_at FROM users WHERE id = $1`, [id]);
-    if (!result.rows.length) return res.status(404).json({ error: "User not found" });
-    return res.json(sanitizeUser(result.rows[0]));
-  } catch (error) {
-    return res.status(500).json({ error: "Failed to fetch user" });
-  }
+router.get('/permissions', (_req, res) => {
+  res.json(ALL_PERMISSIONS);
 });
 
-router.post("/", async (req, res) => {
-  try {
-    const { name, email, role, password, phone, permissions, cnic, address, photoUrl, documents } = req.body;
-    if (!name || !email || !password) return res.status(400).json({ error: "name, email, password required" });
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const perms = permissions || [];
-    const result = await pool.query(
-      `INSERT INTO users (name, email, role, password, phone, permissions, cnic, address, photo_url, documents) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, name, email, role, is_active, permissions, phone, cnic, address, photo_url, documents, created_at`,
-      [
-        name,
-        email.toLowerCase().trim(),
-        role || "sales",
-        hashedPassword,
-        phone || null,
-        JSON.stringify(perms),
-        cnic || null,
-        address || null,
-        photoUrl || null,
-        JSON.stringify(documents || []),
-      ]
-    );
-    return res.status(201).json(sanitizeUser(result.rows[0]));
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException & { code?: string }).code === "23505") return res.status(409).json({ error: "Email already exists" });
-    console.error(error);
-    return res.status(500).json({ error: "Failed to create user" });
-  }
+router.get('/:id', async (req, res) => {
+  const [u] = await db.select({ id: users.id, name: users.name, email: users.email, role: users.role, isActive: users.isActive, permissions: users.permissions, createdAt: users.createdAt }).from(users).where(eq(users.id, Number(req.params.id)));
+  if (!u) return res.status(404).json({ error: 'Not found' });
+  res.json({ ...u, createdAt: u.createdAt.toISOString() });
 });
 
-router.patch("/:id", async (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const { name, role, isActive, is_active, phone, permissions, password, cnic, address, photoUrl, documents } = req.body;
-    const updates: string[] = [];
-    const values: unknown[] = [];
-    let idx = 1;
+    const body = req.body;
+    const hashed = await hashPassword(body.password || 'alghani123');
+    const [row] = await db.insert(users).values({
+      name: body.name, email: body.email.toLowerCase(),
+      password: hashed, phone: body.phone,
+      role: body.role || 'sales', isActive: body.isActive !== false,
+      permissions: body.permissions || [],
+    }).returning({ id: users.id, name: users.name, email: users.email, role: users.role, isActive: users.isActive, permissions: users.permissions, createdAt: users.createdAt });
+    res.status(201).json({ ...row, createdAt: row.createdAt.toISOString() });
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
+});
 
-    if (name !== undefined) { updates.push(`name = $${idx++}`); values.push(name); }
-    if (role !== undefined) { updates.push(`role = $${idx++}`); values.push(role); }
-    const activeVal = isActive !== undefined ? isActive : is_active;
-    if (activeVal !== undefined) { updates.push(`is_active = $${idx++}`); values.push(activeVal); }
-    if (phone !== undefined) { updates.push(`phone = $${idx++}`); values.push(phone); }
-    if (cnic !== undefined) { updates.push(`cnic = $${idx++}`); values.push(cnic); }
-    if (address !== undefined) { updates.push(`address = $${idx++}`); values.push(address); }
-    if (photoUrl !== undefined) { updates.push(`photo_url = $${idx++}`); values.push(photoUrl); }
-    if (documents !== undefined) { updates.push(`documents = $${idx++}`); values.push(JSON.stringify(documents)); }
-    if (permissions !== undefined) { updates.push(`permissions = $${idx++}`); values.push(JSON.stringify(permissions)); }
-    if (password !== undefined && password !== "") {
-      const hashed = await bcrypt.hash(password, 10);
-      updates.push(`password = $${idx++}`); values.push(hashed);
+router.put('/:id', async (req, res) => {
+  try {
+    const body = req.body;
+    const updateData: any = {
+      name: body.name, phone: body.phone,
+      role: body.role, isActive: body.isActive,
+      permissions: body.permissions,
+      updatedAt: new Date(),
+    };
+    if (body.password) {
+      updateData.password = await hashPassword(body.password);
     }
-
-    if (updates.length === 0) return res.status(400).json({ error: "Nothing to update" });
-    values.push(id);
-
-    const result = await pool.query(
-      `UPDATE users SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, email, role, is_active, permissions, phone, cnic, address, photo_url, documents, created_at`,
-      values
-    );
-    if (!result.rows.length) return res.status(404).json({ error: "User not found" });
-    return res.json(sanitizeUser(result.rows[0]));
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Failed to update user" });
-  }
+    if (body.email) {
+      updateData.email = body.email.toLowerCase();
+    }
+    const [row] = await db.update(users).set(updateData).where(eq(users.id, Number(req.params.id))).returning({ id: users.id, name: users.name, email: users.email, role: users.role, isActive: users.isActive, permissions: users.permissions, createdAt: users.createdAt });
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json({ ...row, createdAt: row.createdAt.toISOString() });
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete('/:id', async (req, res) => {
+  await db.delete(users).where(eq(users.id, Number(req.params.id)));
+  res.status(204).send();
+});
+
+// Generate OTP for user (admin can generate for any user)
+router.post('/:id/generate-otp', async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    await pool.query(`DELETE FROM users WHERE id = $1`, [id]);
-    res.status(204).send();
-  } catch (error) {
-    return res.status(500).json({ error: "Failed to delete user" });
-  }
+    const [user] = await db.select().from(users).where(eq(users.id, Number(req.params.id)));
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours for admin-generated
+    await db.update(users).set({ otp, otpExpiry }).where(eq(users.id, user.id));
+    // Send to user's email
+    try { await sendOTPEmail(user.email, otp, user.name); } catch {}
+    res.json({ message: 'OTP generated and sent to user email', otp }); // show OTP to admin too
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin sets password directly
+router.post('/:id/set-password', async (req, res) => {
+  try {
+    const { password } = req.body;
+    const hashed = await hashPassword(password);
+    await db.update(users).set({ password: hashed, otp: null, otpExpiry: null, updatedAt: new Date() }).where(eq(users.id, Number(req.params.id)));
+    res.json({ message: 'Password updated' });
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
 export default router;

@@ -1,136 +1,90 @@
-import { useState } from "react";
-import { Layout } from "@/components/layout";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useGetCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer, getGetCustomersQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, Users, Wallet } from "lucide-react";
-import { CustomerLedgerDialog } from "@/components/customer-ledger-dialog";
-import DataTable from "@/components/ui/data-table";
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'wouter';
+import api from '../lib/api';
+import { fmtCurrency, fmtDate } from '../lib/utils';
+import toast from 'react-hot-toast';
+import { Plus, Search, Trash2, Edit2, BookOpen, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
-type CustForm = { name: string; phone: string; email: string; address: string; city: string; type: string; };
-const emptyForm: CustForm = { name: "", phone: "", email: "", address: "", city: "", type: "retail" };
+type Customer = { id: number; name: string; phone: string; email?: string; city?: string; type: string; totalOrders: number; totalSpent: number; currentBalance: number; openingBalance: number; createdAt: string };
 
-export default function Customers() {
+const TYPE_COLORS: Record<string, string> = { retail: 'badge-blue', dealer: 'badge-yellow', wholesale: 'badge-green' };
+
+function CustomerModal({ cust, onClose }: { cust: Customer | null; onClose: () => void }) {
   const qc = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<number | null>(null);
-  const [form, setForm] = useState<CustForm>(emptyForm);
-  const [ledgerCustomer, setLedgerCustomer] = useState<{ id: number; name: string } | null>(null);
+  const [form, setForm] = useState(cust ? { name: cust.name, phone: cust.phone, email: cust.email || '', city: cust.city || '', type: cust.type, openingBalance: String(cust.openingBalance), createdAt: cust.createdAt.slice(0,10) } : { name: '', phone: '', email: '', city: '', type: 'retail', openingBalance: '0', createdAt: new Date().toISOString().slice(0,10) });
 
-  const { data, isLoading } = useGetCustomers({ search: search || undefined, page, limit: 20 });
-  const create = useCreateCustomer();
-  const update = useUpdateCustomer();
-  const del = useDeleteCustomer();
-
-  const invalidate = () => qc.invalidateQueries({ queryKey: getGetCustomersQueryKey() });
-  const openNew = () => { setForm(emptyForm); setEditing(null); setOpen(true); };
-  const openEdit = (c: NonNullable<typeof data>["data"][0]) => {
-    setForm({
-      name: c.name,
-      phone: c.phone,
-      email: c.email || "",
-      address: c.address || "",
-      city: c.city || "",
-      type: c.type || "retail",
-    });
-    setEditing(c.id); setOpen(true);
-  };
-  const handleSave = async () => {
-    const payload = { name: form.name, phone: form.phone, email: form.email || undefined, address: form.address || undefined, city: form.city || undefined, type: form.type as "retail" | "dealer" | "wholesale" };
-    if (editing) { await update.mutateAsync({ id: editing, data: payload }); }
-    else { await create.mutateAsync({ data: payload }); }
-    invalidate(); setOpen(false);
-  };
-  const handleDelete = async (id: number) => {
-    if (!confirm("Delete this customer?")) return;
-    await del.mutateAsync({ id }); invalidate();
-  };
-  const typeColor = (t: string) => t === "dealer" ? "bg-primary/10 text-red-400 border-0" : t === "wholesale" ? "bg-secondary/10 text-yellow-400 border-0" : "bg-muted text-muted-foreground border-0";
+  const { mutate, isPending } = useMutation({
+    mutationFn: () => cust ? api.put(`/customers/${cust.id}`, form) : api.post('/customers', { ...form, openingBalance: Number(form.openingBalance) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['customers'] }); toast.success(cust ? 'Updated' : 'Created'); onClose(); },
+    onError: (e: any) => toast.error(e.response?.data?.error || 'Failed'),
+  });
 
   return (
-    <Layout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Users className="w-6 h-6 text-primary" /> Customers</h1>
-            <p className="text-muted-foreground text-sm mt-1">{data?.total || 0} customers</p>
-          </div>
-          <Button onClick={openNew} className="bg-primary hover:bg-primary/90 gap-2"><Plus className="w-4 h-4" /> Add Customer</Button>
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal modal-sm">
+        <div className="flex items-center justify-between p-6 border-b"><h2 className="font-bold">{cust ? 'Edit Customer' : 'New Customer'}</h2><button onClick={onClose}><X size={20} /></button></div>
+        <div className="p-6 grid grid-cols-2 gap-4">
+          <div className="col-span-2"><label className="label">Name</label><input className="input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required /></div>
+          <div><label className="label">Phone</label><input className="input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} required /></div>
+          <div><label className="label">Email</label><input className="input" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
+          <div><label className="label">City</label><input className="input" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} /></div>
+          <div><label className="label">Type</label><select className="input" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}><option value="retail">Retail</option><option value="dealer">Dealer</option><option value="wholesale">Wholesale</option></select></div>
+          <div><label className="label">Opening Balance (PKR)</label><input type="number" className="input" value={form.openingBalance} onChange={e => setForm(f => ({ ...f, openingBalance: e.target.value }))} /></div>
+          {!cust && <div><label className="label">Date Added</label><input type="date" className="input" value={form.createdAt} onChange={e => setForm(f => ({ ...f, createdAt: e.target.value }))} /></div>}
         </div>
-
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search customers..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="pl-9 bg-card border-border" />
-        </div>
-
-        <Card className="border-border bg-card">
-          <CardContent className="p-0">
-            <DataTable
-              loading={isLoading}
-              data={data?.data || []}
-              columns={[
-                { key: 'name', title: 'Name', render: (r) => <span className="font-medium">{r.name}</span> },
-                { key: 'phone', title: 'Phone', render: (r) => <span className="text-muted-foreground">{r.phone}</span> },
-                { key: 'city', title: 'City', render: (r) => r.city || '—' },
-                { key: 'type', title: 'Type', align: 'center', render: (r) => <Badge className={typeColor(r.type ?? 'retail')}>{r.type || 'retail'}</Badge> },
-                { key: 'orders', title: 'Orders', align: 'right', render: (r) => r.totalOrders },
-                { key: 'totalSpent', title: 'Total Spent', align: 'right', render: (r) => <span className="text-secondary font-medium">Rs. {Number(r.totalSpent || 0).toLocaleString()}</span> },
-                { key: 'actions', title: 'Actions', align: 'center', render: (r) => (
-                  <div className="flex gap-2 justify-center">
-                    <Button size="sm" variant="ghost" onClick={() => setLedgerCustomer({ id: r.id, name: r.name })} className="hover:bg-primary/10 hover:text-primary w-8 h-8 p-0" title="Khata (Ledger)"><Wallet className="w-4 h-4" /></Button>
-                    <Button size="sm" variant="ghost" onClick={() => openEdit(r)} className="hover:bg-accent w-8 h-8 p-0"><Edit className="w-4 h-4" /></Button>
-                    <Button size="sm" variant="ghost" onClick={() => handleDelete(r.id)} className="hover:bg-destructive/20 hover:text-destructive w-8 h-8 p-0"><Trash2 className="w-4 h-4" /></Button>
-                  </div>
-                ) },
-              ]}
-            />
-          </CardContent>
-        </Card>
+        <div className="flex justify-end gap-3 p-6 border-t"><button onClick={onClose} className="btn-secondary">Cancel</button><button onClick={() => mutate()} disabled={isPending} className="btn-primary">{isPending ? 'Saving...' : 'Save'}</button></div>
       </div>
+    </div>
+  );
+}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="bg-card border-border max-w-md">
-          <DialogHeader><DialogTitle>{editing ? "Edit Customer" : "Add Customer"}</DialogTitle></DialogHeader>
-          <div className="grid gap-3 py-2">
-            {(["name", "phone", "email", "address", "city"] as const).map(field => (
-              <div key={field} className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">{field}{field === "name" || field === "phone" ? " *" : ""}</Label>
-                <Input value={form[field]} onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))} className="bg-background/50 border-border" />
-              </div>
+export default function Customers() {
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [editCust, setEditCust] = useState<Customer | null>(null);
+  const qc = useQueryClient();
+
+  const { data, isLoading } = useQuery({ queryKey: ['customers', page, search], queryFn: () => api.get(`/customers?page=${page}&limit=20&search=${search}`).then(r => r.data) });
+  const { mutate: del } = useMutation({ mutationFn: (id: number) => api.delete(`/customers/${id}`), onSuccess: () => { qc.invalidateQueries({ queryKey: ['customers'] }); toast.success('Deleted'); } });
+
+  const customers: Customer[] = data?.data || [];
+  const pages = Math.ceil((data?.total || 0) / 20);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div><h1 className="page-title">Customers</h1><p className="text-gray-500 text-sm">{data?.total || 0} total</p></div>
+        <button onClick={() => { setEditCust(null); setShowModal(true); }} className="btn-primary"><Plus size={16} />New Customer</button>
+      </div>
+      <div className="card">
+        <div className="card-header"><div className="relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input className="input pl-9 w-72" placeholder="Search customers..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} /></div></div>
+        <div className="table-container"><table className="table"><thead><tr><th>Name</th><th>Phone</th><th>City</th><th>Type</th><th>Total Orders</th><th>Total Spent</th><th>Balance</th><th>Actions</th></tr></thead>
+          <tbody>
+            {isLoading ? <tr><td colSpan={8} className="text-center py-10 text-gray-400">Loading...</td></tr> :
+             customers.length === 0 ? <tr><td colSpan={8} className="text-center py-10 text-gray-400">No customers found</td></tr> :
+             customers.map(c => (
+              <tr key={c.id}>
+                <td className="font-medium">{c.name}</td>
+                <td>{c.phone}</td>
+                <td>{c.city || '-'}</td>
+                <td><span className={TYPE_COLORS[c.type] || 'badge-gray'}>{c.type}</span></td>
+                <td>{c.totalOrders}</td>
+                <td>{fmtCurrency(c.totalSpent)}</td>
+                <td className={c.currentBalance > 0 ? 'text-red-600 font-semibold' : c.currentBalance < 0 ? 'text-green-600 font-semibold' : ''}>{fmtCurrency(Math.abs(c.currentBalance))} {c.currentBalance > 0 ? 'Dr' : c.currentBalance < 0 ? 'Cr' : ''}</td>
+                <td className="flex gap-1">
+                  <Link href={`/customers/${c.id}/ledger`}><a className="btn-secondary btn-sm"><BookOpen size={13} /></a></Link>
+                  <button onClick={() => { setEditCust(c); setShowModal(true); }} className="btn-secondary btn-sm"><Edit2 size={13} /></button>
+                  <button onClick={() => confirm('Delete?') && del(c.id)} className="btn-danger btn-sm"><Trash2 size={13} /></button>
+                </td>
+              </tr>
             ))}
-            <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Type</Label>
-              <Select value={form.type} onValueChange={v => setForm(f => ({ ...f, type: v }))}>
-                <SelectTrigger className="bg-background/50 border-border"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  <SelectItem value="retail">Retail</SelectItem>
-                  <SelectItem value="dealer">Dealer</SelectItem>
-                  <SelectItem value="wholesale">Wholesale</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setOpen(false)} className="border-border">Cancel</Button>
-            <Button onClick={handleSave} disabled={!form.name || !form.phone || create.isPending || update.isPending} className="bg-primary hover:bg-primary/90">{editing ? "Save" : "Add"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <CustomerLedgerDialog
-        customerId={ledgerCustomer?.id ?? null}
-        customerName={ledgerCustomer?.name ?? ""}
-        open={!!ledgerCustomer}
-        onOpenChange={(o) => { if (!o) setLedgerCustomer(null); }}
-      />
-    </Layout>
+          </tbody>
+        </table></div>
+        {pages > 1 && <div className="flex items-center justify-between px-5 py-3 border-t"><span className="text-sm text-gray-500">Page {page} of {pages}</span><div className="flex gap-2"><button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="btn-secondary btn-sm"><ChevronLeft size={14} /></button><button disabled={page >= pages} onClick={() => setPage(p => p + 1)} className="btn-secondary btn-sm"><ChevronRight size={14} /></button></div></div>}
+      </div>
+      {showModal && <CustomerModal cust={editCust} onClose={() => { setShowModal(false); setEditCust(null); }} />}
+    </div>
   );
 }

@@ -1,69 +1,29 @@
-import express, { type Express } from "express";
-import cors from "cors";
-import helmetPkg from "helmet";
-import rateLimitPkg from "express-rate-limit";
-import { pinoHttp } from "pino-http"; // Fixed: Using named import
-import router from "./routes/index.js";
-import { logger } from "./lib/logger.js";
-import { initTelegramBot } from "./routes/telegram.js";
-import { errorHandler } from "./lib/error-handler.js";
+import express from 'express';
+import cors from 'cors';
+import router from './routes/index.js';
 
-const app: Express = express();
-const helmet = (helmetPkg as any).default ? (helmetPkg as any).default : helmetPkg;
-const rateLimit = (rateLimitPkg as any).default ? (rateLimitPkg as any).default : rateLimitPkg;
+const app = express();
 
-app.use(
-  pinoHttp({
-    logger,
-    serializers: {
-      req(req) { return { id: req.id, method: req.method, url: req.url?.split("?")[0] }; },
-      res(res) { return { statusCode: res.statusCode }; },
-    },
-  }),
-);
+const allowedOrigins = process.env.FRONTEND_URL
+  ? [process.env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:4173']
+  : ['http://localhost:5173', 'http://localhost:4173'];
 
-const frontendUrl = process.env.FRONTEND_URL;
-const corsOptions = {
-  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    if (process.env.NODE_ENV !== "production") return callback(null, true);
-    if (!origin) return callback(null, true);
-    if (!frontendUrl) {
-      logger.warn(
-        "FRONTEND_URL is not configured in production. All origins are temporarily allowed for CORS."
-      );
-      return callback(null, true);
-    }
-    return callback(null, origin === frontendUrl);
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.some(o => origin.startsWith(o))) return cb(null, true);
+    // allow vercel preview URLs
+    if (origin.includes('.vercel.app') || origin.includes('vercel.app')) return cb(null, true);
+    return cb(null, true); // open for now
   },
   credentials: true,
-};
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 
-app.use(cors(corsOptions));
-app.use(helmet());
-app.use(
-  rateLimit({
-    windowMs: 60 * 1000,
-    max: 120,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: "Too many requests, please try again later." },
-  }),
-);
-app.use(express.json({ limit: "20mb" }));
-app.use(express.urlencoded({ extended: true, limit: "20mb" }));
+app.use('/api', router);
 
-app.use("/api", router);
-
-// Only initialize the Telegram bot loop if we are NOT on Vercel.
-// On Vercel, long-polling freezes the function. Use webhooks instead for production.
-if (!process.env["VERCEL"]) {
-  try { 
-    initTelegramBot(); 
-  } catch (e) { 
-    logger.warn("Telegram bot init failed"); 
-  }
-} else {
-  logger.info("Skipping Telegram long-polling on Vercel environment.");
-}
+app.get('/', (_req, res) => {
+  res.json({ message: 'Al Ghani ERP API', version: '2.0.0' });
+});
 
 export default app;

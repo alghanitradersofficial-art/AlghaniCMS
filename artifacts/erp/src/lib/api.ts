@@ -1,22 +1,25 @@
-// Shared API base URL, matching the convention already used across pages
-// (see src/lib/auth.ts).
-export const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
-import { getAuthHeaders } from "./auth";
+import axios from 'axios';
 
-export async function apiFetch<T = any>(path: string, options?: RequestInit): Promise<T> {
-  const headers = { "Content-Type": "application/json", ...(getAuthHeaders() || {}), ...(options?.headers || {}) };
-  const res = await fetch(`${BASE}${path}`, { ...options, headers });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: `Request failed (${res.status})` }));
-    throw new Error(err.error || `Request failed (${res.status})`);
-  }
-  if (res.status === 204) return undefined as T;
-  return res.json();
-}
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
-export const apiGet = <T = any>(path: string) => apiFetch<T>(path);
-export const apiPost = <T = any>(path: string, body?: unknown) =>
-  apiFetch<T>(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined });
-export const apiPatch = <T = any>(path: string, body?: unknown) =>
-  apiFetch<T>(path, { method: "PATCH", body: body !== undefined ? JSON.stringify(body) : undefined });
-export const apiDelete = <T = any>(path: string) => apiFetch<T>(path, { method: "DELETE" });
+export const api = axios.create({ baseURL: BASE_URL });
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+api.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
+    return Promise.reject(err);
+  },
+);
+
+export default api;

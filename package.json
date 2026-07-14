@@ -1,17 +1,20 @@
 {
-  "name": "workspace",
-  "version": "0.0.0",
-  "license": "MIT",
-  "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
-    "migrate": "node ./scripts/run-migrations.mjs",
-    "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
-  },
+  "name": "alghani-cms",
+  "version": "1.0.0",
   "private": true,
-  "devDependencies": {
-    "prettier": "^3.8.4",
-    "typescript": "~5.9.3"
+  "description": "Al Ghani Wholesale Traders ERP System",
+  "scripts": {
+    "dev": "pnpm --filter @workspace/api-server run dev",
+    "build": "pnpm run build:db && pnpm run build:api && pnpm run build:erp",
+    "build:db": "pnpm --filter @workspace/db run build",
+    "build:api": "pnpm --filter @workspace/api-server run build",
+    "build:erp": "pnpm --filter @workspace/erp run build",
+    "migrate": "node scripts/migrate.mjs",
+    "seed": "node scripts/seed-admin.mjs",
+    "start": "node artifacts/api-server/dist/index.js"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=8"
   }
 }

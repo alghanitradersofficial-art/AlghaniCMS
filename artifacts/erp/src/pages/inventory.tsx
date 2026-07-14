@@ -1,246 +1,97 @@
-import { useState } from "react";
-import { Layout } from "@/components/layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useGetProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useGetCategories, useGetBrands, useGetInventoryReport, getGetProductsQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, AlertTriangle, Package } from "lucide-react";
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '../lib/api';
+import { fmtCurrency, fmtDate } from '../lib/utils';
+import toast from 'react-hot-toast';
+import { Plus, Search, Trash2, Edit2, X, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 
-type ProductForm = {
-  name: string; sku: string; description: string; brandId: string;
-  costPrice: string; salePrice: string; currentStock: string; minStock: string; unit: string; oemNumber: string; createdAt?: string;
-};
+type Product = { id: number; name: string; sku: string; categoryName?: string; brandName?: string; costPrice: number; salePrice: number; currentStock: number; minStock: number; unit: string; oemNumber?: string; barcode?: string; createdAt: string };
 
-const emptyForm: ProductForm = {
-  name: "", sku: "", description: "", brandId: "",
-  costPrice: "", salePrice: "", currentStock: "0", minStock: "5", unit: "pcs", oemNumber: "", createdAt: new Date().toISOString().split('T')[0],
-};
-
-export default function Inventory() {
+function ProductModal({ product, cats, brands, onClose }: { product: Product | null; cats: any[]; brands: any[]; onClose: () => void }) {
   const qc = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [lowStockOnly, setLowStockOnly] = useState(false);
-  const [page, setPage] = useState(1);
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<number | null>(null);
-  const [form, setForm] = useState<ProductForm>(emptyForm);
+  const [form, setForm] = useState(product ? { name: product.name, sku: product.sku, categoryId: '', brandId: '', costPrice: String(product.costPrice), salePrice: String(product.salePrice), currentStock: String(product.currentStock), minStock: String(product.minStock), unit: product.unit, oemNumber: product.oemNumber || '', barcode: product.barcode || '', createdAt: product.createdAt.slice(0,10) } : { name: '', sku: '', categoryId: '', brandId: '', costPrice: '0', salePrice: '0', currentStock: '0', minStock: '0', unit: 'pcs', oemNumber: '', barcode: '', createdAt: new Date().toISOString().slice(0,10) });
 
-  const { data, isLoading } = useGetProducts({
-    search: search || undefined,
-    lowStock: lowStockOnly || undefined,
-    page,
-    limit: 20,
+  const { mutate, isPending } = useMutation({
+    mutationFn: () => product ? api.put(`/products/${product.id}`, { ...form, costPrice: Number(form.costPrice), salePrice: Number(form.salePrice), currentStock: Number(form.currentStock), minStock: Number(form.minStock), categoryId: Number(form.categoryId) || null, brandId: Number(form.brandId) || null }) : api.post('/products', { ...form, costPrice: Number(form.costPrice), salePrice: Number(form.salePrice), currentStock: Number(form.currentStock), minStock: Number(form.minStock), categoryId: Number(form.categoryId) || null, brandId: Number(form.brandId) || null }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); toast.success(product ? 'Updated' : 'Added'); onClose(); },
+    onError: (e: any) => toast.error(e.response?.data?.error || 'Failed'),
   });
 
-  const { data: brands } = useGetBrands();
-  const { data: inventoryReport } = useGetInventoryReport();
-  const createProduct = useCreateProduct();
-  const updateProduct = useUpdateProduct();
-  const deleteProduct = useDeleteProduct();
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="flex items-center justify-between p-6 border-b"><h2 className="font-bold">{product ? 'Edit Product' : 'New Product'}</h2><button onClick={onClose}><X size={20} /></button></div>
+        <div className="p-6 grid grid-cols-2 gap-4">
+          <div className="col-span-2"><label className="label">Product Name</label><input className="input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required /></div>
+          <div><label className="label">SKU</label><input className="input" value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} required /></div>
+          <div><label className="label">Unit</label><select className="input" value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}><option>pcs</option><option>kg</option><option>ltr</option><option>m</option><option>box</option><option>set</option></select></div>
+          <div><label className="label">Category</label><select className="input" value={form.categoryId} onChange={e => setForm(f => ({ ...f, categoryId: e.target.value }))}><option value="">-- None --</option>{cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div><label className="label">Brand</label><select className="input" value={form.brandId} onChange={e => setForm(f => ({ ...f, brandId: e.target.value }))}><option value="">-- None --</option>{brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+          <div><label className="label">Cost Price (PKR)</label><input type="number" className="input" value={form.costPrice} onChange={e => setForm(f => ({ ...f, costPrice: e.target.value }))} /></div>
+          <div><label className="label">Sale Price (PKR)</label><input type="number" className="input" value={form.salePrice} onChange={e => setForm(f => ({ ...f, salePrice: e.target.value }))} /></div>
+          <div><label className="label">Current Stock</label><input type="number" className="input" value={form.currentStock} onChange={e => setForm(f => ({ ...f, currentStock: e.target.value }))} /></div>
+          <div><label className="label">Min Stock (Alert)</label><input type="number" className="input" value={form.minStock} onChange={e => setForm(f => ({ ...f, minStock: e.target.value }))} /></div>
+          <div><label className="label">OEM Number</label><input className="input" value={form.oemNumber} onChange={e => setForm(f => ({ ...f, oemNumber: e.target.value }))} /></div>
+          <div><label className="label">Barcode</label><input className="input" value={form.barcode} onChange={e => setForm(f => ({ ...f, barcode: e.target.value }))} /></div>
+          {!product && <div className="col-span-2"><label className="label">Date Added (for historical data)</label><input type="date" className="input" value={form.createdAt} onChange={e => setForm(f => ({ ...f, createdAt: e.target.value }))} /></div>}
+        </div>
+        <div className="flex justify-end gap-3 p-6 border-t"><button onClick={onClose} className="btn-secondary">Cancel</button><button onClick={() => mutate()} disabled={isPending} className="btn-primary">{isPending ? 'Saving...' : 'Save Product'}</button></div>
+      </div>
+    </div>
+  );
+}
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getGetProductsQueryKey() });
+export default function Inventory() {
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [lowStock, setLowStock] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [editProd, setEditProd] = useState<Product | null>(null);
+  const qc = useQueryClient();
 
-  const openNew = () => { setForm(emptyForm); setEditing(null); setOpen(true); };
-  const openEdit = (p: NonNullable<typeof data>["data"][0]) => {
-    setForm({
-      name: p.name, sku: p.sku, description: p.description || "",
-      brandId: p.brandId ? String(p.brandId) : "", costPrice: String(p.costPrice), salePrice: String(p.salePrice),
-      currentStock: String(p.currentStock), minStock: String(p.minStock), unit: p.unit, oemNumber: p.oemNumber || "", createdAt: new Date().toISOString().split('T')[0],
-    });
-    setEditing(p.id);
-    setOpen(true);
-  };
+  const { data, isLoading } = useQuery({ queryKey: ['products', page, search, lowStock], queryFn: () => api.get(`/products?page=${page}&limit=20&search=${search}${lowStock ? '&lowStock=true' : ''}`).then(r => r.data) });
+  const { data: cats } = useQuery({ queryKey: ['categories'], queryFn: () => api.get('/products/categories/all').then(r => r.data) });
+  const { data: brandsList } = useQuery({ queryKey: ['brands'], queryFn: () => api.get('/products/brands/all').then(r => r.data) });
+  const { mutate: del } = useMutation({ mutationFn: (id: number) => api.delete(`/products/${id}`), onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); toast.success('Deleted'); } });
 
-  const handleSave = async () => {
-    const payload = {
-      name: form.name, sku: form.sku, description: form.description || undefined,
-      brandId: form.brandId ? parseInt(form.brandId) : null,
-      costPrice: parseFloat(form.costPrice), salePrice: parseFloat(form.salePrice),
-      currentStock: parseInt(form.currentStock), minStock: parseInt(form.minStock),
-      unit: form.unit, oemNumber: form.oemNumber || undefined,
-    };
-    if (editing) {
-      await updateProduct.mutateAsync({ id: editing, data: payload });
-    } else {
-      await createProduct.mutateAsync({ data: payload });
-    }
-    invalidate();
-    setOpen(false);
-  };
-
-  const handleDelete = async (id: number) => {
-    if (!confirm("Delete this product?")) return;
-    await deleteProduct.mutateAsync({ id });
-    invalidate();
-  };
+  const products: Product[] = data?.data || [];
+  const pages = Math.ceil((data?.total || 0) / 20);
 
   return (
-    <Layout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Package className="w-6 h-6 text-primary" /> Inventory</h1>
-            <p className="text-muted-foreground text-sm mt-1">{data?.total || 0} products total</p>
-          </div>
-          <Button onClick={openNew} className="bg-primary hover:bg-primary/90 gap-2"><Plus className="w-4 h-4" /> Add Product</Button>
-        </div>
-
-        <div className="flex gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search products..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="pl-9 bg-card border-border" />
-          </div>
-          <Button variant={lowStockOnly ? "default" : "outline"} onClick={() => setLowStockOnly(!lowStockOnly)} className={lowStockOnly ? "bg-primary" : "border-border"}>
-            <AlertTriangle className="w-4 h-4 mr-2" /> Low Stock
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Card className="border-border bg-card">
-            <CardContent className="p-4">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Total Stock Units</p>
-              <p className="text-xl font-bold mt-1">{inventoryReport?.totalStock?.toLocaleString() || "0"}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-border bg-card">
-            <CardContent className="p-4">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Inventory Value</p>
-              <p className="text-xl font-bold mt-1 text-secondary">Rs. {inventoryReport?.totalValue?.toLocaleString() || "0"}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-border bg-card">
-            <CardContent className="p-4">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Low Stock Alerts</p>
-              <p className="text-xl font-bold mt-1 text-destructive">{inventoryReport?.categories?.filter(c => c.count <= 0).length || 0}</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="border-border bg-card">
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-muted-foreground uppercase text-xs tracking-wider">
-                    <th className="px-4 py-3 text-left">Product</th>
-                    <th className="px-4 py-3 text-left">SKU</th>
-                    <th className="px-4 py-3 text-left">Brand</th>
-                    <th className="px-4 py-3 text-right">Cost</th>
-                    <th className="px-4 py-3 text-center">Stock</th>
-                    <th className="px-4 py-3 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? (
-                    <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">Loading...</td></tr>
-                  ) : data?.data.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No products found</td></tr>
-                  ) : data?.data.map(p => (
-                    <tr key={p.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
-                      <td className="px-4 py-3 font-medium">{p.name}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{p.sku}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{p.brandName || "—"}</td>
-                      <td className="px-4 py-3 text-right">Rs. {p.costPrice?.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center">
-                        <Badge variant={p.currentStock <= p.minStock ? "destructive" : "secondary"} className={p.currentStock <= p.minStock ? "bg-destructive/20 text-red-400 border-0" : "bg-green-500/10 text-green-400 border-0"}>
-                          {p.currentStock} {p.unit}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex gap-2 justify-center">
-                          <Button size="sm" variant="ghost" onClick={() => openEdit(p)} className="hover:bg-accent w-8 h-8 p-0"><Edit className="w-4 h-4" /></Button>
-                          <Button size="sm" variant="ghost" onClick={() => handleDelete(p.id)} className="hover:bg-destructive/20 hover:text-destructive w-8 h-8 p-0"><Trash2 className="w-4 h-4" /></Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {data && data.total > 20 && (
-              <div className="flex justify-center gap-2 p-4 border-t border-border">
-                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="border-border">Prev</Button>
-                <span className="flex items-center px-3 text-sm text-muted-foreground">Page {page} of {Math.ceil(data.total / 20)}</span>
-                <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= Math.ceil(data.total / 20)} className="border-border">Next</Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div><h1 className="page-title">Inventory</h1><p className="text-gray-500 text-sm">{data?.total || 0} products</p></div>
+        <button onClick={() => { setEditProd(null); setShowModal(true); }} className="btn-primary"><Plus size={16} />Add Product</button>
       </div>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="bg-card border-border max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit Product" : "Add Product"}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Name *</Label>
-                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="bg-background/50 border-border" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">SKU *</Label>
-                <Input value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} className="bg-background/50 border-border" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Brand</Label>
-                <Select value={form.brandId} onValueChange={v => setForm(f => ({ ...f, brandId: v }))}>
-                  <SelectTrigger className="bg-background/50 border-border"><SelectValue placeholder="Select..." /></SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    {brands?.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Date</Label>
-                <Input type="date" value={form.createdAt} onChange={e => setForm(f => ({ ...f, createdAt: e.target.value }))} className="bg-background/50 border-border" />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Cost Price (Rs.)</Label>
-                <Input type="number" value={form.costPrice} onChange={e => setForm(f => ({ ...f, costPrice: e.target.value }))} className="bg-background/50 border-border" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Sale Price (Rs.)</Label>
-                <Input type="number" value={form.salePrice} onChange={e => setForm(f => ({ ...f, salePrice: e.target.value }))} className="bg-background/50 border-border" />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Stock</Label>
-                <Input type="number" value={form.currentStock} onChange={e => setForm(f => ({ ...f, currentStock: e.target.value }))} className="bg-background/50 border-border" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Min Stock</Label>
-                <Input type="number" value={form.minStock} onChange={e => setForm(f => ({ ...f, minStock: e.target.value }))} className="bg-background/50 border-border" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Unit</Label>
-                <Input value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} className="bg-background/50 border-border" />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">OEM Number</Label>
-              <Input value={form.oemNumber} onChange={e => setForm(f => ({ ...f, oemNumber: e.target.value }))} className="bg-background/50 border-border" />
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setOpen(false)} className="border-border">Cancel</Button>
-            <Button onClick={handleSave} disabled={createProduct.isPending || updateProduct.isPending} className="bg-primary hover:bg-primary/90">
-              {editing ? "Save Changes" : "Add Product"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Layout>
+      <div className="card">
+        <div className="card-header flex-wrap gap-3">
+          <div className="relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input className="input pl-9 w-72" placeholder="Search products..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} /></div>
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer"><input type="checkbox" checked={lowStock} onChange={e => setLowStock(e.target.checked)} /><AlertTriangle size={14} className="text-red-500" />Low Stock Only</label>
+        </div>
+        <div className="table-container"><table className="table"><thead><tr><th>Name</th><th>SKU</th><th>Category</th><th>Cost</th><th>Price</th><th>Stock</th><th>Min</th><th>Actions</th></tr></thead>
+          <tbody>
+            {isLoading ? <tr><td colSpan={8} className="text-center py-10 text-gray-400">Loading...</td></tr> :
+             products.length === 0 ? <tr><td colSpan={8} className="text-center py-10 text-gray-400">No products found</td></tr> :
+             products.map(p => (
+              <tr key={p.id}>
+                <td className="font-medium">{p.name}</td>
+                <td className="font-mono text-xs text-gray-500">{p.sku}</td>
+                <td>{p.categoryName || '-'}</td>
+                <td>{fmtCurrency(p.costPrice)}</td>
+                <td className="text-blue-700 font-semibold">{fmtCurrency(p.salePrice)}</td>
+                <td><span className={p.currentStock <= p.minStock ? 'badge-red' : 'badge-green'}>{p.currentStock} {p.unit}</span></td>
+                <td className="text-gray-400">{p.minStock}</td>
+                <td className="flex gap-1">
+                  <button onClick={() => { setEditProd(p); setShowModal(true); }} className="btn-secondary btn-sm"><Edit2 size={13} /></button>
+                  <button onClick={() => confirm('Delete?') && del(p.id)} className="btn-danger btn-sm"><Trash2 size={13} /></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
+        {pages > 1 && <div className="flex items-center justify-between px-5 py-3 border-t"><span className="text-sm text-gray-500">Page {page} of {pages}</span><div className="flex gap-2"><button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="btn-secondary btn-sm"><ChevronLeft size={14} /></button><button disabled={page >= pages} onClick={() => setPage(p => p + 1)} className="btn-secondary btn-sm"><ChevronRight size={14} /></button></div></div>}
+      </div>
+      {showModal && <ProductModal product={editProd} cats={cats || []} brands={brandsList || []} onClose={() => { setShowModal(false); setEditProd(null); }} />}
+    </div>
   );
 }

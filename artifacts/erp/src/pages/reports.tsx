@@ -1,301 +1,125 @@
-import { useState } from "react";
-import { Layout } from "@/components/layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { customFetch, useGetProfitLossReport, useGetInventoryReport, useGetDashboardSummary } from "@workspace/api-client-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { FileBarChart, TrendingUp, TrendingDown, Package, Download, Send, Mail, MessageSquare } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
+import { useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import api from '../lib/api';
+import { fmtCurrency, MONTH_NAMES } from '../lib/utils';
+import toast from 'react-hot-toast';
+import { Download, Send, BarChart3, TrendingUp, ShoppingCart, Truck, Users, Building2, Receipt } from 'lucide-react';
 
-const PERIODS = ["daily", "weekly", "monthly", "yearly"] as const;
-const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
-const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
+const now = new Date();
 
 export default function Reports() {
-  const { toast } = useToast();
-  const [period, setPeriod] = useState<"daily" | "weekly" | "monthly" | "yearly">("monthly");
-  const [sendOpen, setSendOpen] = useState(false);
-  const [sendEmail, setSendEmail] = useState(true);
-  const [sendTelegram, setSendTelegram] = useState(false);
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
   const [sending, setSending] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [channels, setChannels] = useState({ email: true, telegram: true });
 
-  const { data: pl, isLoading: loadingPL } = useGetProfitLossReport({ period });
-  const { data: inv, isLoading: loadingInv } = useGetInventoryReport();
-  const { data: dashboardSummary } = useGetDashboardSummary();
+  const { data: summary, isLoading } = useQuery({
+    queryKey: ['monthly-summary', year, month],
+    queryFn: () => api.get(`/reports/monthly-summary?year=${year}&month=${month}`).then(r => r.data),
+  });
 
-  const handleExcelExport = async () => {
-    setExporting(true);
+  const { data: plData } = useQuery({
+    queryKey: ['pl-report', year, month],
+    queryFn: () => api.get(`/reports/profit-loss?period=monthly&year=${year}&month=${month}`).then(r => r.data),
+  });
+
+  const downloadExcel = async () => {
     try {
-      const blob = await customFetch<Blob>(`/api/export/report/excel?period=${period}`, { responseType: "blob" });
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = `AlGhani_Report_${period}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-      document.body.appendChild(a);
+      const resp = await api.post('/reports/export-excel', { year, month }, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([resp.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `AlGhani_${MONTH_NAMES[month - 1]}_${year}.xlsx`;
       a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(objectUrl);
-      toast({ title: "✅ Excel exported successfully!" });
-    } catch {
-      toast({ title: "Export failed", variant: "destructive" });
-    } finally {
-      setExporting(false);
-    }
+      window.URL.revokeObjectURL(url);
+      toast.success('Excel report downloaded');
+    } catch { toast.error('Failed to download report'); }
   };
 
-  const handleSend = async () => {
+  const sendReport = async () => {
     setSending(true);
     try {
-      const promises = [];
-      if (sendEmail) {
-        promises.push(fetch(`${BASE}/api/email/send-report`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reportType: `${period}-summary` }),
-        }).then(r => r.json()));
-      }
-      if (sendTelegram) {
-        promises.push(fetch(`${BASE}/api/telegram/send`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reportType: `${period}-summary` }),
-        }).then(r => r.json()));
-      }
-      await Promise.all(promises);
-      toast({ title: "✅ Report sent!", description: `Sent via ${[sendEmail && "Email", sendTelegram && "Telegram"].filter(Boolean).join(" & ")}` });
-      setSendOpen(false);
-    } catch {
-      toast({ title: "Failed to send report", variant: "destructive" });
-    } finally {
-      setSending(false);
-    }
+      const ch = Object.entries(channels).filter(([, v]) => v).map(([k]) => k);
+      const { data } = await api.post('/reports/send-report', { year, month, channels: ch });
+      if (data.errors?.length) toast.error(`Partial send: ${data.errors.join(', ')}`);
+      else toast.success('Report sent successfully!');
+    } catch { toast.error('Failed to send report'); }
+    finally { setSending(false); }
   };
 
+  const s = summary || {};
+  const years = [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
+
   return (
-    <Layout>
-      <div className="space-y-6 sm:space-y-8">
-        <div className="flex items-start justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
-              <FileBarChart className="w-5 h-5 sm:w-6 sm:h-6 text-primary" /> Reports & Analytics
-            </h1>
-            <p className="text-muted-foreground text-sm mt-1">Financial and inventory reports</p>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-border gap-1.5 h-9"
-              onClick={handleExcelExport}
-              disabled={exporting}
-            >
-              <Download className="w-3.5 h-3.5" />
-              {exporting ? "Exporting..." : "Export Excel"}
-            </Button>
-            <Button
-              size="sm"
-              className="bg-primary hover:bg-primary/90 gap-1.5 h-9"
-              onClick={() => setSendOpen(true)}
-            >
-              <Send className="w-3.5 h-3.5" /> Send Report
-            </Button>
-          </div>
-        </div>
-
-        {/* Period Selector */}
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div><h1 className="page-title">Reports</h1><p className="text-gray-500 text-sm">Monthly financial reports for Al Ghani Traders</p></div>
         <div className="flex gap-2 flex-wrap">
-          {PERIODS.map(p => (
-            <Button
-              key={p}
-              size="sm"
-              onClick={() => setPeriod(p)}
-              className={`capitalize h-9 ${period === p ? "bg-primary text-white hover:bg-primary/90" : "border border-border bg-transparent hover:bg-accent"}`}
-            >{p}</Button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-          {[
-            { label: "Today Sales", value: dashboardSummary?.todaySales },
-            { label: "This Week", value: dashboardSummary?.weeklySales },
-            { label: "This Month", value: dashboardSummary?.monthlySales },
-            { label: "Net Profit", value: pl?.netProfit },
-          ].map(stat => (
-            <Card key={stat.label} className="border-border bg-card">
-              <CardContent className="p-3 sm:p-4">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">{stat.label}</p>
-                <p className="text-base sm:text-xl font-bold text-secondary">Rs. {stat.value?.toLocaleString() || 0}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* P&L Summary */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-          {[
-            { label: "Revenue", value: pl?.revenue, color: "text-green-400" },
-            { label: "Cost of Goods", value: pl?.costOfGoods, color: "text-red-400" },
-            { label: "Gross Profit", value: pl?.grossProfit, color: "text-secondary" },
-            { label: "Expenses", value: pl?.expenses, color: "text-primary" },
-            { label: "Net Profit", value: pl?.netProfit, color: (pl?.netProfit || 0) >= 0 ? "text-green-400" : "text-red-400" },
-            { label: "Total Purchases", value: pl?.totalPurchases, color: "text-amber-400" },
-          ].map(stat => (
-            <Card key={stat.label} className="border-border bg-card">
-              <CardContent className="p-3 sm:p-4">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">{stat.label}</p>
-                <p className={`text-base sm:text-xl font-bold ${stat.color}`}>
-                  Rs. {stat.value?.toLocaleString() || 0}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* P&L Chart */}
-        <Card className="border-border bg-card">
-          <CardHeader><CardTitle className="text-base sm:text-lg">Profit & Loss Breakdown</CardTitle></CardHeader>
-          <CardContent>
-            {loadingPL ? (
-              <div className="h-48 sm:h-64 flex items-center justify-center text-muted-foreground text-sm">Loading...</div>
-            ) : (
-              <div className="h-48 sm:h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={pl?.breakdown || []} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis dataKey="label" stroke="#888" fontSize={10} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#888" fontSize={10} tickLine={false} axisLine={false} tickFormatter={v => `${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
-                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))", color: "hsl(var(--foreground))", fontSize: 12 }} />
-                    <Bar dataKey="sales" name="Sales" fill="hsl(var(--primary))" radius={[4,4,0,0]} />
-                    <Bar dataKey="profit" name="Profit" fill="hsl(var(--secondary))" radius={[4,4,0,0]} />
-                    <Bar dataKey="costOfGoods" name="Cost of Goods" fill="hsl(var(--chart-3))" radius={[4,4,0,0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Inventory Report */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          <Card className="border-border bg-card">
-            <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
-              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                <Package className="w-5 h-5 text-primary" /> Inventory Valuation
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loadingInv ? (
-                <p className="text-muted-foreground text-sm">Loading...</p>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="text-center p-3 rounded-lg bg-accent">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider">Products</p>
-                      <p className="text-xl font-bold mt-1">{inv?.totalProducts}</p>
-                    </div>
-                    <div className="text-center p-3 rounded-lg bg-accent">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Stock</p>
-                      <p className="text-xl font-bold mt-1">{inv?.totalStock?.toLocaleString()}</p>
-                    </div>
-                    <div className="text-center p-3 rounded-lg bg-accent">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Value</p>
-                      <p className="text-sm font-bold mt-1 text-secondary">Rs. {inv?.totalValue?.toLocaleString()}</p>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    {inv?.categories.map((cat, idx) => (
-                      <div key={cat.name} className="flex items-center justify-between py-2 border-b border-border/50">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                          <span className="text-sm font-medium truncate">{cat.name}</span>
-                          <span className="text-xs text-muted-foreground">({cat.count})</span>
-                        </div>
-                        <span className="text-sm font-semibold text-secondary flex-shrink-0">Rs. {cat.value?.toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-border bg-card">
-            <CardHeader><CardTitle className="text-base sm:text-lg">Inventory by Category</CardTitle></CardHeader>
-            <CardContent>
-              {loadingInv ? <p className="text-muted-foreground text-sm">Loading...</p> : (
-                <div className="h-48 sm:h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={inv?.categories || []}
-                        cx="50%" cy="50%"
-                        outerRadius={80}
-                        dataKey="value"
-                        nameKey="name"
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        labelLine={false}
-                        fontSize={10}
-                      >
-                        {inv?.categories.map((_, idx) => <Cell key={idx} fill={COLORS[idx % COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))", color: "hsl(var(--foreground))", fontSize: 12 }}
-                        formatter={(v) => [`Rs. ${Number(v).toLocaleString()}`, "Value"]}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <select className="input w-24" value={year} onChange={e => setYear(Number(e.target.value))}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
+          <select className="input w-36" value={month} onChange={e => setMonth(Number(e.target.value))}>{MONTH_NAMES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}</select>
+          <button onClick={downloadExcel} className="btn-success"><Download size={15} />Export Excel</button>
         </div>
       </div>
 
-      {/* Send Report Dialog */}
-      <Dialog open={sendOpen} onOpenChange={setSendOpen}>
-        <DialogContent className="bg-card border-border w-[95vw] max-w-sm">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Send className="w-4 h-4" /> Send Report</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              Send <span className="text-foreground font-medium capitalize">{period}</span> report via:
-            </p>
-            <div className="space-y-3">
-              <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border border-border hover:bg-accent transition-colors">
-                <Checkbox checked={sendEmail} onCheckedChange={v => setSendEmail(!!v)} />
-                <div className="flex items-center gap-2">
-                  <Mail className="w-4 h-4 text-blue-400" />
-                  <span className="text-sm font-medium">Email</span>
-                </div>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border border-border hover:bg-accent transition-colors">
-                <Checkbox checked={sendTelegram} onCheckedChange={v => setSendTelegram(!!v)} />
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-sky-400" />
-                  <span className="text-sm font-medium">Telegram</span>
-                </div>
-              </label>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Configure email & Telegram credentials in Settings page.
-            </p>
+      {/* Send Report Section */}
+      <div className="card">
+        <div className="card-header"><h3 className="font-semibold flex items-center gap-2"><Send size={16} />Send Report - {MONTH_NAMES[month - 1]} {year}</h3></div>
+        <div className="card-body flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={channels.email} onChange={e => setChannels(c => ({ ...c, email: e.target.checked }))} />Email (CEO)</label>
+          <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={channels.telegram} onChange={e => setChannels(c => ({ ...c, telegram: e.target.checked }))} />Telegram</label>
+          <button onClick={sendReport} disabled={sending || (!channels.email && !channels.telegram)} className="btn-primary"><Send size={14} />{sending ? 'Sending...' : 'Send Report'}</button>
+        </div>
+      </div>
+
+      {/* Monthly Summary KPIs */}
+      {isLoading ? <div className="text-center py-10 text-gray-400">Loading...</div> : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="kpi-card"><div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0"><ShoppingCart size={18} className="text-white" /></div><div><p className="text-xs text-gray-500">Total Sales</p><p className="text-lg font-bold text-blue-700">{fmtCurrency(s.totalSales || 0)}</p><p className="text-xs text-gray-400">{(s.sales || []).length} invoices</p></div></div>
+            <div className="kpi-card"><div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center flex-shrink-0"><Truck size={18} className="text-white" /></div><div><p className="text-xs text-gray-500">Total Purchases</p><p className="text-lg font-bold text-orange-700">{fmtCurrency(s.totalPurchases || 0)}</p><p className="text-xs text-gray-400">{(s.purchases || []).length} orders</p></div></div>
+            <div className="kpi-card"><div className="w-10 h-10 bg-red-500 rounded-lg flex items-center justify-center flex-shrink-0"><Receipt size={18} className="text-white" /></div><div><p className="text-xs text-gray-500">Total Expenses</p><p className="text-lg font-bold text-red-700">{fmtCurrency(s.totalExpenses || 0)}</p></div></div>
+            <div className="kpi-card"><div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${(s.netProfit || 0) >= 0 ? 'bg-green-600' : 'bg-red-600'}`}><TrendingUp size={18} className="text-white" /></div><div><p className="text-xs text-gray-500">Net Profit</p><p className={`text-lg font-bold ${(s.netProfit || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>{fmtCurrency(s.netProfit || 0)}</p></div></div>
           </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setSendOpen(false)} className="border-border h-11 sm:h-9">Cancel</Button>
-            <Button
-              onClick={handleSend}
-              disabled={(!sendEmail && !sendTelegram) || sending}
-              className="bg-primary hover:bg-primary/90 h-11 sm:h-9 gap-1.5"
-            >
-              <Send className="w-3.5 h-3.5" />
-              {sending ? "Sending..." : "Send"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Layout>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="kpi-card"><div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center flex-shrink-0"><Users size={18} className="text-white" /></div><div><p className="text-xs text-gray-500">Customer Receivable</p><p className="text-lg font-bold text-teal-700">{fmtCurrency(s.totalReceivable || 0)}</p><p className="text-xs text-gray-400">Outstanding from customers</p></div></div>
+            <div className="kpi-card"><div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center flex-shrink-0"><Building2 size={18} className="text-white" /></div><div><p className="text-xs text-gray-500">Supplier Payable</p><p className="text-lg font-bold text-purple-700">{fmtCurrency(s.totalPayable || 0)}</p><p className="text-xs text-gray-400">Amount owed to suppliers</p></div></div>
+          </div>
+
+          {/* P&L Summary */}
+          <div className="card">
+            <div className="card-header"><h3 className="font-semibold flex items-center gap-2"><BarChart3 size={16} />Profit & Loss - {MONTH_NAMES[month - 1]} {year}</h3></div>
+            <div className="card-body">
+              <div className="space-y-3">
+                {[
+                  { label: 'Revenue (Sales)', value: s.totalSales || 0, color: 'text-blue-700' },
+                  { label: 'Cost of Goods (Purchases)', value: s.totalPurchases || 0, color: 'text-orange-600', negative: true },
+                  { label: 'Gross Profit', value: s.grossProfit || 0, color: s.grossProfit >= 0 ? 'text-green-700' : 'text-red-600', bold: true },
+                  { label: 'Operating Expenses', value: s.totalExpenses || 0, color: 'text-red-600', negative: true },
+                  { label: 'Net Profit / Loss', value: s.netProfit || 0, color: s.netProfit >= 0 ? 'text-green-700' : 'text-red-700', bold: true, border: true },
+                ].map((row, i) => (
+                  <div key={i} className={`flex justify-between items-center py-2 ${row.border ? 'border-t-2 border-gray-300 pt-3' : ''}`}>
+                    <span className={`text-sm ${row.bold ? 'font-bold text-gray-900' : 'text-gray-600'}`}>{row.label}</span>
+                    <span className={`font-semibold ${row.color}`}>{row.negative && row.value > 0 ? '- ' : ''}{fmtCurrency(Math.abs(row.value))}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Sales Detail */}
+          <div className="card">
+            <div className="card-header"><h3 className="font-semibold">Sales Detail - {MONTH_NAMES[month - 1]}</h3></div>
+            <div className="table-container"><table className="table"><thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th>Status</th><th>Total</th></tr></thead>
+              <tbody>
+                {(s.sales || []).slice(0, 20).map((sale: any) => <tr key={sale.id}><td>{new Date(sale.saleDate).toLocaleDateString('en-PK')}</td><td className="font-mono text-blue-700">{sale.invoiceNumber}</td><td>{sale.customerName}</td><td><span className={`badge ${sale.status === 'completed' ? 'badge-green' : 'badge-yellow'}`}>{sale.status}</span></td><td className="font-semibold">{fmtCurrency(sale.total)}</td></tr>)}
+                {!s.sales?.length && <tr><td colSpan={5} className="text-center py-8 text-gray-400">No sales this month</td></tr>}
+              </tbody>
+              {s.sales?.length > 0 && <tfoot><tr><td colSpan={4} className="text-right font-bold px-4 py-2">Grand Total:</td><td className="font-bold text-blue-700 px-4 py-2">{fmtCurrency(s.totalSales)}</td></tr></tfoot>}
+            </table></div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

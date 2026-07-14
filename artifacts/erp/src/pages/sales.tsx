@@ -1,440 +1,154 @@
-import React, { useState } from "react";
-import { Layout } from "@/components/layout";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useGetSales, useCreateSale, useUpdateSale, useDeleteSale, useGetProducts, useGetCustomers, getGetSalesQueryKey } from "@workspace/api-client-react";
-import { apiGet } from "@/lib/api";
-import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, ShoppingCart, X, Info } from "lucide-react";
-import DataTable, { Column } from "@/components/ui/data-table";
-import { PriceHistoryPanel } from "@/components/price-history-panel";
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '../lib/api';
+import { fmtCurrency, fmtDate } from '../lib/utils';
+import toast from 'react-hot-toast';
+import { Plus, Search, Trash2, Eye, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
-type LineItem = { productId: number; productName: string; quantity: number; unitPrice: number; };
+type Sale = { id: number; invoiceNumber: string; customerName: string; status: string; total: number; discount: number; saleDate: string; items: any[]; notes?: string; paidAmount?: number };
 
-export default function Sales() {
+const STATUS_COLORS: Record<string, string> = { completed: 'badge-green', pending: 'badge-yellow', cancelled: 'badge-red' };
+
+function SaleModal({ sale, onClose }: { sale: Sale | null; onClose: () => void }) {
   const qc = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [page, setPage] = useState(1);
-  const [open, setOpen] = useState(false);
-  const [customerName, setCustomerName] = useState("");
-  const [customerId, setCustomerId] = useState<number | undefined>(undefined);
-  const [discount, setDiscount] = useState("0");
-  const [notes, setNotes] = useState("");
-  const [saleDate, setSaleDate] = useState(new Date().toISOString().slice(0, 10));
-  const [items, setItems] = useState<LineItem[]>([]);
-  const [expandedRow, setExpandedRow] = useState<number | null>(null);
-  const [editSaleOpen, setEditSaleOpen] = useState(false);
-  const [editingSale, setEditingSale] = useState<NonNullable<typeof data>['data'][0] | null>(null);
-  const [editSaleStatus, setEditSaleStatus] = useState<"pending" | "completed" | "cancelled">("pending");
-  const [editSaleNotes, setEditSaleNotes] = useState("");
-  const [editSaleDiscount, setEditSaleDiscount] = useState("0");
-  const [editSaleDate, setEditSaleDate] = useState(new Date().toISOString().slice(0, 10));
-  const [editItems, setEditItems] = useState<LineItem[]>([]);
-  const [editExpandedRow, setEditExpandedRow] = useState<number | null>(null);
+  const [form, setForm] = useState({ customerName: '', customerId: '', status: 'completed', discount: '0', paidAmount: '', notes: '', saleDate: new Date().toISOString().slice(0,10), items: [{ productName: '', quantity: '1', unitPrice: '0', total: '0' }] });
+  const [searching, setSearching] = useState(false);
+  const [custSuggestions, setCustSuggestions] = useState<any[]>([]);
 
-  const { data, isLoading } = useGetSales({ search: search || undefined, status: statusFilter as "pending" | "completed" | "cancelled" | undefined, page, limit: 20 });
-  const { data: products } = useGetProducts({ limit: 100 });
-  const { data: customers } = useGetCustomers({ limit: 100 });
-  const createSale = useCreateSale();
-  const updateSale = useUpdateSale();
-  const deleteSale = useDeleteSale();
+  const total = form.items.reduce((a, i) => a + (Number(i.quantity) * Number(i.unitPrice)), 0) - Number(form.discount || 0);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getGetSalesQueryKey(), exact: false });
-
-  const openNew = () => {
-    setCustomerName(""); setCustomerId(undefined); setDiscount("0"); setNotes(""); setSaleDate(new Date().toISOString().slice(0, 10)); setItems([]); setEditingSale(null); setExpandedRow(null); setOpen(true);
+  const searchCustomers = async (q: string) => {
+    if (!q) { setCustSuggestions([]); return; }
+    const { data } = await api.get(`/customers/suggestions?q=${q}`);
+    setCustSuggestions(data);
   };
 
-  const addItemTo = (setter: React.Dispatch<React.SetStateAction<LineItem[]>>) => {
-    if (products?.data[0]) {
-      const p = products.data[0];
-      setter(prev => [...prev, { productId: p.id, productName: p.name, quantity: 1, unitPrice: 0 }]);
-    }
-  };
-  const addItem = () => addItemTo(setItems);
-  const addEditItem = () => addItemTo(setEditItems);
-
-  const updateItemIn = (setter: React.Dispatch<React.SetStateAction<LineItem[]>>, forCustomerId: number | undefined, idx: number, field: keyof LineItem, val: string | number) => {
-    setter(prev => {
-      const next = [...prev];
-      if (field === "productId") {
-        const product = products?.data.find(p => p.id === Number(val));
-        if (product) {
-          // Set unit price to customer's previous price for this product if available,
-          // otherwise fall back to product.salePrice or 0.
-          next[idx] = { ...next[idx], productId: product.id, productName: product.name, unitPrice: 0 };
-          (async () => {
-            try {
-              if (forCustomerId) {
-                const suggestion = await apiGet<any>(`/api/customers/${forCustomerId}/price-suggestion/${product.id}`);
-                const prev = suggestion.previousCustomerPrice ?? null;
-                setter(cur => {
-                  const n = [...cur];
-                  n[idx] = { ...n[idx], unitPrice: prev ?? product.salePrice ?? 0 };
-                  return n;
-                });
-              } else {
-                setter(cur => {
-                  const n = [...cur];
-                  n[idx] = { ...n[idx], unitPrice: product.salePrice ?? 0 };
-                  return n;
-                });
-              }
-            } catch (e) {
-              // ignore and leave unitPrice as-is
-            }
-          })();
-        }
-      } else {
-        next[idx] = { ...next[idx], [field]: Number(val) };
-      }
-      return next;
-    });
-  };
-  const updateItem = (idx: number, field: keyof LineItem, val: string | number) => updateItemIn(setItems, customerId, idx, field, val);
-  const updateEditItem = (idx: number, field: keyof LineItem, val: string | number) => updateItemIn(setEditItems, editingSale?.customerId ?? undefined, idx, field, val);
-
-  const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-  const total = subtotal - parseFloat(discount || "0");
-
-  const handleSave = async () => {
-    try {
-      await createSale.mutateAsync({
-        data: {
-          customerId,
-          customerName,
-          discount: parseFloat(discount || "0"),
-          notes: notes || undefined,
-          items: items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
-          // saleDate enables backdated/historical invoice entry — accepted by
-          // the backend but not yet part of the generated CreateSaleBody type.
-          ...({ saleDate: new Date(saleDate).toISOString() } as {}),
-        }
-      });
-      invalidate();
-      setOpen(false);
-    } catch (error: any) {
-      alert(error?.message || "Failed to create sale. If this date is in a closed month, reopen the month first from the Months page.");
-    }
+  const addItem = () => setForm(f => ({ ...f, items: [...f.items, { productName: '', quantity: '1', unitPrice: '0', total: '0' }] }));
+  const removeItem = (i: number) => setForm(f => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
+  const updateItem = (i: number, key: string, val: string) => {
+    setForm(f => { const items = [...f.items]; items[i] = { ...items[i], [key]: val, total: String(Number(items[i].quantity) * Number(items[i].unitPrice)) }; 
+      if (key === 'quantity' || key === 'unitPrice') { const q = key === 'quantity' ? Number(val) : Number(items[i].quantity); const u = key === 'unitPrice' ? Number(val) : Number(items[i].unitPrice); items[i].total = String(q * u); }
+      return { ...f, items }; });
   };
 
-  const handleStatusUpdate = async (id: number, status: "pending" | "completed" | "cancelled") => {
-    await updateSale.mutateAsync({ id, data: { status } });
-    invalidate();
-  };
-
-  const editSubtotal = editItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-  const editTotal = editSubtotal - parseFloat(editSaleDiscount || "0");
-
-  const openEditSale = (sale: NonNullable<typeof data>['data'][0]) => {
-    setEditingSale(sale);
-    setEditSaleStatus(sale.status);
-    setEditSaleNotes(sale.notes || "");
-    setEditSaleDiscount(String(sale.discount ?? 0));
-    setEditSaleDate((sale.saleDate ?? sale.createdAt).slice(0, 10));
-    setEditItems(sale.items.map(i => ({ productId: i.productId, productName: i.productName, quantity: i.quantity, unitPrice: i.unitPrice })));
-    setEditExpandedRow(null);
-    setEditSaleOpen(true);
-  };
-
-  const handleSaveSaleEdit = async () => {
-    if (!editingSale) return;
-    try {
-      await updateSale.mutateAsync({
-        id: editingSale.id,
-        data: {
-          status: editSaleStatus,
-          notes: editSaleNotes || undefined,
-          discount: parseFloat(editSaleDiscount || "0"),
-          items: editItems.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
-          ...({ saleDate: new Date(editSaleDate).toISOString() } as {}),
-        },
-      });
-      invalidate();
-      setEditSaleOpen(false);
-      setEditingSale(null);
-    } catch (error: any) {
-      alert(error?.message || "Failed to update sale. If this invoice is in a closed month, reopen the month first from the Months page.");
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    if (!confirm("Delete this sale?")) return;
-    try {
-      await deleteSale.mutateAsync({ id }); invalidate();
-    } catch (error: any) {
-      alert(error?.message || "Failed to delete sale. If this invoice is in a closed month, reopen the month first from the Months page.");
-    }
-  };
-
-  const statusColor = (s: string) => s === "completed" ? "bg-green-500/10 text-green-400 border-0" : s === "pending" ? "bg-yellow-500/10 text-yellow-400 border-0" : "bg-red-500/10 text-red-400 border-0";
+  const { mutate: save, isPending } = useMutation({
+    mutationFn: () => api.post('/sales', { ...form, total, items: form.items.map(i => ({ ...i, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice), total: Number(i.quantity) * Number(i.unitPrice) })), paidAmount: Number(form.paidAmount || total), discount: Number(form.discount || 0) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sales'] }); qc.invalidateQueries({ queryKey: ['dashboard-summary'] }); toast.success('Sale saved'); onClose(); },
+    onError: (e: any) => toast.error(e.response?.data?.error || 'Failed'),
+  });
 
   return (
-    <Layout>
-      <div className="space-y-4 sm:space-y-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal modal-lg">
+        <div className="flex items-center justify-between p-6 border-b">
+          <h2 className="text-lg font-bold">New Sale</h2>
+          <button onClick={onClose}><X size={20} /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="relative">
+              <label className="label">Customer Name</label>
+              <input className="input" value={form.customerName} onChange={e => { setForm(f => ({ ...f, customerName: e.target.value, customerId: '' })); searchCustomers(e.target.value); }} placeholder="Search customer..." />
+              {custSuggestions.length > 0 && (
+                <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1">
+                  {custSuggestions.map(c => <button key={c.id} className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm" onClick={() => { setForm(f => ({ ...f, customerName: c.name, customerId: String(c.id) })); setCustSuggestions([]); }}>{c.name} - {c.phone}</button>)}
+                </div>
+              )}
+            </div>
+            <div><label className="label">Date</label><input type="date" className="input" value={form.saleDate} onChange={e => setForm(f => ({ ...f, saleDate: e.target.value }))} /></div>
+            <div><label className="label">Status</label><select className="input" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}><option value="completed">Completed</option><option value="pending">Pending</option><option value="cancelled">Cancelled</option></select></div>
+            <div><label className="label">Discount (PKR)</label><input type="number" className="input" value={form.discount} onChange={e => setForm(f => ({ ...f, discount: e.target.value }))} /></div>
+            <div><label className="label">Paid Amount (PKR)</label><input type="number" className="input" value={form.paidAmount} onChange={e => setForm(f => ({ ...f, paidAmount: e.target.value }))} placeholder={String(total)} /></div>
+            <div><label className="label">Notes</label><input className="input" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></div>
+          </div>
           <div>
-            <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight sm:text-2xl"><ShoppingCart className="h-5 w-5 text-primary sm:h-6 sm:w-6" /> Sales Orders</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{data?.total || 0} orders total</p>
+            <div className="flex items-center justify-between mb-2"><span className="label !mb-0">Items</span><button onClick={addItem} className="btn-secondary btn-sm"><Plus size={14} />Add Item</button></div>
+            <table className="table w-full"><thead><tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Total</th><th></th></tr></thead>
+              <tbody>{form.items.map((item, i) => (
+                <tr key={i}>
+                  <td><input className="input" value={item.productName} onChange={e => updateItem(i, 'productName', e.target.value)} placeholder="Product name" /></td>
+                  <td><input type="number" className="input w-20" value={item.quantity} onChange={e => updateItem(i, 'quantity', e.target.value)} /></td>
+                  <td><input type="number" className="input w-28" value={item.unitPrice} onChange={e => updateItem(i, 'unitPrice', e.target.value)} /></td>
+                  <td className="font-semibold">{fmtCurrency(Number(item.total))}</td>
+                  <td><button onClick={() => removeItem(i)} className="text-red-500 hover:text-red-700"><Trash2 size={14} /></button></td>
+                </tr>
+              ))}</tbody>
+            </table>
+            <div className="text-right mt-2 text-lg font-bold text-blue-700">Total: {fmtCurrency(total)}</div>
           </div>
-          <Button onClick={openNew} className="w-full gap-2 bg-primary hover:bg-primary/90 sm:w-auto"><Plus className="h-4 w-4" /> New Sale</Button>
         </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search customer..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="border-border bg-card pl-9" />
-          </div>
-          <Select value={statusFilter} onValueChange={v => { setStatusFilter(v === "all" ? "" : v); setPage(1); }}>
-            <SelectTrigger className="w-full bg-card border-border sm:w-44"><SelectValue placeholder="All Status" /></SelectTrigger>
-            <SelectContent className="bg-card border-border">
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="cancelled">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="flex justify-end gap-3 p-6 border-t">
+          <button onClick={onClose} className="btn-secondary">Cancel</button>
+          <button onClick={() => save()} disabled={isPending} className="btn-primary">{isPending ? 'Saving...' : 'Save Sale'}</button>
         </div>
-
-        <Card className="border-border bg-card">
-          <CardContent className="p-0">
-            <div className="hidden md:block">
-              <DataTable
-                loading={isLoading}
-                data={data?.data || []}
-                columns={[
-                  { key: 'invoiceNumber', title: 'Invoice', render: (r) => <span className="font-mono text-xs text-primary">{r.invoiceNumber}</span> },
-                  { key: 'customerName', title: 'Customer', render: (r) => <span className="font-medium">{r.customerName}</span> },
-                  { key: 'total', title: 'Total', align: 'right', render: (r) => <span className="font-semibold text-secondary">Rs. {Number(r.total).toLocaleString()}</span> },
-                  { key: 'status', title: 'Status', align: 'center', render: (r) => (
-                      <Select value={r.status} onValueChange={(v) => handleStatusUpdate(r.id, v as "pending" | "completed" | "cancelled") }>
-                        <SelectTrigger className="h-7 w-32 border-0 bg-transparent p-0 text-xs">
-                          <Badge className={statusColor(r.status)}>{r.status}</Badge>
-                        </SelectTrigger>
-                        <SelectContent className="bg-card border-border">
-                          <SelectItem value="pending">Pending</SelectItem>
-                          <SelectItem value="completed">Completed</SelectItem>
-                          <SelectItem value="cancelled">Cancelled</SelectItem>
-                        </SelectContent>
-                      </Select>
-                  ) },
-                  { key: 'saleDate', title: 'Date', render: (r) => new Date(r.saleDate ?? r.createdAt).toLocaleDateString() },
-                  { key: 'actions', title: 'Actions', align: 'center', render: (r) => (
-                    <div className="flex justify-center gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => openEditSale(r)} className="h-8 w-8 p-0 hover:bg-accent"><Edit className="h-4 w-4" /></Button>
-                      <Button size="sm" variant="ghost" onClick={() => handleDelete(r.id)} className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
-                    </div>
-                  ) },
-                ]}
-              />
-            </div>
-
-            <div className="space-y-3 p-3 md:hidden">
-              {isLoading ? (
-                <div className="rounded-2xl border border-border/60 bg-background/70 p-6 text-center text-sm text-muted-foreground">Loading sales...</div>
-              ) : (data?.data || []).length === 0 ? (
-                <div className="rounded-2xl border border-border/60 bg-background/70 p-6 text-center text-sm text-muted-foreground">No sales yet.</div>
-              ) : (data?.data || []).map((sale) => (
-                <div key={sale.id} className="rounded-2xl border border-border/60 bg-background/70 p-3 shadow-sm">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">{sale.invoiceNumber}</div>
-                      <div className="mt-1 truncate text-sm font-semibold">{sale.customerName}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">{new Date(sale.saleDate ?? sale.createdAt).toLocaleDateString()}</div>
-                    </div>
-                    <Badge className={statusColor(sale.status)}>{sale.status}</Badge>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between gap-2">
-                    <div className="text-sm font-semibold text-secondary">Rs. {Number(sale.total).toLocaleString()}</div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => openEditSale(sale)} className="h-8 w-8 p-0 hover:bg-accent"><Edit className="h-4 w-4" /></Button>
-                      <Button size="sm" variant="ghost" onClick={() => handleDelete(sale.id)} className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {data && data.total > 20 && (
-              <div className="flex flex-wrap justify-center gap-2 border-t border-border p-4">
-                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="border-border">Prev</Button>
-                <span className="flex items-center px-3 text-sm text-muted-foreground">Page {page} of {Math.ceil(data.total / 20)}</span>
-                <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= Math.ceil(data.total / 20)} className="border-border">Next</Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
+    </div>
+  );
+}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border">
-          <DialogHeader><DialogTitle>New Sale Order</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Customer *</Label>
-              <Select
-                value={customerId ? String(customerId) : customerName ? "__walkin__" : ""}
-                onValueChange={(v) => {
-                  if (v === "__walkin__") { setCustomerId(undefined); setCustomerName(""); return; }
-                  const c = customers?.data.find(c => c.id === Number(v));
-                  if (c) { setCustomerId(c.id); setCustomerName(c.name); }
-                }}
-              >
-                <SelectTrigger className="bg-background/50 border-border"><SelectValue placeholder="Select a registered customer" /></SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  {customers?.data.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name} — {c.phone}</SelectItem>)}
-                  <SelectItem value="__walkin__">Walk-in / Other (no khata tracking)</SelectItem>
-                </SelectContent>
-              </Select>
-              {customerId === undefined && (
-                <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Walk-in customer name" className="bg-background/50 border-border mt-1" />
-              )}
-              {customerId !== undefined && (
-                <p className="text-xs text-muted-foreground">Price history + khata (ledger) will update automatically for this customer.</p>
-              )}
-            </div>
+export default function Sales() {
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [viewSale, setViewSale] = useState<Sale | null>(null);
+  const qc = useQueryClient();
 
-            <div className="space-y-2">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Line Items</Label>
-                <Button size="sm" variant="outline" onClick={addItem} className="h-7 gap-1 border-border text-xs"><Plus className="h-3 w-3" /> Add Item</Button>
-              </div>
-              {items.map((item, idx) => (
-                <div key={idx} className="space-y-2 rounded-2xl border border-border/60 bg-background/60 p-2 sm:p-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <Select value={String(item.productId)} onValueChange={v => updateItem(idx, "productId", v)}>
-                      <SelectTrigger className="h-9 flex-1 border-border bg-background/50 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        {products?.data.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-                      <Input type="number" value={item.quantity} onChange={e => updateItem(idx, "quantity", e.target.value)} className="h-9 w-full border-border bg-background/50 text-xs sm:w-20" placeholder="Qty" min={1} />
-                      <Input type="number" value={item.unitPrice} onChange={e => updateItem(idx, "unitPrice", e.target.value)} className="h-9 w-full border-border bg-background/50 text-xs sm:w-28" placeholder="Price" />
-                    </div>
-                    <div className="flex items-center justify-between gap-2 sm:ml-auto">
-                      <span className="w-20 text-right text-xs text-muted-foreground">Rs. {(item.quantity * item.unitPrice).toLocaleString()}</span>
-                      <Button type="button" size="sm" variant="ghost" onClick={() => setExpandedRow(prev => prev === idx ? null : idx)} className={`h-8 w-8 p-0 ${expandedRow === idx ? "bg-primary/10 text-primary" : "hover:bg-accent"}`} title="Price history & suggestion"><Info className="h-4 w-4" /></Button>
-                      <Button size="sm" variant="ghost" onClick={() => { setItems(prev => prev.filter((_, i) => i !== idx)); if (expandedRow === idx) setExpandedRow(null); }} className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><X className="h-4 w-4" /></Button>
-                    </div>
-                  </div>
-                  {expandedRow === idx && (
-                    <PriceHistoryPanel customerId={customerId} productId={item.productId} proposedPrice={item.unitPrice} />
-                  )}
-                </div>
+  const { data, isLoading } = useQuery({ queryKey: ['sales', page, search], queryFn: () => api.get(`/sales?page=${page}&limit=20&search=${search}`).then(r => r.data) });
+  const { mutate: deleteSale } = useMutation({ mutationFn: (id: number) => api.delete(`/sales/${id}`), onSuccess: () => { qc.invalidateQueries({ queryKey: ['sales'] }); toast.success('Deleted'); }, onError: () => toast.error('Failed to delete') });
+
+  const sales: Sale[] = data?.data || [];
+  const total = data?.total || 0;
+  const pages = Math.ceil(total / 20);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div><h1 className="page-title">Sales</h1><p className="text-gray-500 text-sm">{total} total records</p></div>
+        <button onClick={() => setShowModal(true)} className="btn-primary"><Plus size={16} />New Sale</button>
+      </div>
+      <div className="card">
+        <div className="card-header">
+          <div className="relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input className="input pl-9 w-72" placeholder="Search by customer..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} /></div>
+        </div>
+        <div className="table-container">
+          <table className="table">
+            <thead><tr><th>Date</th><th>Invoice #</th><th>Customer</th><th>Status</th><th>Total</th><th>Actions</th></tr></thead>
+            <tbody>
+              {isLoading ? <tr><td colSpan={6} className="text-center py-10 text-gray-400">Loading...</td></tr> :
+               sales.length === 0 ? <tr><td colSpan={6} className="text-center py-10 text-gray-400">No sales found</td></tr> :
+               sales.map(s => (
+                <tr key={s.id}>
+                  <td>{fmtDate(s.saleDate)}</td>
+                  <td className="font-mono text-blue-700">{s.invoiceNumber}</td>
+                  <td className="font-medium">{s.customerName}</td>
+                  <td><span className={STATUS_COLORS[s.status] || 'badge-gray'}>{s.status}</span></td>
+                  <td className="font-semibold">{fmtCurrency(s.total)}</td>
+                  <td className="flex gap-2">
+                    <button onClick={() => setViewSale(s)} className="btn-secondary btn-sm"><Eye size={13} /></button>
+                    <button onClick={() => confirm('Delete?') && deleteSale(s.id)} className="btn-danger btn-sm"><Trash2 size={13} /></button>
+                  </td>
+                </tr>
               ))}
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Discount (Rs.)</Label>
-                <Input type="number" value={discount} onChange={e => setDiscount(e.target.value)} className="bg-background/50 border-border" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Invoice Date</Label>
-                <Input type="date" value={saleDate} onChange={e => setSaleDate(e.target.value)} className="bg-background/50 border-border" />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
-              <Input value={notes} onChange={e => setNotes(e.target.value)} className="bg-background/50 border-border" />
-            </div>
-
-            <div className="border-t border-border pt-3 text-right space-y-1">
-              <p className="text-sm text-muted-foreground">Subtotal: Rs. {subtotal.toLocaleString()}</p>
-              <p className="text-sm text-muted-foreground">Discount: Rs. {parseFloat(discount || "0").toLocaleString()}</p>
-              <p className="text-lg font-bold text-secondary">Total: Rs. {total.toLocaleString()}</p>
+            </tbody>
+          </table>
+        </div>
+        {pages > 1 && <div className="flex items-center justify-between px-5 py-3 border-t">
+          <span className="text-sm text-gray-500">Page {page} of {pages}</span>
+          <div className="flex gap-2"><button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="btn-secondary btn-sm"><ChevronLeft size={14} /></button><button disabled={page >= pages} onClick={() => setPage(p => p + 1)} className="btn-secondary btn-sm"><ChevronRight size={14} /></button></div>
+        </div>}
+      </div>
+      {showModal && <SaleModal sale={null} onClose={() => setShowModal(false)} />}
+      {viewSale && (
+        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setViewSale(null)}>
+          <div className="modal">
+            <div className="flex items-center justify-between p-6 border-b"><h2 className="font-bold text-lg">Sale #{viewSale.invoiceNumber}</h2><button onClick={() => setViewSale(null)}><X size={20} /></button></div>
+            <div className="p-6 space-y-3">
+              <div className="grid grid-cols-2 gap-3 text-sm"><div><span className="text-gray-500">Customer:</span> <strong>{viewSale.customerName}</strong></div><div><span className="text-gray-500">Date:</span> {fmtDate(viewSale.saleDate)}</div><div><span className="text-gray-500">Status:</span> <span className={STATUS_COLORS[viewSale.status]}>{viewSale.status}</span></div><div><span className="text-gray-500">Total:</span> <strong className="text-blue-700">{fmtCurrency(viewSale.total)}</strong></div></div>
+              {viewSale.items?.length > 0 && <table className="table w-full mt-3"><thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>{viewSale.items.map((item, i) => <tr key={i}><td>{item.productName}</td><td>{item.quantity}</td><td>{fmtCurrency(item.unitPrice)}</td><td className="font-semibold">{fmtCurrency(item.total)}</td></tr>)}</tbody></table>}
             </div>
           </div>
-          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={() => setOpen(false)} className="border-border">Cancel</Button>
-            <Button onClick={handleSave} disabled={!customerName || items.length === 0 || createSale.isPending} className="bg-primary hover:bg-primary/90">Create Sale</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-        <Dialog open={editSaleOpen} onOpenChange={(open) => { setEditSaleOpen(open); if (!open) setEditingSale(null); }}>
-          <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border">
-            <DialogHeader><DialogTitle>Edit Sale — {editingSale?.invoiceNumber}</DialogTitle></DialogHeader>
-            <div className="grid gap-3 py-2">
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Status</Label>
-                <Select value={editSaleStatus} onValueChange={v => setEditSaleStatus(v as "pending" | "completed" | "cancelled") }>
-                  <SelectTrigger className="bg-background/50 border-border"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Line Items</Label>
-                  <Button size="sm" variant="outline" onClick={addEditItem} className="h-7 gap-1 border-border text-xs"><Plus className="h-3 w-3" /> Add Item</Button>
-                </div>
-                <p className="text-xs text-muted-foreground">Changing quantities or products here will automatically adjust stock and this customer's ledger/price history to match.</p>
-                {editItems.map((item, idx) => (
-                  <div key={idx} className="space-y-2 rounded-2xl border border-border/60 bg-background/60 p-2 sm:p-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <Select value={String(item.productId)} onValueChange={v => updateEditItem(idx, "productId", v)}>
-                        <SelectTrigger className="h-9 flex-1 border-border bg-background/50 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-card border-border">
-                          {products?.data.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-                        <Input type="number" value={item.quantity} onChange={e => updateEditItem(idx, "quantity", e.target.value)} className="h-9 w-full border-border bg-background/50 text-xs sm:w-20" placeholder="Qty" min={1} />
-                        <Input type="number" value={item.unitPrice} onChange={e => updateEditItem(idx, "unitPrice", e.target.value)} className="h-9 w-full border-border bg-background/50 text-xs sm:w-28" placeholder="Price" />
-                      </div>
-                      <div className="flex items-center justify-between gap-2 sm:ml-auto">
-                        <span className="w-20 text-right text-xs text-muted-foreground">Rs. {(item.quantity * item.unitPrice).toLocaleString()}</span>
-                        <Button type="button" size="sm" variant="ghost" onClick={() => setEditExpandedRow(prev => prev === idx ? null : idx)} className={`h-8 w-8 p-0 ${editExpandedRow === idx ? "bg-primary/10 text-primary" : "hover:bg-accent"}`} title="Price history & suggestion"><Info className="h-4 w-4" /></Button>
-                        <Button size="sm" variant="ghost" onClick={() => { setEditItems(prev => prev.filter((_, i) => i !== idx)); if (editExpandedRow === idx) setEditExpandedRow(null); }} className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><X className="h-4 w-4" /></Button>
-                      </div>
-                    </div>
-                    {editExpandedRow === idx && (
-                      <PriceHistoryPanel customerId={editingSale?.customerId ?? undefined} productId={item.productId} proposedPrice={item.unitPrice} />
-                    )}
-                  </div>
-                ))}
-                {editItems.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No items — add at least one line item.</p>}
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Discount (Rs.)</Label>
-                  <Input type="number" value={editSaleDiscount} onChange={e => setEditSaleDiscount(e.target.value)} className="bg-background/50 border-border" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Invoice Date</Label>
-                  <Input type="date" value={editSaleDate} onChange={e => setEditSaleDate(e.target.value)} className="bg-background/50 border-border" />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
-                <Input value={editSaleNotes} onChange={e => setEditSaleNotes(e.target.value)} className="bg-background/50 border-border" />
-              </div>
-
-              <div className="border-t border-border pt-3 text-right space-y-1">
-                <p className="text-sm text-muted-foreground">Subtotal: Rs. {editSubtotal.toLocaleString()}</p>
-                <p className="text-sm text-muted-foreground">Discount: Rs. {parseFloat(editSaleDiscount || "0").toLocaleString()}</p>
-                <p className="text-lg font-bold text-secondary">Total: Rs. {editTotal.toLocaleString()}</p>
-              </div>
-            </div>
-            <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button variant="outline" onClick={() => { setEditSaleOpen(false); setEditingSale(null); }} className="border-border">Cancel</Button>
-              <Button onClick={handleSaveSaleEdit} disabled={updateSale.isPending || editItems.length === 0} className="bg-primary hover:bg-primary/90">Save</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-    </Layout>
+        </div>
+      )}
+    </div>
   );
 }

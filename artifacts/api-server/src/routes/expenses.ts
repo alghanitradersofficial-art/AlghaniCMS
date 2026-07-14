@@ -1,97 +1,62 @@
-import { Router } from "express";
-import { db } from "@workspace/db";
-import { expensesTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
-import { CreateExpenseBody, UpdateExpenseBody } from "@workspace/api-zod";
-import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
-import { getUserIdFromRequest } from "../lib/auth-context.js";
+import { Router } from 'express';
+import { db, expenses } from '@workspace/db';
+import { eq, ilike, and, sql, gte, lte } from 'drizzle-orm';
+import { authMiddleware } from '../lib/auth.js';
 
 const router = Router();
+router.use(authMiddleware);
 
-router.get("/", async (req, res): Promise<any> => {
+router.get('/', async (req, res) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const offset = (page - 1) * limit;
-
-    const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(expensesTable);
-    const total = Number(count);
-
-    const rows = await db.select().from(expensesTable).limit(limit).offset(offset);
-    return res.json({
-      data: rows.map(r => ({
-        ...r,
-        amount: parseFloat(r.amount as string),
-        createdAt: r.createdAt.toISOString(),
-      })),
-      total,
-      page,
-      limit,
-    });
-  } catch (error) {
-    return res.status(500).json({ error: "Failed to fetch expenses" });
-  }
+    const { search, category, startDate, endDate, page = 1, limit = 20 } = req.query;
+    const conditions: any[] = [];
+    if (search) conditions.push(ilike(expenses.title, `%${search}%`));
+    if (category) conditions.push(eq(expenses.category, String(category)));
+    if (startDate) conditions.push(gte(expenses.date, new Date(String(startDate))));
+    if (endDate) conditions.push(lte(expenses.date, new Date(String(endDate))));
+    const where = conditions.length ? and(...conditions) : undefined;
+    const offset = (Number(page) - 1) * Number(limit);
+    const rows = await db.select().from(expenses).where(where).orderBy(sql`date DESC`).limit(Number(limit)).offset(offset);
+    const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(expenses).where(where);
+    res.json({ data: rows.map(e => ({ ...e, amount: Number(e.amount), date: e.date.toISOString(), createdAt: e.createdAt.toISOString() })), total: Number(count), page: Number(page), limit: Number(limit) });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post("/", async (req, res): Promise<any> => {
-  try {
-    const body = CreateExpenseBody.parse(req.body);
-    const createdByUserId = getUserIdFromRequest(req);
-    // Loose inference alignment ke liye 'as any' use kiya
-    const [expense] = await db.insert(expensesTable).values({
-      ...body,
-      amount: String(body.amount),
-      createdByUserId,
-    } as any).returning();
-
-    await appendGeneralLedgerEntry(db as any, {
-      date: body.date ? new Date(body.date) : new Date(),
-      type: "expense",
-      referenceId: expense.id,
-      partyType: "none",
-      amount: body.amount,
-      direction: "debit",
-      note: `${body.category}: ${body.title}`,
-      createdByUserId,
-    });
-
-    return res.status(201).json({
-      ...expense,
-      amount: parseFloat(expense.amount as string),
-      createdAt: expense.createdAt.toISOString(),
-    });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Failed to create expense" });
-  }
+router.get('/:id', async (req, res) => {
+  const [e] = await db.select().from(expenses).where(eq(expenses.id, Number(req.params.id)));
+  if (!e) return res.status(404).json({ error: 'Not found' });
+  res.json({ ...e, amount: Number(e.amount), date: e.date.toISOString() });
 });
 
-router.patch("/:id", async (req, res): Promise<any> => {
+router.post('/', async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const body = UpdateExpenseBody.parse(req.body);
-    const updateData: Record<string, unknown> = { ...body };
-    if (body.amount !== undefined) updateData.amount = String(body.amount);
-    const [expense] = await db.update(expensesTable).set(updateData).where(eq(expensesTable.id, id)).returning();
-    if (!expense) return res.status(404).json({ error: "Expense not found" });
-    return res.json({
-      ...expense,
-      amount: parseFloat(expense.amount as string),
-      createdAt: expense.createdAt.toISOString(),
-    });
-  } catch (error) {
-    return res.status(500).json({ error: "Failed to update expense" });
-  }
+    const body = req.body;
+    const [row] = await db.insert(expenses).values({
+      title: body.title, category: body.category,
+      amount: String(body.amount), date: body.date ? new Date(body.date) : new Date(),
+      notes: body.notes,
+    }).returning();
+    res.status(201).json({ ...row, amount: Number(row.amount), date: row.date.toISOString() });
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
 });
 
-router.delete("/:id", async (req, res): Promise<any> => {
+router.put('/:id', async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    await db.delete(expensesTable).where(eq(expensesTable.id, id));
-    return res.status(204).send();
-  } catch (error) {
-    return res.status(500).json({ error: "Failed to delete expense" });
-  }
+    const body = req.body;
+    const [row] = await db.update(expenses).set({
+      title: body.title, category: body.category,
+      amount: body.amount !== undefined ? String(body.amount) : undefined,
+      date: body.date ? new Date(body.date) : undefined,
+      notes: body.notes, updatedAt: new Date(),
+    }).where(eq(expenses.id, Number(req.params.id))).returning();
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json({ ...row, amount: Number(row.amount), date: row.date.toISOString() });
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
+});
+
+router.delete('/:id', async (req, res) => {
+  await db.delete(expenses).where(eq(expenses.id, Number(req.params.id)));
+  res.status(204).send();
 });
 
 export default router;
