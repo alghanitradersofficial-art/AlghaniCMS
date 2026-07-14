@@ -20,6 +20,5 @@ export interface Purchase {
   /** @nullable */
   notes?: string | null;
   items: PurchaseItem[];
-  purchaseDate: string;
   createdAt: string;
 }

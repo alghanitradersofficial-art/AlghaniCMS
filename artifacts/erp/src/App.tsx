@@ -1,59 +1,91 @@
-import { useEffect, useState } from 'react';
-import { Route, Switch, useLocation, Redirect } from 'wouter';
-import { useAuth } from './hooks/useAuth';
-import Layout from './components/Layout';
-import Login from './pages/Login';
-import ForgotPassword from './pages/ForgotPassword';
-import Dashboard from './pages/Dashboard';
-import Inventory from './pages/Inventory';
-import Sales from './pages/Sales';
-import Purchases from './pages/Purchases';
-import Customers from './pages/Customers';
-import CustomerLedger from './pages/CustomerLedger';
-import Suppliers from './pages/Suppliers';
-import SupplierLedger from './pages/SupplierLedger';
-import Expenses from './pages/Expenses';
-import QuickEntry from './pages/QuickEntry';
-import Reports from './pages/Reports';
-import Operations from './pages/Operations';
-import Users from './pages/Users';
-import NotFound from './pages/NotFound';
+import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { isLoggedIn, hasPermission } from "@/lib/auth";
+import NotFound from "@/pages/not-found";
+import Login from "@/pages/login";
+import Dashboard from "@/pages/dashboard";
+import Inventory from "@/pages/inventory";
+import Brands from "@/pages/brands";
+import Sales from "@/pages/sales";
+import Purchases from "@/pages/purchases";
+import Customers from "@/pages/customers";
+import Suppliers from "@/pages/suppliers";
+import Expenses from "@/pages/expenses";
+import Users from "@/pages/users";
+import SupplierDetail from "@/pages/supplier-detail";
+import Reports from "@/pages/reports";
+import RecentActivity from "@/pages/recent-activity";
+import Settings from "@/pages/settings";
+import QuickEntry from "@/pages/quick-entry";
+import Operations from "@/pages/operations";
+import MonthsPage from "@/pages/months";
+import SaleDetail from "@/pages/sale-detail";
+import PurchaseDetail from "@/pages/purchase-detail";
+import ExpenseDetail from "@/pages/expense-detail";
 
-function PrivateRoute({ children, perm }: { children: React.ReactNode; perm?: string }) {
-  const { user, hasPermission } = useAuth();
-  const [, navigate] = useLocation();
-  if (!user) return <Redirect to="/login" />;
-  if (perm && !hasPermission(perm)) return <Redirect to="/" />;
-  return <>{children}</>;
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, staleTime: 30000 } },
+});
+
+function AuthGuard({ component: Component, permission }: { component: React.ComponentType; permission?: string }) {
+  if (!isLoggedIn()) return <Redirect to="/login" />;
+  if (permission && !hasPermission(permission)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8">
+        <div className="text-5xl mb-4">🔒</div>
+        <h2 className="text-2xl font-semibold mb-2">Access Denied</h2>
+        <p className="text-muted-foreground max-w-md">You don't have permission to access this page.</p>
+      </div>
+    );
+  }
+  return <Component />;
 }
 
-export default function App() {
-  const { user } = useAuth();
-
+function Router() {
   return (
     <Switch>
-      <Route path="/login">{user ? <Redirect to="/" /> : <Login />}</Route>
-      <Route path="/forgot-password"><ForgotPassword /></Route>
-      <Route path="/">
-        <PrivateRoute>
-          <Layout>
-            <Route path="/"><Dashboard /></Route>
-            <Route path="/inventory"><PrivateRoute perm="inventory"><Inventory /></PrivateRoute></Route>
-            <Route path="/sales"><PrivateRoute perm="sales"><Sales /></PrivateRoute></Route>
-            <Route path="/purchases"><PrivateRoute perm="purchases"><Purchases /></PrivateRoute></Route>
-            <Route path="/customers"><PrivateRoute perm="customers"><Customers /></PrivateRoute></Route>
-            <Route path="/customers/:id/ledger"><PrivateRoute perm="customer-ledger"><CustomerLedger /></PrivateRoute></Route>
-            <Route path="/suppliers"><PrivateRoute perm="suppliers"><Suppliers /></PrivateRoute></Route>
-            <Route path="/suppliers/:id/ledger"><PrivateRoute perm="supplier-ledger"><SupplierLedger /></PrivateRoute></Route>
-            <Route path="/expenses"><PrivateRoute perm="expenses"><Expenses /></PrivateRoute></Route>
-            <Route path="/quick-entry"><PrivateRoute perm="quick-entry"><QuickEntry /></PrivateRoute></Route>
-            <Route path="/reports"><PrivateRoute perm="reports"><Reports /></PrivateRoute></Route>
-            <Route path="/operations"><PrivateRoute perm="operations"><Operations /></PrivateRoute></Route>
-            <Route path="/users"><PrivateRoute perm="users"><Users /></PrivateRoute></Route>
-          </Layout>
-        </PrivateRoute>
-      </Route>
-      <Route><NotFound /></Route>
+      <Route path="/login" component={Login} />
+      <Route path="/dashboard">{() => <AuthGuard component={Dashboard} permission="dashboard" />}</Route>
+      <Route path="/inventory">{() => <AuthGuard component={Inventory} permission="inventory" />}</Route>
+      <Route path="/brands">{() => <AuthGuard component={Brands} permission="brands" />}</Route>
+      <Route path="/sales">{() => <AuthGuard component={Sales} permission="sales" />}</Route>
+      <Route path="/sales/:id">{() => <AuthGuard component={SaleDetail} permission="sales" />}</Route>
+      <Route path="/purchases">{() => <AuthGuard component={Purchases} permission="purchases" />}</Route>
+      <Route path="/purchases/:id">{() => <AuthGuard component={PurchaseDetail} permission="purchases" />}</Route>
+      <Route path="/customers">{() => <AuthGuard component={Customers} permission="customers" />}</Route>
+      <Route path="/suppliers">{() => <AuthGuard component={Suppliers} permission="suppliers" />}</Route>
+      <Route path="/suppliers/:id">{() => <AuthGuard component={SupplierDetail} permission="suppliers" />}</Route>
+      <Route path="/expenses">{() => <AuthGuard component={Expenses} permission="expenses" />}</Route>
+      <Route path="/expenses/:id">{() => <AuthGuard component={ExpenseDetail} permission="expenses" />}</Route>
+      <Route path="/users">{() => <AuthGuard component={Users} permission="users" />}</Route>
+      <Route path="/reports">{() => <AuthGuard component={Reports} permission="reports" />}</Route>
+      <Route path="/recent-activity">{() => <AuthGuard component={RecentActivity} permission="reports" />}</Route>
+      <Route path="/quick-entry">{() => <AuthGuard component={QuickEntry} permission="sales" />}</Route>
+      <Route path="/operations">{() => <AuthGuard component={Operations} permission="inventory" />}</Route>
+      <Route path="/financial-periods">{() => <AuthGuard component={MonthsPage} permission="settings" />}</Route>
+      <Route path="/settings">{() => <AuthGuard component={Settings} permission="settings" />}</Route>
+      <Route path="/">{() => <Redirect to={isLoggedIn() ? "/dashboard" : "/login"} />}</Route>
+      <Route component={NotFound} />
     </Switch>
   );
 }
+
+function App() {
+  return (
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="alghani-theme">
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "") }>
+            <Router />
+          </WouterRouter>
+          <Toaster />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
+  );
+}
+
+export default App;

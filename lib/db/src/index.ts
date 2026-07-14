@@ -1,11 +1,12 @@
-import postgres from 'postgres';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import * as schema from './schema/index';
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
+import * as schema from "./schema/index.js";
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) throw new Error('DATABASE_URL is required');
+const { Pool } = pg;
 
-const client = postgres(connectionString);
-export const db = drizzle(client, { schema });
+const databaseUrl = process.env.DATABASE_URL;
 
-export * from './schema/index';
+export const pool = databaseUrl ? new Pool({ connectionString: databaseUrl }) : null as unknown as pg.Pool;
+export const db = databaseUrl ? drizzle(pool, { schema }) : null as any;
+
+export * from "./schema/index.js";

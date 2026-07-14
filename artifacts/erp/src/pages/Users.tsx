@@ -1,143 +1,327 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '../lib/api';
-import toast from 'react-hot-toast';
-import { Plus, Edit2, Trash2, Key, X, CheckCircle, XCircle, Shield } from 'lucide-react';
+import { useState } from "react";
+import { Layout } from "@/components/layout";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useGetUsers, useCreateUser, useUpdateUser, useDeleteUser, getGetUsersQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Plus, Edit, Trash2, Users2, Key, ShieldCheck } from "lucide-react";
+import { getUser } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
+import Confirm from "@/components/ui/confirm";
 
-type User = { id: number; name: string; email: string; role: string; isActive: boolean; permissions: string[]; createdAt: string };
+const ALL_MODULES = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "inventory", label: "Inventory" },
+  { id: "brands", label: "Brands" },
+  { id: "sales", label: "Sales" },
+  { id: "purchases", label: "Purchase" },
+  { id: "customers", label: "Customers" },
+  { id: "suppliers", label: "Suppliers" },
+  { id: "expenses", label: "Expenses" },
+  { id: "ledger", label: "Ledger" },
+  { id: "reports", label: "Reports & Analytics" },
+  { id: "users", label: "Users" },
+  { id: "settings", label: "Settings" },
+];
 
-const ALL_PERMISSIONS = ['dashboard', 'inventory', 'sales', 'purchases', 'customers', 'suppliers', 'expenses', 'reports', 'users', 'settings', 'quick-entry', 'operations', 'months', 'customer-ledger', 'supplier-ledger'];
-const ROLES = ['ceo', 'developer', 'manager', 'sales', 'accountant', 'warehouse', 'content'];
-const ROLE_COLORS: Record<string, string> = { ceo: 'badge-red', developer: 'badge-blue', manager: 'badge-yellow', sales: 'badge-green', accountant: 'badge-gray', warehouse: 'badge-gray', content: 'badge-gray' };
+type UserForm = { name: string; email: string; role: string; password: string; permissions: string[]; };
+const emptyForm: UserForm = { name: "", email: "", role: "sales", password: "", permissions: [] };
+const ROLES = ["ceo", "developer", "manager", "sales", "accountant", "warehouse", "content"];
+const roleColor = (r: string) =>
+  r === "ceo" ? "bg-primary/20 text-red-400 border-0" :
+  r === "developer" ? "bg-blue-500/10 text-blue-400 border-0" :
+  "bg-muted text-muted-foreground border-0";
 
-function UserModal({ user, onClose }: { user: User | null; onClose: () => void }) {
+const isAdminRole = (role: string) => role === "ceo" || role === "developer";
+
+export default function Users() {
   const qc = useQueryClient();
-  const [form, setForm] = useState(user ? { name: user.name, email: user.email, phone: '', role: user.role, isActive: user.isActive, permissions: user.permissions, password: '' } : { name: '', email: '', phone: '', role: 'sales', isActive: true, permissions: [] as string[], password: '' });
+  const { toast } = useToast();
+  const currentUser = getUser();
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<number | null>(null);
+  const [form, setForm] = useState<UserForm>(emptyForm);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetUserId, setResetUserId] = useState<number | null>(null);
+  const [newPassword, setNewPassword] = useState("");
 
-  const togglePermission = (p: string) => setForm(f => ({ ...f, permissions: f.permissions.includes(p) ? f.permissions.filter(x => x !== p) : [...f.permissions, p] }));
-  const grantAll = () => setForm(f => ({ ...f, permissions: [...ALL_PERMISSIONS] }));
-  const revokeAll = () => setForm(f => ({ ...f, permissions: [] }));
+  const { data, isLoading, error, isError } = useGetUsers();
+  const create = useCreateUser();
+  const update = useUpdateUser();
+  const del = useDeleteUser();
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: () => user ? api.put(`/users/${user.id}`, form) : api.post('/users', { ...form }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast.success(user ? 'User updated' : 'User created'); onClose(); },
-    onError: (e: any) => toast.error(e.response?.data?.error || 'Failed'),
-  });
+  const invalidate = () => qc.invalidateQueries({ queryKey: getGetUsersQueryKey() });
 
-  return (
-    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal modal-lg">
-        <div className="flex items-center justify-between p-6 border-b"><h2 className="font-bold">{user ? 'Edit User' : 'New User'}</h2><button onClick={onClose}><X size={20} /></button></div>
-        <div className="p-6 space-y-5">
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="label">Full Name</label><input className="input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required /></div>
-            <div><label className="label">Email</label><input type="email" className="input" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required /></div>
-            <div><label className="label">Phone</label><input className="input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></div>
-            <div><label className="label">Role</label><select className="input" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>{ROLES.map(r => <option key={r} value={r} className="capitalize">{r}</option>)}</select></div>
-            <div><label className="label">{user ? 'New Password (leave blank to keep)' : 'Password'}</label><input type="password" className="input" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder={user ? 'Leave blank to keep current' : 'Min 6 chars'} /></div>
-            <div className="flex items-end gap-3"><label className="flex items-center gap-2 cursor-pointer mb-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} /><span className="font-medium">Active Account</span></label></div>
-          </div>
+  const openNew = () => { setForm(emptyForm); setEditing(null); setOpen(true); };
+  const openEdit = (u: NonNullable<typeof data>[0]) => {
+    setForm({ name: u.name, email: u.email, role: u.role, password: "", permissions: u.permissions || [] });
+    setEditing(u.id); setOpen(true);
+  };
 
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="label !mb-0 flex items-center gap-1"><Shield size={14} />Permissions</label>
-              <div className="flex gap-2"><button onClick={grantAll} className="btn-success btn-sm">Grant All</button><button onClick={revokeAll} className="btn-secondary btn-sm">Revoke All</button></div>
-            </div>
-            <p className="text-xs text-gray-500 mb-3">Note: CEO and Developer always have full access regardless of permissions.</p>
-            <div className="grid grid-cols-3 gap-2">
-              {ALL_PERMISSIONS.map(p => (
-                <label key={p} className={`flex items-center gap-2 cursor-pointer p-2 rounded-lg border transition-colors ${form.permissions.includes(p) ? 'bg-blue-50 border-blue-300 text-blue-800' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                  <input type="checkbox" className="hidden" checked={form.permissions.includes(p)} onChange={() => togglePermission(p)} />
-                  {form.permissions.includes(p) ? <CheckCircle size={14} className="text-blue-600" /> : <XCircle size={14} className="text-gray-300" />}
-                  <span className="text-sm capitalize">{p.replace(/-/g, ' ')}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="flex justify-end gap-3 p-6 border-t"><button onClick={onClose} className="btn-secondary">Cancel</button><button onClick={() => mutate()} disabled={isPending} className="btn-primary">{isPending ? 'Saving...' : 'Save User'}</button></div>
-      </div>
-    </div>
-  );
-}
+  const togglePermission = (mod: string) => {
+    setForm(f => ({
+      ...f,
+      permissions: f.permissions.includes(mod)
+        ? f.permissions.filter(p => p !== mod)
+        : [...f.permissions, mod]
+    }));
+  };
 
-function OTPModal({ user, onClose }: { user: User; onClose: () => void }) {
-  const [otp, setOtp] = useState<string | null>(null);
-  const [generating, setGenerating] = useState(false);
-
-  const generateOTP = async () => {
-    setGenerating(true);
+  const handleSave = async () => {
+    const perms = isAdminRole(form.role) ? ALL_MODULES.map(m => m.id) : form.permissions;
     try {
-      const { data } = await api.post(`/users/${user.id}/generate-otp`);
-      setOtp(data.otp);
-      toast.success('OTP sent to user\'s email');
-    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed'); }
-    finally { setGenerating(false); }
+      if (editing) {
+        await update.mutateAsync({
+          id: editing,
+          data: {
+            name: form.name,
+            role: form.role as "ceo" | "developer" | "manager" | "sales" | "accountant" | "warehouse" | "content",
+            permissions: perms,
+          },
+        });
+        toast({ title: "User updated", description: "The user has been updated successfully." });
+      } else {
+        await create.mutateAsync({
+          data: {
+            name: form.name,
+            email: form.email,
+            role: form.role as "ceo" | "developer" | "manager" | "sales" | "accountant" | "warehouse" | "content",
+            password: form.password,
+            permissions: perms,
+          },
+        });
+        toast({ title: "User added", description: "The new user has been created successfully." });
+      }
+      invalidate();
+      setOpen(false);
+    } catch (error) {
+      toast({ title: "Failed to save user", description: (error as Error).message, variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      await del.mutateAsync({ id });
+      toast({ title: "User deleted", description: "The user has been removed." });
+      invalidate();
+    } catch (error) {
+      toast({ title: "Failed to delete user", description: (error as Error).message, variant: "destructive" });
+    }
+  };
+
+  const handleToggleActive = async (id: number, isActive: boolean) => {
+    try {
+      await update.mutateAsync({ id, data: { isActive: !isActive } });
+      toast({ title: "User status updated" });
+      invalidate();
+    } catch (error) {
+      toast({ title: "Failed to update user status", description: (error as Error).message, variant: "destructive" });
+    }
+  };
+
+  const openReset = (id: number) => { setResetUserId(id); setNewPassword(""); setResetOpen(true); };
+  const handleReset = async () => {
+    if (!resetUserId || !newPassword) return;
+    try {
+      await update.mutateAsync({ id: resetUserId, data: { password: newPassword } as any });
+      toast({ title: "Password reset", description: "User password has been updated." });
+      invalidate();
+      setResetOpen(false);
+    } catch (error) {
+      toast({ title: "Failed to reset password", description: (error as Error).message, variant: "destructive" });
+    }
   };
 
   return (
-    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal modal-sm">
-        <div className="flex items-center justify-between p-6 border-b"><h2 className="font-bold">Generate OTP for {user.name}</h2><button onClick={onClose}><X size={20} /></button></div>
-        <div className="p-6 space-y-4">
-          <p className="text-sm text-gray-600">Generate a one-time password for the user. The OTP will be sent to their email and shown below.</p>
-          {otp && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-              <p className="text-xs text-blue-600 mb-1">OTP Code</p>
-              <p className="text-3xl font-bold tracking-widest text-blue-700">{otp}</p>
-              <p className="text-xs text-gray-500 mt-2">Valid for 24 hours · Sent to {user.email}</p>
-            </div>
-          )}
-          <button onClick={generateOTP} disabled={generating} className="btn-primary w-full justify-center"><Key size={14} />{generating ? 'Generating...' : 'Generate & Send OTP'}</button>
+    <Layout>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
+              <Users2 className="w-5 h-5 sm:w-6 sm:h-6 text-primary" /> User Management
+            </h1>
+            <p className="text-muted-foreground text-sm mt-1">{data?.length || 0} users</p>
+          </div>
+          <Button onClick={openNew} className="bg-primary hover:bg-primary/90 gap-2 h-11 sm:h-9 w-full sm:w-auto">
+            <Plus className="w-4 h-4" /> Add User
+          </Button>
         </div>
+
+        <Card className="border-border bg-card">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[600px]">
+                <thead>
+                  <tr className="border-b border-border text-muted-foreground uppercase text-xs tracking-wider">
+                    <th className="px-4 py-3 text-left">Name</th>
+                    <th className="px-4 py-3 text-left">Email</th>
+                    <th className="px-4 py-3 text-center">Role</th>
+                    <th className="px-4 py-3 text-center">Status</th>
+                    <th className="px-4 py-3 text-center">Permissions</th>
+                    <th className="px-4 py-3 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">Loading...</td></tr>
+                  ) : isError ? (
+                    <tr><td colSpan={6} className="text-center py-12 text-destructive">Failed to load users: {(error as Error)?.message || "Unknown error"}</td></tr>
+                  ) : data?.length === 0 ? (
+                    <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No users found</td></tr>
+                  ) : data?.map(u => (
+                    <tr key={u.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
+                      <td className="px-4 py-3 font-medium">{u.name}</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">{u.email}</td>
+                      <td className="px-4 py-3 text-center">
+                        <Badge className={roleColor(u.role)}>{u.role}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => handleToggleActive(u.id, u.isActive ?? true)}
+                          className={`px-2 py-1 rounded text-xs font-medium transition-colors ${u.isActive ? "bg-green-500/10 text-green-400 hover:bg-red-500/10 hover:text-red-400" : "bg-red-500/10 text-red-400 hover:bg-green-500/10 hover:text-green-400"}`}
+                        >
+                          {u.isActive ? "Active" : "Disabled"}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {isAdminRole(u.role) ? (
+                          <span className="text-xs text-emerald-400 flex items-center justify-center gap-1"><ShieldCheck className="w-3 h-3" /> Full Access</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">{(u.permissions || []).length} modules</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => openEdit(u)} className="h-8 w-8 p-0 hover:bg-accent">
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => openReset(u.id)} className="h-8 w-8 p-0 hover:bg-accent" title="Reset Password">
+                            <Key className="w-3.5 h-3.5" />
+                          </Button>
+                          {u.id !== currentUser?.id && (
+                            <Confirm
+                              title="Delete this user?"
+                              description="This will permanently remove the user."
+                              onConfirm={() => handleDelete(u.id)}
+                              trigger={<Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button>}
+                            />
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
-    </div>
-  );
-}
 
-export default function Users() {
-  const [showModal, setShowModal] = useState(false);
-  const [editUser, setEditUser] = useState<User | null>(null);
-  const [otpUser, setOtpUser] = useState<User | null>(null);
-  const qc = useQueryClient();
+      {/* Add / Edit User Dialog */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="bg-card border-border w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{editing ? "Edit User" : "Add User"}</DialogTitle></DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Name *</Label>
+              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="bg-background/50 border-border h-11" />
+            </div>
+            {!editing && (
+              <>
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Email *</Label>
+                  <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="bg-background/50 border-border h-11" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Password *</Label>
+                  <Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} className="bg-background/50 border-border h-11" />
+                </div>
+              </>
+            )}
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Role</Label>
+              <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v }))}>
+                <SelectTrigger className="bg-background/50 border-border capitalize h-11"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {ROLES.map(r => <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
 
-  const { data, isLoading } = useQuery({ queryKey: ['users'], queryFn: () => api.get('/users?limit=100').then(r => r.data) });
-  const { mutate: del } = useMutation({ mutationFn: (id: number) => api.delete(`/users/${id}`), onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast.success('User deleted'); } });
+            {/* Permissions — only shown for non-admin roles */}
+            {!isAdminRole(form.role) && (
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5" /> Module Permissions
+                </Label>
+                <div className="grid grid-cols-2 gap-2 p-3 rounded-md border border-border bg-background/30">
+                  {ALL_MODULES.map(mod => (
+                    <label key={mod.id} className="flex items-center gap-2 cursor-pointer hover:text-foreground transition-colors text-sm">
+                      <Checkbox
+                        checked={form.permissions.includes(mod.id)}
+                        onCheckedChange={() => togglePermission(mod.id)}
+                        className="border-border"
+                      />
+                      <span className="text-sm text-muted-foreground">{mod.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="text-xs h-7 border-border" onClick={() => setForm(f => ({ ...f, permissions: ALL_MODULES.map(m => m.id) }))}>
+                    Select All
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-xs h-7 border-border" onClick={() => setForm(f => ({ ...f, permissions: [] }))}>
+                    Clear All
+                  </Button>
+                </div>
+              </div>
+            )}
+            {isAdminRole(form.role) && (
+              <div className="p-3 rounded-md border border-emerald-500/20 bg-emerald-500/5 text-xs text-emerald-400 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+                This role has full access to all modules automatically.
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOpen(false)} className="border-border h-11 sm:h-9">Cancel</Button>
+            <Button
+              onClick={handleSave}
+              disabled={!form.name || (!editing && (!form.email || !form.password)) || create.isPending || update.isPending}
+              className="bg-primary hover:bg-primary/90 h-11 sm:h-9"
+            >
+              {editing ? "Save" : "Add User"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-  const users: User[] = data?.data || [];
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div><h1 className="page-title">Users & Permissions</h1><p className="text-gray-500 text-sm">{users.length} team members</p></div>
-        <button onClick={() => { setEditUser(null); setShowModal(true); }} className="btn-primary"><Plus size={16} />Add User</button>
-      </div>
-      <div className="card">
-        <div className="table-container"><table className="table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Permissions</th><th>Actions</th></tr></thead>
-          <tbody>
-            {isLoading ? <tr><td colSpan={6} className="text-center py-10 text-gray-400">Loading...</td></tr> :
-             users.map(u => (
-              <tr key={u.id}>
-                <td className="font-medium">{u.name}</td>
-                <td className="text-gray-500">{u.email}</td>
-                <td><span className={`${ROLE_COLORS[u.role] || 'badge-gray'} capitalize`}>{u.role}</span></td>
-                <td><span className={u.isActive ? 'badge-green' : 'badge-red'}>{u.isActive ? 'Active' : 'Inactive'}</span></td>
-                <td>
-                  {['ceo', 'developer'].includes(u.role) ? <span className="text-blue-600 text-xs font-semibold">Full Access</span> :
-                   <span className="text-xs text-gray-500">{u.permissions.length} permissions</span>}
-                </td>
-                <td className="flex gap-1">
-                  <button onClick={() => setOtpUser(u)} className="btn-secondary btn-sm" title="Generate OTP"><Key size={13} /></button>
-                  <button onClick={() => { setEditUser(u); setShowModal(true); }} className="btn-secondary btn-sm"><Edit2 size={13} /></button>
-                  <button onClick={() => confirm(`Delete ${u.name}?`) && del(u.id)} className="btn-danger btn-sm"><Trash2 size={13} /></button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table></div>
-      </div>
-      {showModal && <UserModal user={editUser} onClose={() => { setShowModal(false); setEditUser(null); }} />}
-      {otpUser && <OTPModal user={otpUser} onClose={() => setOtpUser(null)} />}
-    </div>
+      {/* Reset Password Dialog */}
+      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+        <DialogContent className="bg-card border-border w-[95vw] max-w-sm">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Key className="w-4 h-4" /> Reset Password</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">Enter a new password for this user.</p>
+            <Input
+              type="password"
+              placeholder="New password"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              className="bg-background/50 border-border h-11"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setResetOpen(false)} className="border-border h-11 sm:h-9">Cancel</Button>
+            <Button onClick={handleReset} disabled={!newPassword} className="bg-primary hover:bg-primary/90 h-11 sm:h-9">Reset</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Layout>
   );
 }

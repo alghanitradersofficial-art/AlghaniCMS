@@ -1,175 +1,212 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '../lib/api';
-import { fmtCurrency, MONTH_NAMES } from '../lib/utils';
-import { useAuth } from '../hooks/useAuth';
-import toast from 'react-hot-toast';
-import { Lock, Unlock, X, AlertTriangle, CheckCircle, Calendar } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { Layout } from "@/components/layout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { Package, BellRing, Plus, Trash2, CheckCircle2 } from "lucide-react";
 
-const now = new Date();
+type Adjustment = {
+  id: number;
+  productId: number;
+  productName?: string;
+  direction: "increase" | "decrease";
+  quantity: number;
+  reason: string;
+  notes?: string | null;
+  createdAt: string;
+};
+
+type Reminder = {
+  id: number;
+  title: string;
+  description?: string | null;
+  dueDate: string;
+  isCompleted: boolean;
+};
 
 export default function Operations() {
-  const { user } = useAuth();
   const qc = useQueryClient();
-  const [selYear, setSelYear] = useState(now.getFullYear());
-  const [selMonth, setSelMonth] = useState(now.getMonth() + 1);
-  const [closeModal, setCloseModal] = useState(false);
-  const [notes, setNotes] = useState('');
-  const [closeYearModal, setCloseYearModal] = useState(false);
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [productId, setProductId] = useState("");
+  const [direction, setDirection] = useState("increase");
+  const [quantity, setQuantity] = useState("1");
+  const [reason, setReason] = useState("");
+  const [notes, setNotes] = useState("");
+  const [reminderTitle, setReminderTitle] = useState("");
+  const [reminderDate, setReminderDate] = useState(new Date().toISOString().slice(0, 10));
+  const [reminderDescription, setReminderDescription] = useState("");
 
-  const { data } = useQuery({ queryKey: ['months'], queryFn: () => api.get('/months').then(r => r.data) });
-  const { data: monthStatus } = useQuery({ queryKey: ['month-status', selYear, selMonth], queryFn: () => api.get(`/months/${selYear}/${selMonth}/status`).then(r => r.data) });
+  const loadData = async () => {
+    try {
+      const [adjRes, remRes] = await Promise.all([
+        apiGet<unknown>('/api/stock-adjustments'),
+        apiGet<unknown>('/api/reminders'),
+      ]);
 
-  const { mutate: closeMonth, isPending: closing } = useMutation({
-    mutationFn: () => api.post('/months/close', { year: selYear, month: selMonth, notes }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['months'] }); qc.invalidateQueries({ queryKey: ['month-status'] }); toast.success('Month closed successfully'); setCloseModal(false); setNotes(''); },
-    onError: (e: any) => toast.error(e.response?.data?.error || 'Failed'),
-  });
+      const normalizeArray = (value: unknown): any[] => {
+        if (Array.isArray(value)) return value;
+        if (value && typeof value === 'object') {
+          const container = value as Record<string, unknown>;
+          if (Array.isArray(container.data)) return container.data;
+          if (Array.isArray(container.items)) return container.items;
+        }
+        return [];
+      };
 
-  const { mutate: reopenMonth, isPending: reopening } = useMutation({
-    mutationFn: (id: number) => api.post(`/months/${id}/reopen`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['months'] }); qc.invalidateQueries({ queryKey: ['month-status'] }); toast.success('Month reopened'); },
-    onError: (e: any) => toast.error(e.response?.data?.error || 'Failed to reopen - insufficient permissions'),
-  });
+      setAdjustments(normalizeArray(adjRes).map((item: any) => ({
+        id: item.id ?? 0,
+        productId: item.productId ?? item.product_id ?? 0,
+        productName: item.productName ?? item.product_name,
+        direction: item.direction ?? 'increase',
+        quantity: Number(item.quantity ?? 0),
+        reason: item.reason ?? '',
+        notes: item.notes ?? null,
+        createdAt: item.createdAt ?? item.created_at ?? new Date().toISOString(),
+      })) as Adjustment[]);
 
-  const { mutate: closeYear, isPending: closingYear } = useMutation({
-    mutationFn: () => api.post('/months/year/close', { year: selYear, notes }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['months'] }); toast.success('Year closed'); setCloseYearModal(false); },
-    onError: (e: any) => toast.error(e.response?.data?.error || 'Failed'),
-  });
+      setReminders(normalizeArray(remRes).map((item: any) => ({
+        id: item.id ?? 0,
+        title: item.title ?? 'Reminder',
+        description: item.description ?? item.notes ?? null,
+        dueDate: item.dueDate ?? item.due_date ?? new Date().toISOString(),
+        isCompleted: Boolean(item.isCompleted ?? item.is_completed ?? false),
+      })) as Reminder[]);
+    } catch (error) {
+      setAdjustments([]);
+      setReminders([]);
+    }
+  };
 
-  const { mutate: reopenYear } = useMutation({
-    mutationFn: (id: number) => api.post(`/months/year/${id}/reopen`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['months'] }); toast.success('Year reopened'); },
-    onError: (e: any) => toast.error(e.response?.data?.error || 'Failed'),
-  });
+  useEffect(() => { loadData(); }, []);
 
-  const monthClosures = data?.months || [];
-  const yearClosures = data?.years || [];
-  const canReopen = user && ['ceo', 'developer', 'manager'].includes(user.role);
-  const isClosed = monthStatus?.status === 'closed';
+  const handleSaveAdjustment = async () => {
+    if (!productId || !reason) return;
+    await apiPost('/api/stock-adjustments', { productId: Number(productId), direction, quantity: Number(quantity), reason, notes });
+    setReason(""); setNotes(""); setQuantity("1"); setProductId("");
+    await loadData();
+    qc.invalidateQueries({ queryKey: ["products"] });
+  };
 
-  const years = Array.from(new Set([now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2]));
+  const handleSaveReminder = async () => {
+    if (!reminderTitle) return;
+    await apiPost('/api/reminders', { title: reminderTitle, description: reminderDescription, dueDate: new Date(reminderDate).toISOString() });
+    setReminderTitle(""); setReminderDate(new Date().toISOString().slice(0, 10)); setReminderDescription("");
+    await loadData();
+  };
+
+  const handleToggleReminder = async (id: number, completed: boolean) => {
+    await apiPatch(`/api/reminders/${id}`, { isCompleted: completed });
+    await loadData();
+  };
+
+  const handleDeleteReminder = async (id: number) => {
+    await apiDelete(`/api/reminders/${id}`);
+    await loadData();
+  };
 
   return (
-    <div className="space-y-6">
-      <div><h1 className="page-title">Month & Year Closing</h1><p className="text-gray-500 text-sm">Close periods to lock data. Reopen requires Manager/CEO permission.</p></div>
-
-      {/* Month Selector */}
-      <div className="card">
-        <div className="card-header"><h3 className="font-semibold flex items-center gap-2"><Calendar size={18} />Monthly Period Close</h3></div>
-        <div className="card-body space-y-5">
-          <div className="flex flex-wrap gap-4 items-end">
-            <div><label className="label">Year</label><select className="input w-32" value={selYear} onChange={e => setSelYear(Number(e.target.value))}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div>
-            <div><label className="label">Month</label><select className="input w-40" value={selMonth} onChange={e => setSelMonth(Number(e.target.value))}>{MONTH_NAMES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}</select></div>
-            <div className="flex items-center gap-2 pb-0.5">
-              {isClosed ? (
-                <span className="flex items-center gap-2 text-green-700 font-semibold"><CheckCircle size={18} className="text-green-500" />Month is Closed</span>
-              ) : (
-                <span className="flex items-center gap-2 text-blue-700 font-semibold"><Unlock size={18} />Month is Open</span>
-              )}
-            </div>
-          </div>
-
-          {monthStatus?.closure && (
-            <div className="bg-gray-50 rounded-lg p-4 grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
-              <div><p className="text-gray-500">Total Sales</p><p className="font-bold text-blue-700">{fmtCurrency(monthStatus.closure.totalSales)}</p></div>
-              <div><p className="text-gray-500">Total Purchases</p><p className="font-bold text-orange-700">{fmtCurrency(monthStatus.closure.totalPurchases)}</p></div>
-              <div><p className="text-gray-500">Total Expenses</p><p className="font-bold text-red-700">{fmtCurrency(monthStatus.closure.totalExpenses)}</p></div>
-              <div><p className="text-gray-500">Net Profit</p><p className={`font-bold ${monthStatus.closure.netProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>{fmtCurrency(monthStatus.closure.netProfit)}</p></div>
-              {monthStatus.closure.closedBy && <div className="col-span-2"><p className="text-gray-500">Closed By</p><p className="font-medium">{monthStatus.closure.closedBy}</p></div>}
-              {monthStatus.closure.notes && <div className="col-span-2"><p className="text-gray-500">Notes</p><p className="font-medium">{monthStatus.closure.notes}</p></div>}
-            </div>
-          )}
-
-          <div className="flex gap-3">
-            {!isClosed ? (
-              <button onClick={() => setCloseModal(true)} className="btn-primary"><Lock size={15} />Close {MONTH_NAMES[selMonth - 1]} {selYear}</button>
-            ) : (
-              canReopen && monthStatus?.closure && (
-                <button onClick={() => confirm('Reopen this month?') && reopenMonth(monthStatus.closure.id)} disabled={reopening} className="btn-secondary"><Unlock size={15} />{reopening ? 'Reopening...' : 'Reopen Month'}</button>
-              )
-            )}
-          </div>
+    <Layout>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Package className="w-6 h-6 text-primary" /> Operations</h1>
+          <p className="text-muted-foreground text-sm mt-1">Track stock adjustments and dues in one place.</p>
         </div>
-      </div>
 
-      {/* Month History Table */}
-      <div className="card">
-        <div className="card-header"><h3 className="font-semibold">Closure History</h3></div>
-        <div className="table-container"><table className="table"><thead><tr><th>Year</th><th>Month</th><th>Status</th><th>Sales</th><th>Purchases</th><th>Net Profit</th><th>Closed By</th><th>Action</th></tr></thead>
-          <tbody>
-            {monthClosures.length === 0 ? <tr><td colSpan={8} className="text-center py-10 text-gray-400">No closures yet</td></tr> :
-             monthClosures.map((m: any) => (
-              <tr key={m.id}>
-                <td>{m.year}</td>
-                <td className="font-medium">{MONTH_NAMES[m.month - 1]}</td>
-                <td><span className={m.status === 'closed' ? 'badge-green' : 'badge-blue'}>{m.status}</span></td>
-                <td>{fmtCurrency(m.totalSales)}</td>
-                <td>{fmtCurrency(m.totalPurchases)}</td>
-                <td className={m.netProfit >= 0 ? 'text-green-700 font-semibold' : 'text-red-600 font-semibold'}>{fmtCurrency(m.netProfit)}</td>
-                <td className="text-gray-500 text-xs">{m.closedBy || '-'}</td>
-                <td>{m.status === 'closed' && canReopen ? <button onClick={() => confirm('Reopen?') && reopenMonth(m.id)} className="btn-secondary btn-sm"><Unlock size={12} />Reopen</button> : '-'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table></div>
-      </div>
-
-      {/* Year Closures */}
-      {(user?.role === 'ceo' || user?.role === 'developer') && (
-        <div className="card">
-          <div className="card-header"><h3 className="font-semibold flex items-center gap-2"><Lock size={16} className="text-red-500" />Annual Year Close (CEO/Developer Only)</h3>
-            <button onClick={() => setCloseYearModal(true)} className="btn-danger btn-sm"><Lock size={13} />Close Year {selYear}</button>
-          </div>
-          <div className="table-container"><table className="table"><thead><tr><th>Year</th><th>Status</th><th>Sales</th><th>Net Profit</th><th>Closed By</th><th>Action</th></tr></thead>
-            <tbody>
-              {yearClosures.length === 0 ? <tr><td colSpan={6} className="text-center py-8 text-gray-400">No year closures yet</td></tr> :
-               yearClosures.map((y: any) => (
-                <tr key={y.id}>
-                  <td className="font-bold">{y.year}</td>
-                  <td><span className={y.status === 'closed' ? 'badge-green' : 'badge-blue'}>{y.status}</span></td>
-                  <td>{fmtCurrency(y.totalSales)}</td>
-                  <td className={y.netProfit >= 0 ? 'text-green-700 font-semibold' : 'text-red-600 font-semibold'}>{fmtCurrency(y.netProfit)}</td>
-                  <td className="text-gray-500 text-xs">{y.closedBy || '-'}</td>
-                  <td>{y.status === 'closed' ? <button onClick={() => confirm('Reopen year?') && reopenYear(y.id)} className="btn-secondary btn-sm"><Unlock size={12} />Reopen</button> : '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table></div>
-        </div>
-      )}
-
-      {/* Close Month Modal */}
-      {closeModal && (
-        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setCloseModal(false)}>
-          <div className="modal modal-sm">
-            <div className="flex items-center justify-between p-6 border-b"><h2 className="font-bold">Close {MONTH_NAMES[selMonth - 1]} {selYear}</h2><button onClick={() => setCloseModal(false)}><X size={20} /></button></div>
-            <div className="p-6 space-y-4">
-              <div className="flex items-start gap-3 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <AlertTriangle size={20} className="text-yellow-600 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-yellow-800"><p className="font-semibold">This will lock all records for {MONTH_NAMES[selMonth - 1]} {selYear}</p><p className="mt-1">All sales, purchases, and expenses for this period will become read-only. You will need Manager/CEO permission to reopen.</p></div>
+        <div className="grid gap-6 xl:grid-cols-2">
+          <Card className="border-border bg-card">
+            <CardHeader><CardTitle className="flex items-center gap-2"><Package className="w-5 h-5" /> Stock adjustments</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1">
+                <Label>Product ID</Label>
+                <Input type="number" value={productId} onChange={(e) => setProductId(e.target.value)} className="bg-background/50 border-border" />
               </div>
-              <div><label className="label">Notes (optional)</label><textarea className="input h-20 resize-none" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add any closing notes..." /></div>
-            </div>
-            <div className="flex justify-end gap-3 p-6 border-t"><button onClick={() => setCloseModal(false)} className="btn-secondary">Cancel</button><button onClick={() => closeMonth()} disabled={closing} className="btn-primary"><Lock size={14} />{closing ? 'Closing...' : 'Confirm Close'}</button></div>
-          </div>
-        </div>
-      )}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1">
+                  <Label>Direction</Label>
+                  <Select value={direction} onValueChange={setDirection}>
+                    <SelectTrigger className="bg-background/50 border-border"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-border">
+                      <SelectItem value="increase">Increase</SelectItem>
+                      <SelectItem value="decrease">Decrease</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Quantity</Label>
+                  <Input type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="bg-background/50 border-border" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Reason</Label>
+                <Input value={reason} onChange={(e) => setReason(e.target.value)} className="bg-background/50 border-border" />
+              </div>
+              <div className="space-y-1">
+                <Label>Notes</Label>
+                <Input value={notes} onChange={(e) => setNotes(e.target.value)} className="bg-background/50 border-border" />
+              </div>
+              <Button onClick={handleSaveAdjustment} className="bg-primary hover:bg-primary/90">Save adjustment</Button>
+              <div className="space-y-2">
+                {adjustments.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border/70 p-3 text-sm text-muted-foreground">No stock adjustments yet.</div>
+                ) : adjustments.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-border p-3 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="font-medium">{item.productName || `Product ${item.productId}`}</p>
+                        <p className="text-muted-foreground">{item.direction} by {item.quantity} — {item.reason}</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* Close Year Modal */}
-      {closeYearModal && (
-        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setCloseYearModal(false)}>
-          <div className="modal modal-sm">
-            <div className="flex items-center justify-between p-6 border-b"><h2 className="font-bold text-red-700">Close Year {selYear}</h2><button onClick={() => setCloseYearModal(false)}><X size={20} /></button></div>
-            <div className="p-6 space-y-4">
-              <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg p-4"><AlertTriangle size={20} className="text-red-600 flex-shrink-0 mt-0.5" /><p className="text-sm text-red-800 font-semibold">This will permanently close the entire year {selYear}. Only CEO/Developer can reopen.</p></div>
-              <div><label className="label">Notes</label><textarea className="input h-20 resize-none" value={notes} onChange={e => setNotes(e.target.value)} /></div>
-            </div>
-            <div className="flex justify-end gap-3 p-6 border-t"><button onClick={() => setCloseYearModal(false)} className="btn-secondary">Cancel</button><button onClick={() => closeYear()} disabled={closingYear} className="btn-danger"><Lock size={14} />{closingYear ? 'Closing...' : 'Close Year'}</button></div>
-          </div>
+          <Card className="border-border bg-card">
+            <CardHeader><CardTitle className="flex items-center gap-2"><BellRing className="w-5 h-5" /> Reminders</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1">
+                <Label>Title</Label>
+                <Input value={reminderTitle} onChange={(e) => setReminderTitle(e.target.value)} className="bg-background/50 border-border" />
+              </div>
+              <div className="space-y-1">
+                <Label>Due date</Label>
+                <Input type="date" value={reminderDate} onChange={(e) => setReminderDate(e.target.value)} className="bg-background/50 border-border" />
+              </div>
+              <div className="space-y-1">
+                <Label>Description</Label>
+                <Input value={reminderDescription} onChange={(e) => setReminderDescription(e.target.value)} className="bg-background/50 border-border" />
+              </div>
+              <Button onClick={handleSaveReminder} className="bg-primary hover:bg-primary/90">Add reminder</Button>
+              <div className="space-y-2">
+                {reminders.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border/70 p-3 text-sm text-muted-foreground">No reminders yet.</div>
+                ) : reminders.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-border p-3 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="font-medium">{item.title}</p>
+                        <p className="text-muted-foreground">{item.description || "No additional notes"}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="ghost" onClick={() => handleToggleReminder(item.id, !item.isCompleted)} className="h-8 w-8 p-0"><CheckCircle2 className={`w-4 h-4 ${item.isCompleted ? "text-green-500" : "text-muted-foreground"}`} /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleDeleteReminder(item.id)} className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">Due {new Date(item.dueDate).toLocaleDateString()} • {item.isCompleted ? "Completed" : "Pending"}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      )}
-    </div>
+      </div>
+    </Layout>
   );
 }

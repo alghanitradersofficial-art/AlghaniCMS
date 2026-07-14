@@ -1,127 +1,91 @@
-import { Router } from 'express';
-import { db, products, categories, brands } from '@workspace/db';
-import { eq, ilike, and, sql } from 'drizzle-orm';
-import { authMiddleware } from '../lib/auth.js';
+import { Router } from "express";
+import { CreateProductBody, UpdateProductBody, GetProductsQueryParams } from "@workspace/api-zod";
+import productsService from "../services/products.service.js";
+import { getUserIdFromRequest } from "../lib/auth-context.js";
 
 const router = Router();
-router.use(authMiddleware);
 
 // GET /api/products
-router.get('/', async (req, res) => {
+router.get("/", async (req, res): Promise<any> => {
   try {
-    const { search, categoryId, brandId, lowStock, page = 1, limit = 20 } = req.query;
-    const offset = (Number(page) - 1) * Number(limit);
-
-    const conditions: any[] = [];
-    if (search) conditions.push(ilike(products.name, `%${search}%`));
-    if (categoryId) conditions.push(eq(products.categoryId, Number(categoryId)));
-    if (brandId) conditions.push(eq(products.brandId, Number(brandId)));
-    if (lowStock === 'true') conditions.push(sql`CAST(current_stock AS NUMERIC) <= CAST(min_stock AS NUMERIC)`);
-
-    const where = conditions.length ? and(...conditions) : undefined;
-    const rows = await db.select({
-      id: products.id, name: products.name, sku: products.sku,
-      description: products.description, categoryId: products.categoryId,
-      brandId: products.brandId, categoryName: categories.name,
-      brandName: brands.name, costPrice: products.costPrice,
-      salePrice: products.salePrice, currentStock: products.currentStock,
-      minStock: products.minStock, unit: products.unit,
-      oemNumber: products.oemNumber, barcode: products.barcode,
-      createdAt: products.createdAt,
-    })
-      .from(products)
-      .leftJoin(categories, eq(products.categoryId, categories.id))
-      .leftJoin(brands, eq(products.brandId, brands.id))
-      .where(where)
-      .orderBy(products.name)
-      .limit(Number(limit))
-      .offset(offset);
-
-    const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(products).where(where);
-
-    return res.json({
-      data: rows.map(r => ({ ...r, costPrice: Number(r.costPrice), salePrice: Number(r.salePrice), currentStock: Number(r.currentStock), minStock: Number(r.minStock), createdAt: r.createdAt.toISOString() })),
-      total: Number(count), page: Number(page), limit: Number(limit),
-    });
-  } catch { return res.status(500).json({ error: 'Failed to fetch products' }); }
-});
-
-// GET /api/products/:id
-router.get('/:id', async (req, res) => {
-  const [row] = await db.select().from(products).where(eq(products.id, Number(req.params.id)));
-  if (!row) return res.status(404).json({ error: 'Not found' });
-  return res.json({ ...row, costPrice: Number(row.costPrice), salePrice: Number(row.salePrice), currentStock: Number(row.currentStock), minStock: Number(row.minStock), createdAt: row.createdAt.toISOString() });
-});
-
-// POST /api/products
-router.post('/', async (req, res) => {
-  try {
-    const body = req.body;
-    const [row] = await db.insert(products).values({
-      name: body.name, sku: body.sku, description: body.description,
-      categoryId: body.categoryId || null, brandId: body.brandId || null,
-      costPrice: String(body.costPrice), salePrice: String(body.salePrice),
-      currentStock: String(body.currentStock || 0), minStock: String(body.minStock || 0),
-      unit: body.unit || 'pcs', oemNumber: body.oemNumber, barcode: body.barcode,
-      createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
-    }).returning();
-    return res.status(201).json(row);
-  } catch (err: any) {
-    return res.status(400).json({ error: err.message });
+    const params = GetProductsQueryParams.parse(req.query);
+    const result = await productsService.listProducts(params as Record<string, unknown>);
+    return res.json(result);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to fetch products" });
   }
 });
 
-// PUT /api/products/:id
-router.put('/:id', async (req, res) => {
+// POST /api/products
+router.post("/", async (req, res): Promise<any> => {
   try {
-    const body = req.body;
-    const [row] = await db.update(products).set({
-      name: body.name, sku: body.sku, description: body.description,
-      categoryId: body.categoryId || null, brandId: body.brandId || null,
-      costPrice: body.costPrice !== undefined ? String(body.costPrice) : undefined,
-      salePrice: body.salePrice !== undefined ? String(body.salePrice) : undefined,
-      currentStock: body.currentStock !== undefined ? String(body.currentStock) : undefined,
-      minStock: body.minStock !== undefined ? String(body.minStock) : undefined,
-      unit: body.unit, oemNumber: body.oemNumber, barcode: body.barcode,
-      updatedAt: new Date(),
-    }).where(eq(products.id, Number(req.params.id))).returning();
-    if (!row) return res.status(404).json({ error: 'Not found' });
-    return res.json(row);
-  } catch (err: any) { return res.status(400).json({ error: err.message }); }
+    const body = CreateProductBody.parse(req.body) as any;
+    const actorUserId = getUserIdFromRequest(req);
+    const product = await productsService.createProduct(body, actorUserId);
+    return res.status(201).json(product);
+  } catch (error) {
+    console.error("product create failed", error);
+    return res.status(500).json({ error: "Failed to create product" });
+  }
+});
+
+// GET /api/products/:id
+router.get("/:id", async (req, res): Promise<any> => {
+  try {
+    const id = parseInt(req.params.id);
+    const product = await productsService.getProduct(id);
+    if (!product) return res.status(404).json({ error: "Product not found" });
+    return res.json(product);
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to fetch product" });
+  }
+});
+
+// PATCH /api/products/:id
+router.patch("/:id", async (req, res): Promise<any> => {
+  try {
+    const id = parseInt(req.params.id);
+    const body = UpdateProductBody.parse(req.body) as any;
+    const actorUserId = getUserIdFromRequest(req);
+    const product = await productsService.updateProduct(id, body, actorUserId);
+    if (!product) return res.status(404).json({ error: "Product not found" });
+    return res.json(product);
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to update product" });
+  }
 });
 
 // DELETE /api/products/:id
-router.delete('/:id', async (req, res) => {
-  await db.delete(products).where(eq(products.id, Number(req.params.id)));
-  return res.status(204).send();
-});
-
-// ---- Categories ----
-router.get('/categories/all', async (_req, res) => {
-  const rows = await db.select().from(categories).orderBy(categories.name);
-  return res.json(rows.map(r => ({ ...r, productCount: 0 })));
-});
-router.post('/categories/create', async (req, res) => {
-  const [row] = await db.insert(categories).values({ name: req.body.name, description: req.body.description }).returning();
-  return res.status(201).json({ ...row, productCount: 0 });
-});
-router.delete('/categories/:id', async (req, res) => {
-  await db.delete(categories).where(eq(categories.id, Number(req.params.id)));
-  return res.status(204).send();
-});
-
-// ---- Brands ----
-router.get('/brands/all', async (_req, res) => {
-  const rows = await db.select().from(brands).orderBy(brands.name);
-  return res.json(rows.map(r => ({ ...r, productCount: 0 })));
-});
-router.post('/brands/create', async (req, res) => {
-  const [row] = await db.insert(brands).values({ name: req.body.name, description: req.body.description }).returning();
-  return res.status(201).json({ ...row, productCount: 0 });
-});
-router.delete('/brands/:id', async (req, res) => {
-  await db.delete(brands).where(eq(brands.id, Number(req.params.id)));
-  return res.status(204).send();
+router.delete("/:id", async (req, res): Promise<any> => {
+  try {
+    const id = parseInt(req.params.id);
+    const actorUserId = getUserIdFromRequest(req);
+    await productsService.deleteProduct(id, actorUserId);
+    return res.status(204).send();
+  } catch (error) {
+    console.error(error);
+    // Detect Postgres foreign-key violation (references preventing delete)
+    const pgCode = (error as any)?.code;
+    if (pgCode === "23503") {
+      return res.status(409).json({ error: "Product cannot be deleted because it is referenced by other records", details: (error as any)?.detail ?? null });
+    }
+    // Application-level reference check
+    if ((error as any)?.code === "REFERENCED") {
+      return res.status(409).json({ error: "Product cannot be deleted because it is referenced by other records", details: (error as any)?.detail ?? null });
+    }
+    // Cloudinary cleanup failure - propagate clearer message
+    if ((error as any)?.message === "Failed to delete product image before product removal") {
+      const body: any = { error: (error as any).message };
+      if (process.env.NODE_ENV !== "production") { body.detail = (error as any); }
+      return res.status(500).json(body);
+    }
+    const resp: any = { error: "Failed to delete product" };
+    if (process.env.NODE_ENV !== "production") {
+      resp.detail = { message: (error as any)?.message, code: (error as any)?.code, detail: (error as any)?.detail, stack: (error as any)?.stack };
+    }
+    return res.status(500).json(resp);
+  }
 });
 
 export default router;

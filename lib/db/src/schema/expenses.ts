@@ -1,12 +1,18 @@
-import { pgTable, serial, varchar, text, numeric, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, numeric, integer } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
 
-export const expenses = pgTable('expenses', {
-  id: serial('id').primaryKey(),
-  title: varchar('title', { length: 255 }).notNull(),
-  category: varchar('category', { length: 100 }).notNull(),
-  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
-  date: timestamp('date').notNull().defaultNow(),
-  notes: text('notes'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+export const expensesTable = pgTable("expenses", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  category: text("category").notNull(),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  date: text("date").notNull(),
+  notes: text("notes"),
+  createdByUserId: integer("created_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const insertExpenseSchema = createInsertSchema(expensesTable).omit({ id: true, createdAt: true });
+export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+export type Expense = typeof expensesTable.$inferSelect;

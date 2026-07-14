@@ -21,6 +21,5 @@ export interface Sale {
   /** @nullable */
   notes?: string | null;
   items: SaleItem[];
-  saleDate: string;
   createdAt: string;
 }
