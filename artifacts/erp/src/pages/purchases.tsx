@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Layout } from "@/components/layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,8 @@ export default function Purchases() {
   const [editPurchaseId, setEditPurchaseId] = useState<number | null>(null);
   const [editStatus, setEditStatus] = useState<"pending" | "received" | "cancelled">("pending");
   const [editNotes, setEditNotes] = useState("");
+  const [editPurchaseDate, setEditPurchaseDate] = useState(new Date().toISOString().slice(0, 10));
+  const [editItems, setEditItems] = useState<LineItem[]>([]);
 
   const { data, isLoading } = useGetPurchases({ search: search || undefined, status: statusFilter as "pending" | "received" | "cancelled" | undefined, page, limit: 20 });
   const { data: products } = useGetProducts({ limit: 100 });
@@ -41,15 +43,17 @@ export default function Purchases() {
 
   const openNew = () => { setSupplierName(""); setSupplierId(undefined); setNotes(""); setPurchaseDate(new Date().toISOString().slice(0, 10)); setItems([]); setOpen(true); };
 
-  const addItem = () => {
+  const addItemTo = (setter: React.Dispatch<React.SetStateAction<LineItem[]>>) => {
     if (products?.data[0]) {
       const p = products.data[0];
-      setItems(prev => [...prev, { productId: p.id, productName: p.name, quantity: 1, unitCost: p.costPrice }]);
+      setter(prev => [...prev, { productId: p.id, productName: p.name, quantity: 1, unitCost: p.costPrice }]);
     }
   };
+  const addItem = () => addItemTo(setItems);
+  const addEditItem = () => addItemTo(setEditItems);
 
-  const updateItem = (idx: number, field: keyof LineItem, val: string | number) => {
-    setItems(prev => {
+  const updateItemIn = (setter: React.Dispatch<React.SetStateAction<LineItem[]>>, idx: number, field: keyof LineItem, val: string | number) => {
+    setter(prev => {
       const next = [...prev];
       if (field === "productId") {
         const product = products?.data.find(p => p.id === Number(val));
@@ -60,22 +64,29 @@ export default function Purchases() {
       return next;
     });
   };
+  const updateItem = (idx: number, field: keyof LineItem, val: string | number) => updateItemIn(setItems, idx, field, val);
+  const updateEditItem = (idx: number, field: keyof LineItem, val: string | number) => updateItemIn(setEditItems, idx, field, val);
 
   const total = items.reduce((s, i) => s + i.quantity * i.unitCost, 0);
+  const editTotal = editItems.reduce((s, i) => s + i.quantity * i.unitCost, 0);
 
   const handleSave = async () => {
-    await createPurchase.mutateAsync({
-      data: {
-        supplierName,
-        notes: notes || undefined,
-        items: items.map(i => ({ productId: i.productId, quantity: i.quantity, unitCost: i.unitCost })),
-        // supplierId links this PO to a real supplier record so it posts to
-        // their ledger/khata; purchaseDate enables backdated entry. Both are
-        // accepted by the backend but not yet part of the generated type.
-        ...({ supplierId, purchaseDate: new Date(purchaseDate).toISOString() } as {}),
-      }
-    });
-    invalidate(); setOpen(false);
+    try {
+      await createPurchase.mutateAsync({
+        data: {
+          supplierName,
+          notes: notes || undefined,
+          items: items.map(i => ({ productId: i.productId, quantity: i.quantity, unitCost: i.unitCost })),
+          // supplierId links this PO to a real supplier record so it posts to
+          // their ledger/khata; purchaseDate enables backdated entry. Both are
+          // accepted by the backend but not yet part of the generated type.
+          ...({ supplierId, purchaseDate: new Date(purchaseDate).toISOString() } as {}),
+        }
+      });
+      invalidate(); setOpen(false);
+    } catch (error: any) {
+      alert(error?.message || "Failed to create purchase. If this date is in a closed month, reopen the month first from the Months page.");
+    }
   };
 
   const handleStatusUpdate = async (id: number, status: "pending" | "received" | "cancelled") => {
@@ -88,21 +99,39 @@ export default function Purchases() {
     setEditPurchaseId(purchase.id);
     setEditStatus(purchase.status);
     setEditNotes(purchase.notes || "");
+    setEditPurchaseDate((purchase.purchaseDate ?? purchase.createdAt).slice(0, 10));
+    setEditItems(purchase.items.map(i => ({ productId: i.productId, productName: i.productName, quantity: i.quantity, unitCost: i.unitCost })));
     setEditOpen(true);
   };
 
   const handleSavePurchaseEdit = async () => {
     if (!editPurchaseId) return;
-    await updatePurchase.mutateAsync({ id: editPurchaseId, data: { status: editStatus, notes: editNotes || undefined } });
-    invalidate();
-    setEditOpen(false);
-    setEditPurchaseId(null);
+    try {
+      await updatePurchase.mutateAsync({
+        id: editPurchaseId,
+        data: {
+          status: editStatus,
+          notes: editNotes || undefined,
+          items: editItems.map(i => ({ productId: i.productId, quantity: i.quantity, unitCost: i.unitCost })),
+          ...({ purchaseDate: new Date(editPurchaseDate).toISOString() } as {}),
+        },
+      });
+      invalidate();
+      setEditOpen(false);
+      setEditPurchaseId(null);
+    } catch (error: any) {
+      alert(error?.message || "Failed to update purchase. If this PO is in a closed month, reopen the month first from the Months page.");
+    }
   };
 
   const handleDeletePurchase = async (id: number) => {
     if (!confirm("Delete this purchase?")) return;
-    await apiDelete(`/api/purchases/${id}`);
-    invalidate();
+    try {
+      await apiDelete(`/api/purchases/${id}`);
+      invalidate();
+    } catch (error: any) {
+      alert(error?.message || "Failed to delete purchase. If this PO is in a closed month, reopen the month first from the Months page.");
+    }
   };
 
   return (
@@ -233,8 +262,8 @@ export default function Purchases() {
       </Dialog>
 
       <Dialog open={editOpen} onOpenChange={(open) => { setEditOpen(open); if (!open) setEditPurchaseId(null); }}>
-        <DialogContent className="bg-card border-border max-w-md">
-          <DialogHeader><DialogTitle>Edit Purchase</DialogTitle></DialogHeader>
+        <DialogContent className="bg-card border-border max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Edit Purchase Order</DialogTitle></DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="space-y-1">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">Status</Label>
@@ -247,14 +276,45 @@ export default function Purchases() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
-              <Input value={editNotes} onChange={e => setEditNotes(e.target.value)} className="bg-background/50 border-border" />
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Items</Label>
+                <Button size="sm" variant="outline" onClick={addEditItem} className="border-border gap-1 h-7 text-xs"><Plus className="w-3 h-3" /> Add Item</Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Changing quantities or products here will automatically adjust stock and this supplier's ledger to match.</p>
+              {editItems.map((item, idx) => (
+                <div key={idx} className="flex gap-2 items-center">
+                  <Select value={String(item.productId)} onValueChange={v => updateEditItem(idx, "productId", v)}>
+                    <SelectTrigger className="flex-1 bg-background/50 border-border text-xs h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-border">{products?.data.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <Input type="number" value={item.quantity} onChange={e => updateEditItem(idx, "quantity", e.target.value)} className="w-20 bg-background/50 border-border h-9 text-xs" min={1} />
+                  <Input type="number" value={item.unitCost} onChange={e => updateEditItem(idx, "unitCost", e.target.value)} className="w-28 bg-background/50 border-border h-9 text-xs" />
+                  <span className="text-xs w-24 text-right text-muted-foreground">Rs. {(item.quantity * item.unitCost).toLocaleString()}</span>
+                  <Button size="sm" variant="ghost" onClick={() => setEditItems(prev => prev.filter((_, i) => i !== idx))} className="w-8 h-8 p-0 hover:bg-destructive/20 hover:text-destructive"><X className="w-4 h-4" /></Button>
+                </div>
+              ))}
+              {editItems.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No items — add at least one line item.</p>}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
+                <Input value={editNotes} onChange={e => setEditNotes(e.target.value)} className="bg-background/50 border-border" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Purchase Date</Label>
+                <Input type="date" value={editPurchaseDate} onChange={e => setEditPurchaseDate(e.target.value)} className="bg-background/50 border-border" />
+              </div>
+            </div>
+            <div className="border-t border-border pt-3 text-right">
+              <p className="text-lg font-bold text-secondary">Total: Rs. {editTotal.toLocaleString()}</p>
             </div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => { setEditOpen(false); setEditPurchaseId(null); }} className="border-border">Cancel</Button>
-            <Button onClick={handleSavePurchaseEdit} disabled={updatePurchase.isPending} className="bg-primary hover:bg-primary/90">Save</Button>
+            <Button onClick={handleSavePurchaseEdit} disabled={updatePurchase.isPending || editItems.length === 0} className="bg-primary hover:bg-primary/90">Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

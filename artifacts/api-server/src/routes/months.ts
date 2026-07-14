@@ -37,6 +37,26 @@ router.post("/reopen", async (req, res) => {
   }
 });
 
+/**
+ * Recompute a closed month's stored numbers from current transaction data
+ * and cascade the fix forward through every later closed month's opening
+ * balances. Use this after editing entries inside a reopened month, so the
+ * Months page reflects reality again without having to fully close the
+ * month a second time.
+ */
+router.post("/recalculate", async (req, res) => {
+  try {
+    const { year, month } = req.body;
+    if (!year || !month) return res.status(400).json({ error: "year and month required" });
+    const actorUserId = getUserIdFromRequest(req);
+    await monthsService.recalculateForwardChain(year, month, actorUserId);
+    return res.json({ ok: true, message: `Recalculated ${year}-${month} and all later closed months.` });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to recalculate month" });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);

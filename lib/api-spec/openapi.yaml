@@ -985,6 +985,19 @@ components:
         profit:
           type: number
 
+    ProfitLossBreakdownPoint:
+      type: object
+      required: [label, sales, costOfGoods, profit]
+      properties:
+        label:
+          type: string
+        sales:
+          type: number
+        costOfGoods:
+          type: number
+        profit:
+          type: number
+
     ActivityItem:
       type: object
       required: [id, type, description, amount, createdAt]
@@ -1217,7 +1230,7 @@ components:
 
     Sale:
       type: object
-      required: [id, invoiceNumber, customerId, customerName, status, subtotal, discount, total, items, createdAt]
+      required: [id, invoiceNumber, customerId, customerName, status, subtotal, discount, total, items, saleDate, createdAt]
       properties:
         id:
           type: integer
@@ -1242,6 +1255,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SaleItem"
+        saleDate:
+          type: string
+          description: The invoice date (may be backdated), distinct from createdAt which is when the record was entered into the system.
         createdAt:
           type: string
 
@@ -1301,6 +1317,14 @@ components:
           type: number
         notes:
           type: string
+        saleDate:
+          type: string
+          description: Change the invoice date (backdating). Re-validated against closed periods.
+        items:
+          type: array
+          description: Replace the full line-item list. Triggers stock and ledger reconciliation against the previous items.
+          items:
+            $ref: "#/components/schemas/SaleItemInput"
 
     PurchaseItem:
       type: object
@@ -1319,7 +1343,7 @@ components:
 
     Purchase:
       type: object
-      required: [id, poNumber, supplierId, supplierName, status, subtotal, total, items, createdAt]
+      required: [id, poNumber, supplierId, supplierName, status, subtotal, total, items, purchaseDate, createdAt]
       properties:
         id:
           type: integer
@@ -1342,6 +1366,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PurchaseItem"
+        purchaseDate:
+          type: string
+          description: The purchase date (may be backdated), distinct from createdAt which is when the record was entered into the system.
         createdAt:
           type: string
 
@@ -1397,6 +1424,14 @@ components:
           enum: [pending, received, cancelled]
         notes:
           type: string
+        purchaseDate:
+          type: string
+          description: Change the purchase date (backdating). Re-validated against closed periods.
+        items:
+          type: array
+          description: Replace the full line-item list. Triggers stock and supplier ledger reconciliation against the previous items.
+          items:
+            $ref: "#/components/schemas/PurchaseItemInput"
 
     Customer:
       type: object
@@ -1642,7 +1677,7 @@ components:
 
     ProfitLossReport:
       type: object
-      required: [period, revenue, costOfGoods, grossProfit, expenses, netProfit, breakdown]
+      required: [period, revenue, costOfGoods, grossProfit, expenses, netProfit, totalPurchases, breakdown]
       properties:
         period:
           type: string
@@ -1650,16 +1685,20 @@ components:
           type: number
         costOfGoods:
           type: number
+          description: Actual cost of goods sold, computed from the recorded cost price of each sold item (not from period purchases).
         grossProfit:
           type: number
         expenses:
           type: number
         netProfit:
           type: number
+        totalPurchases:
+          type: number
+          description: Total purchases in the period, shown separately for cash-flow visibility. Not used to compute profit.
         breakdown:
           type: array
           items:
-            $ref: "#/components/schemas/ChartDataPoint"
+            $ref: "#/components/schemas/ProfitLossBreakdownPoint"
 
     InventoryReport:
       type: object

@@ -59,9 +59,21 @@ export default function MonthsPage() {
       await apiPost(`/api/months/reopen`, { year, month, reason: "Administrator reopened the month" });
       qc.invalidateQueries({ queryKey: ["months-closures"] });
       qc.invalidateQueries({ queryKey: ["financial-period-overview"] });
-      setStatusMessage("Month reopened successfully.");
+      setStatusMessage("Month reopened successfully. After making your edits, click \"Recalculate\" to refresh this and every later closed month's numbers.");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Unable to reopen month right now.");
+    }
+  }
+
+  async function handleRecalculate() {
+    try {
+      setStatusMessage(null);
+      const result = await apiPost<any>(`/api/months/recalculate`, { year, month });
+      qc.invalidateQueries({ queryKey: ["months-closures"] });
+      qc.invalidateQueries({ queryKey: ["financial-period-overview"] });
+      setStatusMessage(result?.message || "Recalculated successfully.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Unable to recalculate right now.");
     }
   }
 
@@ -85,6 +97,7 @@ export default function MonthsPage() {
             </select>
             <Button onClick={handleClose}>Close Month</Button>
             <Button variant="outline" onClick={handleReopen}>Reopen</Button>
+            <Button variant="outline" onClick={handleRecalculate}>Recalculate</Button>
           </div>
         </div>
 
@@ -137,8 +150,11 @@ export default function MonthsPage() {
               {closureRows.map((c: any) => (
                 <div key={c.id} className="flex flex-col gap-2 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <div className="font-semibold">{c.year}-{String(c.month).padStart(2, "0")}</div>
-                    <div className="text-sm text-muted-foreground">Created: {formatSafeDate(c.created_at)}</div>
+                    <div className="font-semibold flex items-center gap-2">
+                      {c.year}-{String(c.month).padStart(2, "0")}
+                      {c.updated_after_closing && <span className="rounded-full bg-amber-500/15 text-amber-600 text-xs px-2 py-0.5">Recalculated after closing</span>}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Closed: {formatSafeDate(c.created_at)}</div>
                   </div>
                   <div className="text-right text-sm">
                     <div>Total Sales: Rs. {Number(c.total_sales).toLocaleString()}</div>

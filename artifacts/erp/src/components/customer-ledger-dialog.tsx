@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useCustomerLedger, useLedgerTimeline, useRecordPayment, type RecordPaymentInput } from "@/hooks/use-ledger";
+import { useCustomerLedger, useLedgerTimeline, useRecordPayment, type RecordPaymentInput, type LedgerTimelineEntry } from "@/hooks/use-ledger";
 import { Wallet, Receipt, ArrowDownCircle, ArrowUpCircle, AlertTriangle } from "lucide-react";
 
 interface CustomerLedgerDialogProps {
@@ -26,7 +26,9 @@ const METHODS: Array<{ value: RecordPaymentInput["method"]; label: string }> = [
 
 export function CustomerLedgerDialog({ customerId, customerName, open, onOpenChange }: CustomerLedgerDialogProps) {
   const { data: ledger, isLoading, isError, error } = useCustomerLedger(customerId ?? undefined);
-  const { data: timeline, isError: timelineError } = useLedgerTimeline(customerId ?? undefined);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const { data: timeline, isError: timelineError } = useLedgerTimeline(customerId ?? undefined, 1, dateFrom || undefined, dateTo || undefined);
   const recordPayment = useRecordPayment();
 
   const [amount, setAmount] = useState("");
@@ -93,13 +95,23 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
             </div>
 
             <div className="border-t border-border pt-4">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground mb-2 block flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5" /> Ledger Timeline</Label>
+              <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5" /> Ledger Timeline</Label>
+                <div className="flex items-center gap-1.5">
+                  <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-7 w-[130px] text-xs bg-background/50 border-border" />
+                  <span className="text-xs text-muted-foreground">to</span>
+                  <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-7 w-[130px] text-xs bg-background/50 border-border" />
+                  {(dateFrom || dateTo) && (
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => { setDateFrom(""); setDateTo(""); }}>Clear</Button>
+                  )}
+                </div>
+              </div>
               <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                 {timelineError ? (
                   <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
                     Failed to load timeline entries.
                   </div>
-                ) : timeline?.data.length ? timeline.data.map(entry => (
+                ) : timeline?.data.length ? timeline.data.map((entry: LedgerTimelineEntry) => (
                   <div key={entry.id} className="flex items-center justify-between text-xs border-b border-border/50 pb-2">
                     <div className="flex items-center gap-2">
                       {entry.amount >= 0 ? <ArrowUpCircle className="w-4 h-4 text-red-400" /> : <ArrowDownCircle className="w-4 h-4 text-green-400" />}
@@ -115,7 +127,7 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
                       <div className="text-muted-foreground">Bal: Rs. {entry.runningBalance.toLocaleString()}</div>
                     </div>
                   </div>
-                )) : <div className="text-xs text-muted-foreground text-center py-6">No transactions yet.</div>}
+                )) : <div className="text-xs text-muted-foreground text-center py-6">{dateFrom || dateTo ? "No transactions in this date range." : "No transactions yet."}</div>}
               </div>
             </div>
           </div>

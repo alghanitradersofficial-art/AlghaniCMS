@@ -5,7 +5,7 @@
  * Al Ghani Wholesale Traders ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { ChartDataPoint } from './chartDataPoint.js';
+import type { ProfitLossBreakdownPoint } from './profitLossBreakdownPoint.js';
 
 export interface ProfitLossReport {
   period: string;
@@ -14,5 +14,6 @@ export interface ProfitLossReport {
   grossProfit: number;
   expenses: number;
   netProfit: number;
-  breakdown: ChartDataPoint[];
+  totalPurchases: number;
+  breakdown: ProfitLossBreakdownPoint[];
 }

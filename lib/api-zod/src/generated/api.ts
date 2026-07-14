@@ -481,7 +481,13 @@ export const UpdateSaleParams = zod.object({
 export const UpdateSaleBody = zod.object({
   "status": zod.enum(['pending', 'completed', 'cancelled']).optional(),
   "discount": zod.number().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "saleDate": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "quantity": zod.number(),
+  "unitPrice": zod.number()
+})).optional()
 })
 
 export const UpdateSaleResponse = zod.object({
@@ -624,7 +630,13 @@ export const UpdatePurchaseParams = zod.object({
 
 export const UpdatePurchaseBody = zod.object({
   "status": zod.enum(['pending', 'received', 'cancelled']).optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "purchaseDate": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "quantity": zod.number(),
+  "unitCost": zod.number()
+})).optional()
 })
 
 export const UpdatePurchaseResponse = zod.object({
@@ -1015,10 +1027,11 @@ export const GetProfitLossReportResponse = zod.object({
   "grossProfit": zod.number(),
   "expenses": zod.number(),
   "netProfit": zod.number(),
+  "totalPurchases": zod.number(),
   "breakdown": zod.array(zod.object({
   "label": zod.string(),
   "sales": zod.number(),
-  "purchases": zod.number(),
+  "costOfGoods": zod.number(),
   "profit": zod.number()
 }))
 })

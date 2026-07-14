@@ -1,4 +1,4 @@
-import { usePriceHistory, usePriceSuggestion } from "@/hooks/use-ledger";
+import { usePriceHistory, usePriceSuggestion, type PriceSuggestion } from "@/hooks/use-ledger";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, TrendingUp, TrendingDown, History } from "lucide-react";
 import { useState } from "react";
@@ -78,7 +78,7 @@ export function PriceHistoryPanel({ customerId, productId, proposedPrice }: Pric
               <div>Vs. previous: {suggestion.differenceFromPreviousPrice! >= 0 ? "+" : ""}Rs. {suggestion.differenceFromPreviousPrice?.toLocaleString()}</div>
             )}
           </div>
-          {suggestion.warnings.map((w, i) => (
+          {suggestion.warnings.map((w: PriceSuggestion["warnings"][number], i: number) => (
             <div key={i} className={`flex items-start gap-1.5 rounded px-2 py-1 ${w.level === "error" ? "bg-red-500/10 text-red-400" : "bg-yellow-500/10 text-yellow-400"}`}>
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               <span>{w.message}</span>

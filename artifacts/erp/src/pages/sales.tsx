@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Layout } from "@/components/layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,10 @@ export default function Sales() {
   const [editingSale, setEditingSale] = useState<NonNullable<typeof data>['data'][0] | null>(null);
   const [editSaleStatus, setEditSaleStatus] = useState<"pending" | "completed" | "cancelled">("pending");
   const [editSaleNotes, setEditSaleNotes] = useState("");
+  const [editSaleDiscount, setEditSaleDiscount] = useState("0");
+  const [editSaleDate, setEditSaleDate] = useState(new Date().toISOString().slice(0, 10));
+  const [editItems, setEditItems] = useState<LineItem[]>([]);
+  const [editExpandedRow, setEditExpandedRow] = useState<number | null>(null);
 
   const { data, isLoading } = useGetSales({ search: search || undefined, status: statusFilter as "pending" | "completed" | "cancelled" | undefined, page, limit: 20 });
   const { data: products } = useGetProducts({ limit: 100 });
@@ -47,15 +51,17 @@ export default function Sales() {
     setCustomerName(""); setCustomerId(undefined); setDiscount("0"); setNotes(""); setSaleDate(new Date().toISOString().slice(0, 10)); setItems([]); setEditingSale(null); setExpandedRow(null); setOpen(true);
   };
 
-  const addItem = () => {
+  const addItemTo = (setter: React.Dispatch<React.SetStateAction<LineItem[]>>) => {
     if (products?.data[0]) {
       const p = products.data[0];
-      setItems(prev => [...prev, { productId: p.id, productName: p.name, quantity: 1, unitPrice: 0 }]);
+      setter(prev => [...prev, { productId: p.id, productName: p.name, quantity: 1, unitPrice: 0 }]);
     }
   };
+  const addItem = () => addItemTo(setItems);
+  const addEditItem = () => addItemTo(setEditItems);
 
-  const updateItem = (idx: number, field: keyof LineItem, val: string | number) => {
-    setItems(prev => {
+  const updateItemIn = (setter: React.Dispatch<React.SetStateAction<LineItem[]>>, forCustomerId: number | undefined, idx: number, field: keyof LineItem, val: string | number) => {
+    setter(prev => {
       const next = [...prev];
       if (field === "productId") {
         const product = products?.data.find(p => p.id === Number(val));
@@ -65,16 +71,16 @@ export default function Sales() {
           next[idx] = { ...next[idx], productId: product.id, productName: product.name, unitPrice: 0 };
           (async () => {
             try {
-              if (customerId) {
-                const suggestion = await apiGet<any>(`/api/customers/${customerId}/price-suggestion/${product.id}`);
+              if (forCustomerId) {
+                const suggestion = await apiGet<any>(`/api/customers/${forCustomerId}/price-suggestion/${product.id}`);
                 const prev = suggestion.previousCustomerPrice ?? null;
-                setItems(cur => {
+                setter(cur => {
                   const n = [...cur];
                   n[idx] = { ...n[idx], unitPrice: prev ?? product.salePrice ?? 0 };
                   return n;
                 });
               } else {
-                setItems(cur => {
+                setter(cur => {
                   const n = [...cur];
                   n[idx] = { ...n[idx], unitPrice: product.salePrice ?? 0 };
                   return n;
@@ -91,25 +97,31 @@ export default function Sales() {
       return next;
     });
   };
+  const updateItem = (idx: number, field: keyof LineItem, val: string | number) => updateItemIn(setItems, customerId, idx, field, val);
+  const updateEditItem = (idx: number, field: keyof LineItem, val: string | number) => updateItemIn(setEditItems, editingSale?.customerId ?? undefined, idx, field, val);
 
   const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
   const total = subtotal - parseFloat(discount || "0");
 
   const handleSave = async () => {
-    await createSale.mutateAsync({
-      data: {
-        customerId,
-        customerName,
-        discount: parseFloat(discount || "0"),
-        notes: notes || undefined,
-        items: items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
-        // saleDate enables backdated/historical invoice entry — accepted by
-        // the backend but not yet part of the generated CreateSaleBody type.
-        ...({ saleDate: new Date(saleDate).toISOString() } as {}),
-      }
-    });
-    invalidate();
-    setOpen(false);
+    try {
+      await createSale.mutateAsync({
+        data: {
+          customerId,
+          customerName,
+          discount: parseFloat(discount || "0"),
+          notes: notes || undefined,
+          items: items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
+          // saleDate enables backdated/historical invoice entry — accepted by
+          // the backend but not yet part of the generated CreateSaleBody type.
+          ...({ saleDate: new Date(saleDate).toISOString() } as {}),
+        }
+      });
+      invalidate();
+      setOpen(false);
+    } catch (error: any) {
+      alert(error?.message || "Failed to create sale. If this date is in a closed month, reopen the month first from the Months page.");
+    }
   };
 
   const handleStatusUpdate = async (id: number, status: "pending" | "completed" | "cancelled") => {
@@ -117,24 +129,48 @@ export default function Sales() {
     invalidate();
   };
 
+  const editSubtotal = editItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+  const editTotal = editSubtotal - parseFloat(editSaleDiscount || "0");
+
   const openEditSale = (sale: NonNullable<typeof data>['data'][0]) => {
     setEditingSale(sale);
     setEditSaleStatus(sale.status);
     setEditSaleNotes(sale.notes || "");
+    setEditSaleDiscount(String(sale.discount ?? 0));
+    setEditSaleDate((sale.saleDate ?? sale.createdAt).slice(0, 10));
+    setEditItems(sale.items.map(i => ({ productId: i.productId, productName: i.productName, quantity: i.quantity, unitPrice: i.unitPrice })));
+    setEditExpandedRow(null);
     setEditSaleOpen(true);
   };
 
   const handleSaveSaleEdit = async () => {
     if (!editingSale) return;
-    await updateSale.mutateAsync({ id: editingSale.id, data: { status: editSaleStatus, notes: editSaleNotes || undefined } });
-    invalidate();
-    setEditSaleOpen(false);
-    setEditingSale(null);
+    try {
+      await updateSale.mutateAsync({
+        id: editingSale.id,
+        data: {
+          status: editSaleStatus,
+          notes: editSaleNotes || undefined,
+          discount: parseFloat(editSaleDiscount || "0"),
+          items: editItems.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
+          ...({ saleDate: new Date(editSaleDate).toISOString() } as {}),
+        },
+      });
+      invalidate();
+      setEditSaleOpen(false);
+      setEditingSale(null);
+    } catch (error: any) {
+      alert(error?.message || "Failed to update sale. If this invoice is in a closed month, reopen the month first from the Months page.");
+    }
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm("Delete this sale?")) return;
-    await deleteSale.mutateAsync({ id }); invalidate();
+    try {
+      await deleteSale.mutateAsync({ id }); invalidate();
+    } catch (error: any) {
+      alert(error?.message || "Failed to delete sale. If this invoice is in a closed month, reopen the month first from the Months page.");
+    }
   };
 
   const statusColor = (s: string) => s === "completed" ? "bg-green-500/10 text-green-400 border-0" : s === "pending" ? "bg-yellow-500/10 text-yellow-400 border-0" : "bg-red-500/10 text-red-400 border-0";
@@ -188,7 +224,7 @@ export default function Sales() {
                         </SelectContent>
                       </Select>
                   ) },
-                  { key: 'saleDate', title: 'Date', render: (r) => new Date(((r as any).saleDate ?? r.createdAt)).toLocaleDateString() },
+                  { key: 'saleDate', title: 'Date', render: (r) => new Date(r.saleDate ?? r.createdAt).toLocaleDateString() },
                   { key: 'actions', title: 'Actions', align: 'center', render: (r) => (
                     <div className="flex justify-center gap-2">
                       <Button size="sm" variant="ghost" onClick={() => openEditSale(r)} className="h-8 w-8 p-0 hover:bg-accent"><Edit className="h-4 w-4" /></Button>
@@ -210,7 +246,7 @@ export default function Sales() {
                     <div className="min-w-0">
                       <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">{sale.invoiceNumber}</div>
                       <div className="mt-1 truncate text-sm font-semibold">{sale.customerName}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">{new Date(((sale as any).saleDate ?? sale.createdAt)).toLocaleDateString()}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{new Date(sale.saleDate ?? sale.createdAt).toLocaleDateString()}</div>
                     </div>
                     <Badge className={statusColor(sale.status)}>{sale.status}</Badge>
                   </div>
@@ -324,8 +360,8 @@ export default function Sales() {
       </Dialog>
 
         <Dialog open={editSaleOpen} onOpenChange={(open) => { setEditSaleOpen(open); if (!open) setEditingSale(null); }}>
-          <DialogContent className="bg-card border-border max-w-md">
-            <DialogHeader><DialogTitle>Edit Sale</DialogTitle></DialogHeader>
+          <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border">
+            <DialogHeader><DialogTitle>Edit Sale — {editingSale?.invoiceNumber}</DialogTitle></DialogHeader>
             <div className="grid gap-3 py-2">
               <div className="space-y-1">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Status</Label>
@@ -338,14 +374,64 @@ export default function Sales() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Line Items</Label>
+                  <Button size="sm" variant="outline" onClick={addEditItem} className="h-7 gap-1 border-border text-xs"><Plus className="h-3 w-3" /> Add Item</Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Changing quantities or products here will automatically adjust stock and this customer's ledger/price history to match.</p>
+                {editItems.map((item, idx) => (
+                  <div key={idx} className="space-y-2 rounded-2xl border border-border/60 bg-background/60 p-2 sm:p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Select value={String(item.productId)} onValueChange={v => updateEditItem(idx, "productId", v)}>
+                        <SelectTrigger className="h-9 flex-1 border-border bg-background/50 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-card border-border">
+                          {products?.data.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+                        <Input type="number" value={item.quantity} onChange={e => updateEditItem(idx, "quantity", e.target.value)} className="h-9 w-full border-border bg-background/50 text-xs sm:w-20" placeholder="Qty" min={1} />
+                        <Input type="number" value={item.unitPrice} onChange={e => updateEditItem(idx, "unitPrice", e.target.value)} className="h-9 w-full border-border bg-background/50 text-xs sm:w-28" placeholder="Price" />
+                      </div>
+                      <div className="flex items-center justify-between gap-2 sm:ml-auto">
+                        <span className="w-20 text-right text-xs text-muted-foreground">Rs. {(item.quantity * item.unitPrice).toLocaleString()}</span>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setEditExpandedRow(prev => prev === idx ? null : idx)} className={`h-8 w-8 p-0 ${editExpandedRow === idx ? "bg-primary/10 text-primary" : "hover:bg-accent"}`} title="Price history & suggestion"><Info className="h-4 w-4" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => { setEditItems(prev => prev.filter((_, i) => i !== idx)); if (editExpandedRow === idx) setEditExpandedRow(null); }} className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><X className="h-4 w-4" /></Button>
+                      </div>
+                    </div>
+                    {editExpandedRow === idx && (
+                      <PriceHistoryPanel customerId={editingSale?.customerId ?? undefined} productId={item.productId} proposedPrice={item.unitPrice} />
+                    )}
+                  </div>
+                ))}
+                {editItems.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No items — add at least one line item.</p>}
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Discount (Rs.)</Label>
+                  <Input type="number" value={editSaleDiscount} onChange={e => setEditSaleDiscount(e.target.value)} className="bg-background/50 border-border" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Invoice Date</Label>
+                  <Input type="date" value={editSaleDate} onChange={e => setEditSaleDate(e.target.value)} className="bg-background/50 border-border" />
+                </div>
+              </div>
               <div className="space-y-1">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
                 <Input value={editSaleNotes} onChange={e => setEditSaleNotes(e.target.value)} className="bg-background/50 border-border" />
               </div>
+
+              <div className="border-t border-border pt-3 text-right space-y-1">
+                <p className="text-sm text-muted-foreground">Subtotal: Rs. {editSubtotal.toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground">Discount: Rs. {parseFloat(editSaleDiscount || "0").toLocaleString()}</p>
+                <p className="text-lg font-bold text-secondary">Total: Rs. {editTotal.toLocaleString()}</p>
+              </div>
             </div>
             <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => { setEditSaleOpen(false); setEditingSale(null); }} className="border-border">Cancel</Button>
-              <Button onClick={handleSaveSaleEdit} disabled={updateSale.isPending} className="bg-primary hover:bg-primary/90">Save</Button>
+              <Button onClick={handleSaveSaleEdit} disabled={updateSale.isPending || editItems.length === 0} className="bg-primary hover:bg-primary/90">Save</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

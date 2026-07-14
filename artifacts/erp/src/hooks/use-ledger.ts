@@ -112,12 +112,17 @@ export function useCustomerLedger(customerId: number | undefined) {
   });
 }
 
-export function useLedgerTimeline(customerId: number | undefined, page = 1) {
+export function useLedgerTimeline(customerId: number | undefined, page = 1, from?: string, to?: string) {
   return useQuery({
-    queryKey: ["customer-ledger-timeline", customerId, page],
-    queryFn: () => customFetch<{ data: LedgerTimelineEntry[]; page: number; limit: number }>(
-      `/api/customers/${customerId}/ledger/timeline?page=${page}&limit=25`,
-    ),
+    queryKey: ["customer-ledger-timeline", customerId, page, from, to],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(page), limit: "25" });
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+      return customFetch<{ data: LedgerTimelineEntry[]; total: number; page: number; limit: number }>(
+        `/api/customers/${customerId}/ledger/timeline?${params.toString()}`,
+      );
+    },
     enabled: !!customerId,
   });
 }

@@ -6,9 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { SaleUpdateStatus } from './saleUpdateStatus.js';
+import type { SaleItemInput } from './saleItemInput.js';
 
 export interface SaleUpdate {
   status?: SaleUpdateStatus;
   discount?: number;
   notes?: string;
+  saleDate?: string;
+  items?: SaleItemInput[];
 }

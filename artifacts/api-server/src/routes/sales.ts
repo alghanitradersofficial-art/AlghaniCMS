@@ -53,6 +53,9 @@ router.post("/", async (req, res) => {
     return res.status(201).json(formatSale(sale));
   } catch (error) {
     console.error(error);
+    if (error instanceof Error && (error.message.includes("already closed") || error.message.includes("not found"))) {
+      return res.status(400).json({ error: error.message });
+    }
     return res.status(500).json({ error: "Failed to create sale" });
   }
 });
@@ -78,6 +81,9 @@ router.patch("/:id", async (req, res) => {
     return res.json(formatSale(sale));
   } catch (error) {
     console.error(error);
+    if (error instanceof Error && (error.message.includes("already closed") || error.message.includes("not found"))) {
+      return res.status(400).json({ error: error.message });
+    }
     return res.status(500).json({ error: "Failed to update sale" });
   }
 });
@@ -90,6 +96,9 @@ router.delete("/:id", async (req, res) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
+    if (error instanceof Error && (error.message.includes("already closed") || error.message.includes("not found"))) {
+      return res.status(400).json({ error: error.message });
+    }
     return res.status(500).json({ error: "Failed to delete sale" });
   }
 });

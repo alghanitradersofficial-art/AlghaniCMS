@@ -6,8 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { PurchaseUpdateStatus } from './purchaseUpdateStatus.js';
+import type { PurchaseItemInput } from './purchaseItemInput.js';
 
 export interface PurchaseUpdate {
   status?: PurchaseUpdateStatus;
   notes?: string;
+  purchaseDate?: string;
+  items?: PurchaseItemInput[];
 }

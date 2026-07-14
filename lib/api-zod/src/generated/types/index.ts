@@ -46,6 +46,7 @@ export * from './product.js';
 export * from './productInput.js';
 export * from './productList.js';
 export * from './productUpdate.js';
+export * from './profitLossBreakdownPoint.js';
 export * from './profitLossReport.js';
 export * from './purchase.js';
 export * from './purchaseInput.js';

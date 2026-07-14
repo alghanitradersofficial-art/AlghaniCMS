@@ -4,6 +4,7 @@ import { db, paymentsTable, customersTable, ledgerEntriesTable } from "@workspac
 import { eq, and, desc, sql } from "drizzle-orm";
 import { appendLedgerEntry, allocatePayment, round2 } from "../lib/ledger.js";
 import { getUserIdFromRequest } from "../lib/auth-context.js";
+import { assertPeriodOpen, markPeriodDirty } from "../lib/period-lock.js";
 
 const router = Router();
 
@@ -50,6 +51,7 @@ router.post("/", async (req, res): Promise<any> => {
     const body = CreatePaymentBody.parse(req.body);
     const receivedByUserId = getUserIdFromRequest(req);
     const paymentDate = body.paymentDate ? new Date(body.paymentDate) : new Date();
+    await assertPeriodOpen(paymentDate);
 
     const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, body.customerId));
     if (!customer) return res.status(404).json({ error: "Customer not found" });
@@ -70,7 +72,6 @@ router.post("/", async (req, res): Promise<any> => {
         explicitAllocations: body.allocations as { saleId: number; amount: number }[] | undefined,
       });
 
-      // MAXIMUM BYPASS: Force absolute structural bypass at the variable level
       const cleanAllocations: any = ((rawAllocations ?? []) as any[]).map((a) => {
         return {
           saleId: Number(a?.saleId ?? 0),
@@ -102,6 +103,8 @@ router.post("/", async (req, res): Promise<any> => {
         .set({ paymentId: inserted.id })
         .where(eq(ledgerEntriesTable.id, ledgerEntry.id));
 
+      await markPeriodDirty(paymentDate, tx);
+
       return inserted;
     });
 
@@ -109,6 +112,9 @@ router.post("/", async (req, res): Promise<any> => {
   } catch (error) {
     console.error(error);
     if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues });
+    if (error instanceof Error && error.message.includes("already closed")) {
+      return res.status(400).json({ error: error.message });
+    }
     return res.status(500).json({ error: "Failed to record payment" });
   }
 });
@@ -190,6 +196,7 @@ router.post("/:id/void", async (req, res): Promise<any> => {
     const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
     if (!payment) return res.status(404).json({ error: "Payment not found" });
     if (payment.isVoided) return res.status(400).json({ error: "Payment is already voided" });
+    await assertPeriodOpen(payment.paymentDate);
 
     await db.transaction(async (tx) => {
       await tx.update(paymentsTable).set({ isVoided: true, voidReason: reason }).where(eq(paymentsTable.id, id));
@@ -209,11 +216,16 @@ router.post("/:id/void", async (req, res): Promise<any> => {
         description: `Payment voided: ${reason}`,
         createdByUserId,
       });
+
+      await markPeriodDirty(payment.paymentDate, tx);
     });
 
     return res.json({ success: true });
   } catch (error) {
     console.error(error);
+    if (error instanceof Error && error.message.includes("already closed")) {
+      return res.status(400).json({ error: error.message });
+    }
     return res.status(500).json({ error: "Failed to void payment" });
   }
 });

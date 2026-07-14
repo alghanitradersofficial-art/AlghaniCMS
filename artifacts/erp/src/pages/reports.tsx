@@ -142,6 +142,7 @@ export default function Reports() {
             { label: "Gross Profit", value: pl?.grossProfit, color: "text-secondary" },
             { label: "Expenses", value: pl?.expenses, color: "text-primary" },
             { label: "Net Profit", value: pl?.netProfit, color: (pl?.netProfit || 0) >= 0 ? "text-green-400" : "text-red-400" },
+            { label: "Total Purchases", value: pl?.totalPurchases, color: "text-amber-400" },
           ].map(stat => (
             <Card key={stat.label} className="border-border bg-card">
               <CardContent className="p-3 sm:p-4">
@@ -170,7 +171,7 @@ export default function Reports() {
                     <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))", color: "hsl(var(--foreground))", fontSize: 12 }} />
                     <Bar dataKey="sales" name="Sales" fill="hsl(var(--primary))" radius={[4,4,0,0]} />
                     <Bar dataKey="profit" name="Profit" fill="hsl(var(--secondary))" radius={[4,4,0,0]} />
-                    <Bar dataKey="purchases" name="Purchases" fill="hsl(var(--chart-3))" radius={[4,4,0,0]} />
+                    <Bar dataKey="costOfGoods" name="Cost of Goods" fill="hsl(var(--chart-3))" radius={[4,4,0,0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

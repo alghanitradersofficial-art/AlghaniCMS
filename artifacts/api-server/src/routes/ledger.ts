@@ -18,18 +18,26 @@ router.get("/:id/ledger", async (req, res) => {
   }
 });
 
-/** GET /api/customers/:id/ledger/timeline — chronological Invoice/Payment feed (section 9). */
+/** GET /api/customers/:id/ledger/timeline?from=&to=&page=&limit= — chronological Invoice/Payment feed (section 9), date-range filterable. */
 router.get("/:id/ledger/timeline", async (req, res) => {
   try {
     const customerId = parseInt(req.params.id);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 25;
     const offset = (page - 1) * limit;
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+
+    const conditions = [eq(ledgerEntriesTable.customerId, customerId)];
+    if (from) conditions.push(gte(ledgerEntriesTable.entryDate, new Date(from)));
+    if (to) conditions.push(lte(ledgerEntriesTable.entryDate, new Date(new Date(to).setHours(23, 59, 59, 999))));
+
+    const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(ledgerEntriesTable).where(and(...conditions));
 
     const entries = await db
       .select()
       .from(ledgerEntriesTable)
-      .where(eq(ledgerEntriesTable.customerId, customerId))
+      .where(and(...conditions))
       .orderBy(desc(ledgerEntriesTable.entryDate), desc(ledgerEntriesTable.id))
       .limit(limit)
       .offset(offset);
@@ -45,6 +53,7 @@ router.get("/:id/ledger/timeline", async (req, res) => {
         description: e.description,
         date: e.entryDate.toISOString(),
       })),
+      total: Number(count),
       page,
       limit,
     });
