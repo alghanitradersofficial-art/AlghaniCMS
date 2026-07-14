@@ -15,6 +15,35 @@ const rateLimit = (rateLimitPkg as any).default ? (rateLimitPkg as any).default 
 
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
+
+// ─── CORS ORIGINS CONFIGURATION ─────────────────────────────────────────────
+const frontendUrl = process.env.FRONTEND_URL?.trim();
+const configuredAllowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((item) => item.trim())
+  .filter(Boolean);
+const allowedOrigins = [frontendUrl, ...configuredAllowedOrigins].filter(Boolean) as string[];
+
+// ─── GLOBAL CORS/OPTIONS BYPASS (CRITICAL FOR CORS & 401 FIXES) ─────────────
+// Is middleware ko routes aur rate limiters se pehle lagaya hai taake OPTIONS requests bypass ho sakein
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const isAllowed = !origin || process.env.NODE_ENV !== "production" || allowedOrigins.includes(origin);
+
+  if (origin && isAllowed) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Accept-Version");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).end(); // OPTIONS check ko direct 204 No Content de kar yahin rok dein
+  }
+  next();
+});
+
+// Security headers set karna
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -34,12 +63,6 @@ app.use(
   }),
 );
 
-const frontendUrl = process.env.FRONTEND_URL?.trim();
-const configuredAllowedOrigins = (process.env.ALLOWED_ORIGINS || "")
-  .split(",")
-  .map((item) => item.trim())
-  .filter(Boolean);
-const allowedOrigins = [frontendUrl, ...configuredAllowedOrigins].filter(Boolean) as string[];
 const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     if (process.env.NODE_ENV !== "production") return callback(null, true);
@@ -55,6 +78,8 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(helmet());
+
+// Global Rate Limiter
 app.use(
   rateLimit({
     windowMs: 60 * 1000,
@@ -64,6 +89,8 @@ app.use(
     message: { error: "Too many requests, please try again later." },
   }),
 );
+
+// Auth Rate Limiter
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -71,6 +98,7 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many authentication attempts, please try again later." },
 });
+
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 app.use(requestSanitizer);
@@ -108,9 +136,10 @@ app.get("/", (_req, res) => {
   return res.status(404).json({ error: "Not found" });
 });
 
+// Sensitive Auth Routes par custom rate limit apply karna
 app.use("/api/auth", authLimiter);
 
-// Development-only debug endpoint to build the full report workbook and return sheet names or error.
+// Development-only debug endpoint
 if (process.env.NODE_ENV !== 'production') {
   app.get('/api/_debug/build-wb', async (_req, res) => {
     try {
@@ -131,8 +160,10 @@ if (process.env.NODE_ENV !== 'production') {
 
 app.use("/api", router);
 
-// Only initialize the Telegram bot loop if we are NOT on Vercel.
-// On Vercel, long-polling freezes the function. Use webhooks instead for production.
+// Handle Errors Globally
+app.use(errorHandler);
+
+// Only initialize the Telegram bot loop if we are NOT on Vercel
 if (!process.env["VERCEL"]) {
   try { 
     initTelegramBot(); 

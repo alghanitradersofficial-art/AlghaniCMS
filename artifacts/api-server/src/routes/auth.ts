@@ -10,15 +10,15 @@ import { logger } from "../lib/logger.js";
 import { authenticate, requireRole } from "../lib/auth-middleware.js";
 
 const router = Router();
+
+// Rate limiter sirf sensitive endpoints par apply karne ke liye hai
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // Max 30 attempts
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many authentication attempts, please try again later." },
 });
-
-router.use(authLimiter);
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -42,7 +42,7 @@ function requireDatabase(res: any) {
 }
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
-router.post("/login", async (req, res) => {
+router.post("/login", authLimiter, async (req, res) => {
   try {
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
@@ -312,7 +312,7 @@ router.get("/me", async (req, res) => {
 });
 
 // ─── CHANGE PASSWORD ──────────────────────────────────────────────────────────
-router.post("/change-password", async (req, res) => {
+router.post("/change-password", authLimiter, async (req, res) => {
   try {
     const { userId, newPassword, requestedBy } = req.body;
     if (!userId || !newPassword) return res.status(400).json({ error: "userId and newPassword required" });
@@ -379,7 +379,7 @@ async function sendSecurityAlert(user: { id: number; name: string; email: string
 }
 
 // ─── FORGOT PASSWORD REQUEST ──────────────────────────────────────────────────
-router.post("/forgot-password", async (req, res) => {
+router.post("/forgot-password", authLimiter, async (req, res) => {
   try {
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
     if (!email) return res.status(400).json({ error: "Email is required" });
