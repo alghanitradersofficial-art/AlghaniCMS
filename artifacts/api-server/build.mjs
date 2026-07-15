@@ -32,12 +32,12 @@ async function buildAll() {
     }
   }
   if (missing.length > 0) {
-    console.error('Missing built workspace packages required by api-server:');
+    console.warn('Warning: built workspace packages not found; esbuild will attempt to bundle from source.');
     for (const m of missing) {
-      console.error(` - ${m.pkg} (checked: ${m.expected.join(', ')})`);
+      console.warn(` - ${m.pkg} (checked: ${m.expected.join(', ')})`);
     }
-    console.error('Please run `pnpm --filter <pkg> run build` for the missing packages before bundling.');
-    process.exit(1);
+    console.warn('If you prefer prebuilt artifacts, run `pnpm --filter <pkg> run build` before this step.');
+    // continue and allow the workspace-resolve plugin to fallback to source files
   }
 
 
