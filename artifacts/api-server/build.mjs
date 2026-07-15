@@ -151,11 +151,24 @@ async function buildAll() {
 
             // Fallback to explicit file paths (avoid returning a directory)
             if (subpath) {
-              // if subpath refers to a directory like `schema`, use its index.js
-              return { path: path.join(distRoot, subpath, 'index.js') };
+              const candidateDirIndex = path.join(distRoot, subpath, 'index.js');
+              if (fs.existsSync(candidateDirIndex)) return { path: candidateDirIndex };
+              // try source fallback (src/<subpath>/index.ts)
+              const srcFallback = path.join(repoRoot, 'lib', pkg, 'src', subpath + (subpath.endsWith('.ts') ? '' : '.ts'));
+              if (fs.existsSync(srcFallback)) return { path: srcFallback };
+              const srcDirIndex = path.join(repoRoot, 'lib', pkg, 'src', subpath, 'index.ts');
+              if (fs.existsSync(srcDirIndex)) return { path: srcDirIndex };
+              return { path: candidateDirIndex };
             }
-            // default to dist/index.js
-            return { path: path.join(distRoot, 'index.js') };
+
+            // default to dist/index.js if present
+            const distIndex = path.join(distRoot, 'index.js');
+            if (fs.existsSync(distIndex)) return { path: distIndex };
+            // fallback to source index.ts in the package
+            const srcIndex = path.join(repoRoot, 'lib', pkg, 'src', 'index.ts');
+            if (fs.existsSync(srcIndex)) return { path: srcIndex };
+            // last resort: return dist index path (may trigger clearer error)
+            return { path: distIndex };
           });
         }
       }
