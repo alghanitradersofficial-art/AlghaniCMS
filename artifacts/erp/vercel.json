@@ -1,20 +1,15 @@
 {
   "version": 2,
-  "buildCommand": "pnpm run build",
-  "outputDirectory": "dist",
-  "framework": "vite",
-  "rewrites": [
+  "builds": [
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+      "src": "artifacts/erp/package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "dist", "buildCommand": "pnpm --filter @workspace/erp run build" }
+    },
+    { "src": "api/index.js", "use": "@vercel/node" }
   ],
-  "headers": [
-    {
-      "source": "/assets/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
-    }
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/index.js" },
+    { "src": "/(.*)", "dest": "/artifacts/erp/dist/$1" }
   ]
 }
