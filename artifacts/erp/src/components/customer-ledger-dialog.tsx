@@ -36,8 +36,24 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
 
   const handleReceivePayment = async () => {
     if (!customerId || !amount) return;
-    await recordPayment.mutateAsync({ customerId, amount: parseFloat(amount), method, reference: reference || undefined, paymentDate: paymentDate });
-    setAmount(""); setReference("");
+    try {
+      // paymentDate comes from an <input type="date"> as "YYYY-MM-DD".
+      // Backend requires a full ISO-8601 datetime (z.string().datetime()),
+      // so convert it here rather than sending the bare date string.
+      const isoPaymentDate = new Date(`${paymentDate}T00:00:00.000Z`).toISOString();
+      await recordPayment.mutateAsync({
+        customerId,
+        amount: parseFloat(amount),
+        method,
+        reference: reference || undefined,
+        paymentDate: isoPaymentDate,
+      });
+      setAmount("");
+      setReference("");
+    } catch (err) {
+      console.error("Failed to record payment:", err);
+      alert(err instanceof Error ? err.message : "Failed to record payment. Please try again.");
+    }
   };
 
   return (
