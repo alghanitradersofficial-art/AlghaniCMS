@@ -116,7 +116,6 @@ export interface ProductInput {
   unit: string;
   oemNumber?: string;
   barcode?: string;
-  createdAt?: string;
 }
 
 export interface ProductUpdate {
@@ -351,6 +350,7 @@ export interface Customer {
   type?: CustomerType;
   totalOrders: number;
   totalSpent: number;
+  creditLimit?: number;
   createdAt: string;
 }
 
@@ -377,6 +377,7 @@ export interface CustomerInput {
   address?: string;
   city?: string;
   type?: CustomerInputType;
+  creditLimit?: number;
 }
 
 export type CustomerUpdateType = typeof CustomerUpdateType[keyof typeof CustomerUpdateType];
@@ -395,6 +396,7 @@ export interface CustomerUpdate {
   address?: string;
   city?: string;
   type?: CustomerUpdateType;
+  creditLimit?: number;
 }
 
 export interface Supplier {

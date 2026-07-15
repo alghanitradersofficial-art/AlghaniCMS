@@ -21,5 +21,4 @@ export interface ProductInput {
   unit: string;
   oemNumber?: string;
   barcode?: string;
-  createdAt?: Date;
 }

@@ -1421,6 +1421,8 @@ components:
           type: integer
         totalSpent:
           type: number
+        creditLimit:
+          type: number
         createdAt:
           type: string
 
@@ -1456,6 +1458,8 @@ components:
         type:
           type: string
           enum: [retail, dealer, wholesale]
+        creditLimit:
+          type: number
 
     CustomerUpdate:
       type: object
@@ -1473,6 +1477,8 @@ components:
         type:
           type: string
           enum: [retail, dealer, wholesale]
+        creditLimit:
+          type: number
 
     Supplier:
       type: object

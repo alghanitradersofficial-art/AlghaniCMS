@@ -86,6 +86,43 @@ export async function appendLedgerEntry(
 }
 
 /**
+ * Recomputes every ledger entry's running balance for a customer in strict
+ * chronological order (entryDate, then id as a tiebreaker), starting from
+ * the customer's opening balance. This MUST be called (inside the same
+ * transaction) after appending any ledger entry whose entryDate may not be
+ * the latest — e.g. backdated sales/payments — because appendLedgerEntry
+ * only chains off the most-recently-INSERTED row, not the most-recent-BY-DATE
+ * row, and will otherwise leave the balance chain inconsistent with the
+ * chronological timeline shown to users. Mirrors
+ * recomputeSupplierLedgerRunningBalances in supplier-ledger.ts.
+ */
+export async function recomputeCustomerLedgerRunningBalances(tx: DbTx, customerId: number) {
+  const [customer] = await tx
+    .select({ openingBalance: customersTable.openingBalance })
+    .from(customersTable)
+    .where(eq(customersTable.id, customerId));
+
+  if (!customer) {
+    throw new Error(`Customer ${customerId} not found`);
+  }
+
+  const entries = await tx
+    .select()
+    .from(ledgerEntriesTable)
+    .where(eq(ledgerEntriesTable.customerId, customerId))
+    .orderBy(asc(ledgerEntriesTable.entryDate), asc(ledgerEntriesTable.id));
+
+  let runningBalance = parseFloat(customer.openingBalance as string);
+  for (const entry of entries) {
+    runningBalance = round2(runningBalance + parseFloat(entry.amount as string));
+    await tx
+      .update(ledgerEntriesTable)
+      .set({ runningBalance: String(runningBalance) })
+      .where(eq(ledgerEntriesTable.id, entry.id));
+  }
+}
+
+/**
  * Allocates a payment amount across a customer's outstanding invoices.
  * If `explicitAllocations` is provided, those are validated against each
  * invoice's remaining balance. Otherwise, applies FIFO (oldest invoice

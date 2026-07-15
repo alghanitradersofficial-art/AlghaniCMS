@@ -5,7 +5,7 @@
  * Al Ghani Wholesale Traders ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { ActivityItemType } from './activityItemType.js';
+import type { ActivityItemType } from './activityItemType';
 
 export interface ActivityItem {
   id: number;

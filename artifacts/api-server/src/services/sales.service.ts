@@ -1,7 +1,7 @@
 import { db } from "@workspace/db";
 import { salesTable, productsTable, priceHistoryTable, ledgerEntriesTable } from "@workspace/db";
 import { eq, sql, inArray } from "drizzle-orm";
-import { appendLedgerEntry, round2 } from "../lib/ledger.js";
+import { appendLedgerEntry, round2, recomputeCustomerLedgerRunningBalances } from "../lib/ledger.js";
 import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
 import { calculateDailyProfitSummary } from "../lib/inventory-accounting.js";
 import { isDateInClosedPeriod, MonthClosedError } from "./months.service.js";
@@ -155,6 +155,11 @@ export async function createSale(body: any, actorUserId: number | null) {
         createdByUserId: actorUserId,
         entryDate: invoiceDate,
       });
+
+      // invoiceDate can be backdated relative to other ledger entries, so
+      // re-chain every entry's running balance in chronological order
+      // rather than trusting insertion order.
+      await recomputeCustomerLedgerRunningBalances(tx, body.customerId);
     }
 
     if (status === "completed") {
@@ -209,6 +214,7 @@ export async function updateSale(id: number, body: any, actorUserId: number | nu
             description: `Invoice ${existingSale.invoiceNumber} status changed from completed to ${body.status}`,
             createdByUserId: actorUserId,
           });
+          await recomputeCustomerLedgerRunningBalances(tx, existingSale.customerId);
         }
       } else if (existingSale.status !== "completed" && body.status === "completed") {
         const items = existingSale.items as Array<any>;
@@ -230,6 +236,7 @@ export async function updateSale(id: number, body: any, actorUserId: number | nu
             description: `Invoice ${existingSale.invoiceNumber} status changed to completed`,
             createdByUserId: actorUserId,
           });
+          await recomputeCustomerLedgerRunningBalances(tx, existingSale.customerId);
         }
       }
     }

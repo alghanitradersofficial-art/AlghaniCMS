@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db, paymentsTable, customersTable, ledgerEntriesTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { appendLedgerEntry, allocatePayment, round2 } from "../lib/ledger.js";
+import { appendLedgerEntry, allocatePayment, round2, recomputeCustomerLedgerRunningBalances } from "../lib/ledger.js";
 import { getUserIdFromRequest } from "../lib/auth-context.js";
 import { isDateInClosedPeriod, MonthClosedError } from "../services/months.service.js";
 
@@ -105,6 +105,11 @@ router.post("/", async (req, res): Promise<any> => {
       await tx.update(ledgerEntriesTable)
         .set({ paymentId: inserted.id })
         .where(eq(ledgerEntriesTable.id, ledgerEntry.id));
+
+      // paymentDate can be backdated relative to other ledger entries, so
+      // re-chain every entry's running balance in chronological order
+      // rather than trusting insertion order.
+      await recomputeCustomerLedgerRunningBalances(tx, body.customerId);
 
       return inserted;
     });
@@ -218,6 +223,8 @@ router.post("/:id/void", async (req, res): Promise<any> => {
         description: `Payment voided: ${reason}`,
         createdByUserId,
       });
+
+      await recomputeCustomerLedgerRunningBalances(tx, payment.customerId);
     });
 
     return res.json({ success: true });

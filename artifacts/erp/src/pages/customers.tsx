@@ -14,8 +14,8 @@ import { Plus, Search, Edit, Trash2, Users, Wallet } from "lucide-react";
 import { CustomerLedgerDialog } from "@/components/customer-ledger-dialog";
 import DataTable from "@/components/ui/data-table";
 
-type CustForm = { name: string; phone: string; email: string; address: string; city: string; type: string; };
-const emptyForm: CustForm = { name: "", phone: "", email: "", address: "", city: "", type: "retail" };
+type CustForm = { name: string; phone: string; email: string; address: string; city: string; type: string; creditLimit: string; };
+const emptyForm: CustForm = { name: "", phone: "", email: "", address: "", city: "", type: "retail", creditLimit: "0" };
 
 export default function Customers() {
   const qc = useQueryClient();
@@ -41,11 +41,20 @@ export default function Customers() {
       address: c.address || "",
       city: c.city || "",
       type: c.type || "retail",
+      creditLimit: String((c as any).creditLimit ?? "0"),
     });
     setEditing(c.id); setOpen(true);
   };
   const handleSave = async () => {
-    const payload = { name: form.name, phone: form.phone, email: form.email || undefined, address: form.address || undefined, city: form.city || undefined, type: form.type as "retail" | "dealer" | "wholesale" };
+    const payload = {
+      name: form.name,
+      phone: form.phone,
+      email: form.email || undefined,
+      address: form.address || undefined,
+      city: form.city || undefined,
+      type: form.type as "retail" | "dealer" | "wholesale",
+      creditLimit: form.creditLimit !== "" ? parseFloat(form.creditLimit) : undefined,
+    };
     if (editing) { await update.mutateAsync({ id: editing, data: payload }); }
     else { await create.mutateAsync({ data: payload }); }
     invalidate(); setOpen(false);
@@ -121,6 +130,10 @@ export default function Customers() {
                   <SelectItem value="wholesale">Wholesale</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Credit Limit</Label>
+              <Input type="number" min="0" step="0.01" value={form.creditLimit} onChange={e => setForm(f => ({ ...f, creditLimit: e.target.value }))} className="bg-background/50 border-border" placeholder="0" />
             </div>
           </div>
           <DialogFooter className="gap-2">

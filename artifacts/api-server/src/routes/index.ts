@@ -30,11 +30,17 @@ import calendarRouter from "./calendar.js";
 import stockAdjustmentsRouter from "./stock-adjustments.js";
 import remindersRouter from "./reminders.js";
 import monthsRouter from "./months.js";
+import repairLedgerRouter from "./repair-ledger.js";
 import { authenticate, requirePermission } from "../lib/auth-middleware.js";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+// Temporary one-time ledger repair endpoint — protected by its own
+// JWT_SECRET key check, intentionally mounted before `authenticate` so it
+// can be run directly from a browser URL. Remove after use (see
+// routes/repair-ledger.ts for instructions).
+router.use(repairLedgerRouter);
 router.use("/auth", authRouter);
 router.use(authenticate);
 // Temporary debug endpoint to verify authentication middleware sets `req.auth`.

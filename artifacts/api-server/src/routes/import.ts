@@ -5,7 +5,7 @@ import multer from "multer";
 import ExcelJS from "exceljs";
 import path from "path";
 import { groqVision, groqChat, getGroqClient } from "../lib/groq.js";
-import { appendLedgerEntry, round2 } from "../lib/ledger.js";
+import { appendLedgerEntry, round2, recomputeCustomerLedgerRunningBalances } from "../lib/ledger.js";
 import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
 import { appendSupplierLedgerEntry } from "../lib/supplier-ledger.js";
 import { getUserIdFromRequest } from "../lib/auth-context.js";
@@ -335,6 +335,11 @@ router.post("/legacy", upload.single("file"), async (req, res) => {
             note: `Imported invoice ${invoiceNumber}`,
             createdByUserId,
           });
+
+          // Imported rows are frequently inserted out of chronological order,
+          // so re-chain running balances by entryDate rather than trusting
+          // insertion order.
+          await recomputeCustomerLedgerRunningBalances(tx, customerRow.id);
         }
 
         return inserted;

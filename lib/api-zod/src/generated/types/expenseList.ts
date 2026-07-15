@@ -5,7 +5,7 @@
  * Al Ghani Wholesale Traders ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { Expense } from './expense.js';
+import type { Expense } from './expense';
 
 export interface ExpenseList {
   data: Expense[];

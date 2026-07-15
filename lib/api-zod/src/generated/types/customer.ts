@@ -5,7 +5,7 @@
  * Al Ghani Wholesale Traders ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { CustomerType } from './customerType.js';
+import type { CustomerType } from './customerType';
 
 export interface Customer {
   id: number;
@@ -20,5 +20,6 @@ export interface Customer {
   type?: CustomerType;
   totalOrders: number;
   totalSpent: number;
+  creditLimit?: number;
   createdAt: string;
 }

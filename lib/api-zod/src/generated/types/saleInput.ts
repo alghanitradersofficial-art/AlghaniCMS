@@ -5,8 +5,8 @@
  * Al Ghani Wholesale Traders ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { SaleInputStatus } from './saleInputStatus.js';
-import type { SaleItemInput } from './saleItemInput.js';
+import type { SaleInputStatus } from './saleInputStatus';
+import type { SaleItemInput } from './saleItemInput';
 
 export interface SaleInput {
   /** @nullable */

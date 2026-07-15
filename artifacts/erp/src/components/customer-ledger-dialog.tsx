@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCustomerLedger, useLedgerTimeline, useRecordPayment, type RecordPaymentInput } from "@/hooks/use-ledger";
-import { Wallet, Receipt, ArrowDownCircle, ArrowUpCircle, AlertTriangle } from "lucide-react";
+import { useUpdateCustomer, getGetCustomersQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Wallet, Receipt, ArrowDownCircle, ArrowUpCircle, AlertTriangle, ShieldCheck } from "lucide-react";
 
 interface CustomerLedgerDialogProps {
   customerId: number | null;
@@ -28,11 +30,32 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
   const { data: ledger, isLoading, isError, error } = useCustomerLedger(customerId ?? undefined);
   const { data: timeline, isError: timelineError } = useLedgerTimeline(customerId ?? undefined);
   const recordPayment = useRecordPayment();
+  const updateCustomer = useUpdateCustomer();
+  const qc = useQueryClient();
 
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<RecordPaymentInput["method"]>("cash");
   const [reference, setReference] = useState("");
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [creditLimitInput, setCreditLimitInput] = useState("");
+
+  // Keep the credit limit input in sync with the loaded ledger data,
+  // and whenever the dialog is opened for a different customer.
+  useEffect(() => {
+    if (ledger) setCreditLimitInput(String(ledger.creditLimit ?? 0));
+  }, [ledger?.customerId, ledger?.creditLimit]);
+
+  const handleSetCreditLimit = async () => {
+    if (!customerId || creditLimitInput === "") return;
+    try {
+      await updateCustomer.mutateAsync({ id: customerId, data: { creditLimit: parseFloat(creditLimitInput) } });
+      qc.invalidateQueries({ queryKey: ["customer-ledger", customerId] });
+      qc.invalidateQueries({ queryKey: getGetCustomersQueryKey(), exact: false });
+    } catch (err) {
+      console.error("Failed to update credit limit:", err);
+      alert(err instanceof Error ? err.message : "Failed to update credit limit. Please try again.");
+    }
+  };
 
   const handleReceivePayment = async () => {
     if (!customerId || !amount) return;
@@ -107,6 +130,14 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
                 <Input placeholder="Reference (optional)" value={reference} onChange={e => setReference(e.target.value)} className="flex-1 min-w-[140px] bg-background/50 border-border" />
                 <Input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="bg-background/50 border-border" />
                 <Button onClick={handleReceivePayment} disabled={!amount || recordPayment.isPending} className="bg-primary hover:bg-primary/90">Receive</Button>
+              </div>
+            </div>
+
+            <div className="border-t border-border pt-4">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground mb-2 block flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> Set Credit Limit</Label>
+              <div className="flex flex-wrap gap-2">
+                <Input type="number" min="0" step="0.01" placeholder="Credit limit" value={creditLimitInput} onChange={e => setCreditLimitInput(e.target.value)} className="w-40 bg-background/50 border-border" />
+                <Button onClick={handleSetCreditLimit} disabled={creditLimitInput === "" || updateCustomer.isPending} variant="outline" className="border-border">Save Limit</Button>
               </div>
             </div>
 

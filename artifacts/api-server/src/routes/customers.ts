@@ -36,6 +36,7 @@ router.get("/", async (req, res): Promise<any> => {
       createdAt: customersTable.createdAt,
       totalOrders: sql<number>`COALESCE((SELECT COUNT(*) FROM sales WHERE customer_id = ${customersTable.id} AND status != 'cancelled'), 0)`,
       totalSpent: sql<number>`COALESCE((SELECT SUM(total::numeric) FROM sales WHERE customer_id = ${customersTable.id} AND status != 'cancelled'), 0)`,
+      creditLimit: customersTable.creditLimit,
     })
       .from(customersTable)
       .where(search ? ilike(customersTable.name, `%${search}%`) : undefined)
@@ -47,6 +48,7 @@ router.get("/", async (req, res): Promise<any> => {
         ...r,
         totalOrders: Number(r.totalOrders),
         totalSpent: parseFloat(String(r.totalSpent)),
+        creditLimit: parseFloat(String(r.creditLimit)),
         createdAt: r.createdAt.toISOString(),
       })),
       total,
@@ -63,11 +65,16 @@ router.post("/", async (req, res): Promise<any> => {
   try {
     const body = CreateCustomerBody.parse(req.body);
     // loose validation structure ko strict drizzle structure k sath align krne k liye 'as any' cast kia
-    const [customer] = await db.insert(customersTable).values(body as any).returning();
+    const insertValues: any = { ...body };
+    if (insertValues.creditLimit !== undefined) {
+      insertValues.creditLimit = String(insertValues.creditLimit);
+    }
+    const [customer] = await db.insert(customersTable).values(insertValues).returning();
     return res.status(201).json({
       ...customer,
       totalOrders: 0,
       totalSpent: 0,
+      creditLimit: parseFloat(customer.creditLimit as string),
       createdAt: customer.createdAt.toISOString(),
     });
   } catch (error) {
@@ -85,6 +92,7 @@ router.get("/:id", async (req, res): Promise<any> => {
       ...customer,
       totalOrders: 0,
       totalSpent: 0,
+      creditLimit: parseFloat(customer.creditLimit as string),
       createdAt: customer.createdAt.toISOString(),
     });
   } catch (error) {
@@ -96,12 +104,17 @@ router.patch("/:id", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
     const body = UpdateCustomerBody.parse(req.body);
-    const [customer] = await db.update(customersTable).set(body).where(eq(customersTable.id, id)).returning();
+    const updateValues: any = { ...body };
+    if (updateValues.creditLimit !== undefined) {
+      updateValues.creditLimit = String(updateValues.creditLimit);
+    }
+    const [customer] = await db.update(customersTable).set(updateValues).where(eq(customersTable.id, id)).returning();
     if (!customer) return res.status(404).json({ error: "Customer not found" });
     return res.json({
       ...customer,
       totalOrders: 0,
       totalSpent: 0,
+      creditLimit: parseFloat(customer.creditLimit as string),
       createdAt: customer.createdAt.toISOString(),
     });
   } catch (error) {

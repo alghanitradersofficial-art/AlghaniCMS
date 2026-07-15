@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useGetSales, useCreateSale, useUpdateSale, useDeleteSale, useGetProducts, useGetCustomers, getGetSalesQueryKey } from "@workspace/api-client-react";
+import { useGetSales, useCreateSale, useUpdateSale, useDeleteSale, useGetProducts, useGetCustomers, getGetSalesQueryKey, getGetCustomersQueryKey } from "@workspace/api-client-react";
 import { apiGet } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit, Trash2, ShoppingCart, X, Info } from "lucide-react";
@@ -42,7 +42,12 @@ export default function Sales() {
   const updateSale = useUpdateSale();
   const deleteSale = useDeleteSale();
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getGetSalesQueryKey(), exact: false });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: getGetSalesQueryKey(), exact: false });
+    // Customer totalSpent/totalOrders are computed from sales, so the
+    // customers list must also refresh whenever a sale is created/edited/deleted.
+    qc.invalidateQueries({ queryKey: getGetCustomersQueryKey(), exact: false });
+  };
 
   const openNew = () => {
     setCustomerName(""); setCustomerId(undefined); setDiscount("0"); setNotes(""); setSaleDate(new Date().toISOString().slice(0, 10)); setItems([]); setEditingSale(null); setExpandedRow(null); setOpen(true);

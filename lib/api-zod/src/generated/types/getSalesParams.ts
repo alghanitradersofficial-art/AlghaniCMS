@@ -5,7 +5,7 @@
  * Al Ghani Wholesale Traders ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { GetSalesStatus } from './getSalesStatus.js';
+import type { GetSalesStatus } from './getSalesStatus';
 
 export type GetSalesParams = {
 search?: string;

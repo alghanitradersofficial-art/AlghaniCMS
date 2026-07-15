@@ -148,8 +148,7 @@ export const CreateProductBody = zod.object({
   "minStock": zod.number(),
   "unit": zod.string(),
   "oemNumber": zod.string().optional(),
-  "barcode": zod.string().optional(),
-  "createdAt": zod.coerce.date().optional()
+  "barcode": zod.string().optional()
 })
 
 export const CreateProductResponse = zod.object({
@@ -670,6 +669,7 @@ export const GetCustomersResponse = zod.object({
   "type": zod.enum(['retail', 'dealer', 'wholesale']).optional(),
   "totalOrders": zod.number(),
   "totalSpent": zod.number(),
+  "creditLimit": zod.number().optional(),
   "createdAt": zod.string()
 })),
   "total": zod.number(),
@@ -687,7 +687,8 @@ export const CreateCustomerBody = zod.object({
   "email": zod.string().optional(),
   "address": zod.string().optional(),
   "city": zod.string().optional(),
-  "type": zod.enum(['retail', 'dealer', 'wholesale']).optional()
+  "type": zod.enum(['retail', 'dealer', 'wholesale']).optional(),
+  "creditLimit": zod.number().optional()
 })
 
 export const CreateCustomerResponse = zod.object({
@@ -700,6 +701,7 @@ export const CreateCustomerResponse = zod.object({
   "type": zod.enum(['retail', 'dealer', 'wholesale']).optional(),
   "totalOrders": zod.number(),
   "totalSpent": zod.number(),
+  "creditLimit": zod.number().optional(),
   "createdAt": zod.string()
 })
 
@@ -721,6 +723,7 @@ export const GetCustomerResponse = zod.object({
   "type": zod.enum(['retail', 'dealer', 'wholesale']).optional(),
   "totalOrders": zod.number(),
   "totalSpent": zod.number(),
+  "creditLimit": zod.number().optional(),
   "createdAt": zod.string()
 })
 
@@ -738,7 +741,8 @@ export const UpdateCustomerBody = zod.object({
   "email": zod.string().optional(),
   "address": zod.string().optional(),
   "city": zod.string().optional(),
-  "type": zod.enum(['retail', 'dealer', 'wholesale']).optional()
+  "type": zod.enum(['retail', 'dealer', 'wholesale']).optional(),
+  "creditLimit": zod.number().optional()
 })
 
 export const UpdateCustomerResponse = zod.object({
@@ -751,6 +755,7 @@ export const UpdateCustomerResponse = zod.object({
   "type": zod.enum(['retail', 'dealer', 'wholesale']).optional(),
   "totalOrders": zod.number(),
   "totalSpent": zod.number(),
+  "creditLimit": zod.number().optional(),
   "createdAt": zod.string()
 })
 
