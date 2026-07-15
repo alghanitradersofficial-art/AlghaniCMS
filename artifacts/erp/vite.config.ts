@@ -41,6 +41,11 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
+      // Ensure dom-helpers subpath imports resolve correctly under pnpm layout
+      "dom-helpers/addClass": path.resolve(import.meta.dirname, "..", "..", "node_modules", ".pnpm", "dom-helpers@5.2.1", "node_modules", "dom-helpers", "esm", "addClass.js"),
+      "dom-helpers/removeClass": path.resolve(import.meta.dirname, "..", "..", "node_modules", ".pnpm", "dom-helpers@5.2.1", "node_modules", "dom-helpers", "esm", "removeClass.js"),
+      "dom-helpers/hasClass": path.resolve(import.meta.dirname, "..", "..", "node_modules", ".pnpm", "dom-helpers@5.2.1", "node_modules", "dom-helpers", "esm", "hasClass.js"),
+      "dom-helpers/contains": path.resolve(import.meta.dirname, "..", "..", "node_modules", ".pnpm", "dom-helpers@5.2.1", "node_modules", "dom-helpers", "esm", "contains.js"),
     },
     dedupe: ["react", "react-dom"],
   },
