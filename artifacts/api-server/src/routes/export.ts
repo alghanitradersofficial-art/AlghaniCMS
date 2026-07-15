@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
 import ExcelJS from "exceljs";
+import PDFDocument from "pdfkit";
 import { buildFinancialReportSummary } from "../lib/reporting-engine.js";
 
 const router = Router();
@@ -734,9 +735,27 @@ router.get("/supplier-payment/:id/excel", async (req, res) => {
     notesCell.value = `Notes: ${p.notes ?? ''}`;
     notesCell.alignment = { horizontal: 'left' };
 
+    // Allocations table (if present)
+    let allocations: Array<{ purchaseId: number; poNumber: string; amount: number }> = [];
+    try {
+      allocations = typeof p.allocations === 'string' ? JSON.parse(p.allocations) : (p.allocations || []);
+    } catch (e) {
+      allocations = p.allocations || [];
+    }
+
+    if (allocations && allocations.length > 0) {
+      ws.addRow([]);
+      ws.addRow(["Allocated To PO", "Amount", "", ""]);
+      styleExcelHeader(ws, ws.rowCount, 4);
+      for (const a of allocations) {
+        const r = ws.addRow([a.poNumber || (a.purchaseId ? `PO-${a.purchaseId}` : '-'), a.amount, "", ""]);
+        formatCurrencyCell(r.getCell(2));
+      }
+    }
+
     // Signatures area
     // Prepared by (employee) signature box
-    const signRow = 12;
+    const signRow = ws.rowCount + 2;
     ws.mergeCells(signRow, 1, signRow + 3, 2);
     const preparedCell = ws.getCell(signRow, 1);
     preparedCell.value = `Prepared By: ${p.paid_by_name || ''}`;
@@ -771,6 +790,137 @@ router.get("/supplier-payment/:id/excel", async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to export payment receipt" });
+  }
+});
+
+// ─── SUPPLIER PAYMENT RECEIPT (PDF) ─────────────────────────────────────────
+router.get("/supplier-payment/:id/pdf", async (req, res) => {
+  try {
+    const paymentId = parseInt(req.params.id);
+    if (!paymentId) return res.status(400).json({ error: "payment id required" });
+    const { company } = await getCompanySettings();
+
+    const q = await pool.query(`
+      SELECT sp.*, s.name as supplier_name, u.name as paid_by_name
+      FROM supplier_payments sp
+      LEFT JOIN suppliers s ON s.id = sp.supplier_id
+      LEFT JOIN users u ON u.id = sp.paid_by_user_id
+      WHERE sp.id = $1
+      LIMIT 1
+    `, [paymentId]);
+
+    if (!q.rows || q.rows.length === 0) return res.status(404).json({ error: "Payment not found" });
+    const p = q.rows[0];
+
+    let allocations: Array<{ purchaseId: number; poNumber: string; amount: number }> = [];
+    try {
+      allocations = typeof p.allocations === 'string' ? JSON.parse(p.allocations) : (p.allocations || []);
+    } catch (e) {
+      allocations = p.allocations || [];
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="supplier-payment-${p.id}.pdf"`);
+
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    doc.pipe(res);
+
+    doc.fontSize(16).fillColor('#111111').text(company.name || 'Company Name', { align: 'center' });
+    doc.moveDown(0.2);
+    doc.fontSize(10).fillColor('#666666').text(`${company.branch || ''} | ${company.address || ''} | ${company.phone || ''}`, { align: 'center' });
+    doc.moveDown(0.6);
+
+    doc.fontSize(12).fillColor('#000').text(`Supplier Payment Receipt`, { align: 'left' });
+    doc.moveDown(0.4);
+
+    doc.fontSize(10).text(`Receipt #: PAY-${String(p.id).padStart(6, '0')}`);
+    doc.text(`Date: ${new Date(p.payment_date).toLocaleDateString('en-PK')}`);
+    doc.text(`Supplier: ${p.supplier_name || '-'}`);
+    doc.text(`Method: ${(p.method || 'cash').toString()}`);
+    doc.text(`Reference: ${p.reference || '-'}`);
+    doc.moveDown(0.4);
+    doc.fontSize(11).text(`Amount: Rs ${parseFloat(p.amount || 0).toLocaleString()}`, { continued: false });
+    doc.text(`Paid By: ${p.paid_by_name || '-'}`);
+    doc.moveDown(0.6);
+
+    if (allocations && allocations.length > 0) {
+      doc.fontSize(10).text('Allocations:', { underline: true });
+      doc.moveDown(0.2);
+      for (const a of allocations) {
+        doc.text(`${a.poNumber || `PO-${a.purchaseId}`} — Rs ${parseFloat(String(a.amount)).toLocaleString()}`);
+      }
+      doc.moveDown(0.6);
+    }
+
+    if (p.notes) {
+      doc.fontSize(10).text(`Notes: ${p.notes}`);
+      doc.moveDown(0.6);
+    }
+
+    // Signature lines
+    const y = doc.y + 40;
+    doc.moveTo(60, y).lineTo(240, y).stroke();
+    doc.text('Prepared By', 60, y + 6);
+    doc.moveTo(320, y).lineTo(520, y).stroke();
+    doc.text('Owner / Authorised Signatory', 320, y + 6);
+
+    doc.end();
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Failed to export PDF' });
+  }
+});
+
+// ─── ADMIN: Backfill allocations for existing supplier payments ───────────────
+router.post('/admin/backfill-supplier-payment-allocations', async (req, res) => {
+  try {
+    // optional supplierId filter
+    const supplierIdFilter = req.body?.supplierId ? Number(req.body.supplierId) : null;
+
+    // fetch suppliers
+    const supQ = supplierIdFilter
+      ? await pool.query('SELECT id FROM suppliers WHERE id = $1', [supplierIdFilter])
+      : await pool.query('SELECT id FROM suppliers');
+
+    const suppliers = supQ.rows || [];
+    const results: any[] = [];
+
+    for (const s of suppliers) {
+      const sid = s.id;
+      const purchasesRes = await pool.query(`SELECT id, po_number, total, created_at FROM purchases WHERE supplier_id = $1 AND status = 'received' ORDER BY created_at ASC`, [sid]);
+      const paymentsRes = await pool.query(`SELECT id, amount, payment_date, created_at FROM supplier_payments WHERE supplier_id = $1 ORDER BY payment_date ASC, id ASC`, [sid]);
+
+      const purchases = (purchasesRes.rows || []).map((p: any) => ({ id: p.id, poNumber: p.po_number, total: parseFloat(p.total || 0), remaining: parseFloat(p.total || 0) }));
+
+      for (const pay of (paymentsRes.rows || [])) {
+        let remaining = parseFloat(pay.amount || 0);
+        const allocations: Array<{ purchaseId: number; poNumber: string; amount: number }> = [];
+        for (const po of purchases) {
+          if (remaining <= 0) break;
+          const due = po.remaining;
+          if (due <= 0) continue;
+          const apply = Math.min(due, remaining);
+          if (apply <= 0) continue;
+          po.remaining = +(po.remaining - apply).toFixed(2);
+          remaining = +(remaining - apply).toFixed(2);
+          allocations.push({ purchaseId: po.id, poNumber: po.poNumber, amount: apply });
+        }
+
+        // save allocations only if not present
+        const existing = await pool.query('SELECT allocations FROM supplier_payments WHERE id = $1', [pay.id]);
+        const existingAlloc = existing.rows?.[0]?.allocations;
+        if ((!existingAlloc || existingAlloc.length === 0) && allocations.length > 0) {
+          await pool.query('UPDATE supplier_payments SET allocations = $1 WHERE id = $2', [JSON.stringify(allocations), pay.id]);
+        }
+
+        results.push({ supplierId: sid, paymentId: pay.id, allocationsCount: allocations.length });
+      }
+    }
+
+    return res.json({ ok: true, results });
+  } catch (err) {
+    console.error('backfill failed', err);
+    return res.status(500).json({ error: 'backfill failed', detail: (err as any)?.message });
   }
 });
 

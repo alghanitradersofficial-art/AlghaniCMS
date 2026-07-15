@@ -323,7 +323,7 @@ router.post("/:id/payments", async (req, res): Promise<any> => {
       const validAllocations = (body.allocations ?? [])
         .filter((a): a is { purchaseId: number; amount: number } => typeof a.purchaseId === "number" && typeof a.amount === "number");
 
-      await allocateSupplierPayment(tx, {
+      const appliedAllocations = await allocateSupplierPayment(tx, {
         supplierId,
         amount: body.amount,
         explicitAllocations: validAllocations.length > 0 ? validAllocations : undefined,
@@ -338,6 +338,7 @@ router.post("/:id/payments", async (req, res): Promise<any> => {
         transactionId: body.transactionId ?? null,
         reference: body.reference ?? null,
         notes: body.notes ?? null,
+        allocations: JSON.stringify(appliedAllocations || []),
         paidByUserId,
         paymentDate,
       }).returning();
