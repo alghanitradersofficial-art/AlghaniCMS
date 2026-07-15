@@ -149,8 +149,13 @@ async function buildAll() {
               }
             }
 
-            // fallback: return original path so esbuild can try default resolution or report a helpful message
-            return { path: path.join(distRoot, subpath || '') };
+            // Fallback to explicit file paths (avoid returning a directory)
+            if (subpath) {
+              // if subpath refers to a directory like `schema`, use its index.js
+              return { path: path.join(distRoot, subpath, 'index.js') };
+            }
+            // default to dist/index.js
+            return { path: path.join(distRoot, 'index.js') };
           });
         }
       }
