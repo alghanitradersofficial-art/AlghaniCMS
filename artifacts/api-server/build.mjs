@@ -14,6 +14,11 @@ async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
 
+  // Build with the repository root as the working directory so workspace packages
+  // (e.g. lib/api-zod) are resolved and bundled into the output instead of
+  // referencing files outside `dist`.
+  const repoRoot = path.resolve(artifactDir, "..", "..");
+
   await esbuild({
     entryPoints: [path.resolve(artifactDir, "src/index.ts")],
     platform: "node",
@@ -21,6 +26,7 @@ async function buildAll() {
     format: "esm",
     outdir: distDir,
     outExtension: { ".js": ".mjs" },
+    absWorkingDir: repoRoot,
     logLevel: "info",
     // Some packages may not be bundleable, so we externalize them, we can add more here as needed.
     // Some of the packages below may not be imported or installed, but we're adding them in case they are in the future.
