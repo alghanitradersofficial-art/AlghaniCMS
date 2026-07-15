@@ -687,6 +687,93 @@ router.get("/report/excel", async (req, res) => {
   }
 });
 
+// ─── SUPPLIER PAYMENT RECEIPT EXPORT ─────────────────────────────────────────
+router.get("/supplier-payment/:id/excel", async (req, res) => {
+  try {
+    const paymentId = parseInt(req.params.id);
+    if (!paymentId) return res.status(400).json({ error: "payment id required" });
+    const { company } = await getCompanySettings();
+
+    const q = await pool.query(`
+      SELECT sp.*, s.name as supplier_name, u.name as paid_by_name
+      FROM supplier_payments sp
+      LEFT JOIN suppliers s ON s.id = sp.supplier_id
+      LEFT JOIN users u ON u.id = sp.paid_by_user_id
+      WHERE sp.id = $1
+      LIMIT 1
+    `, [paymentId]);
+
+    if (!q.rows || q.rows.length === 0) return res.status(404).json({ error: "Payment not found" });
+    const p = q.rows[0];
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = company.name;
+    const ws = wb.addWorksheet("Payment Receipt");
+    // Page setup for print
+    ws.pageSetup = { paperSize: 9, orientation: 'portrait', fitToPage: true, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5 } } as any;
+
+    addExcelBranding(ws, company, "Supplier Payment Receipt", 4);
+    ws.columns = [{ key: 'k', width: 20 }, { key: 'v', width: 36 }, { key: 'k2', width: 18 }, { key: 'v2', width: 24 }];
+    ws.addRow([]);
+    ws.addRow(["Receipt #", `PAY-${String(p.id).padStart(6, '0')}`, "Date", new Date(p.payment_date).toLocaleDateString("en-PK")]);
+    ws.addRow(["Supplier", p.supplier_name || "-", "Method", (p.method || "cash").toString()]);
+    ws.addRow(["Reference", p.reference || "-", "Transaction ID", p.transaction_id || "-"]);
+    ws.addRow(["Amount", parseFloat(p.amount || 0), "Paid By", p.paid_by_name || "-"]);
+    ws.addRow([]);
+
+    // Amount in words row
+    const amountNum = parseFloat(p.amount || 0);
+    ws.mergeCells(8, 1, 8, 4);
+    const amtCell = ws.getCell("A8");
+    amtCell.value = `Amount (Rs): ${amountNum.toLocaleString()}  —  ${amountNum} only`;
+    amtCell.alignment = { horizontal: 'left' };
+
+    // Notes
+    ws.mergeCells(10, 1, 10, 4);
+    const notesCell = ws.getCell("A10");
+    notesCell.value = `Notes: ${p.notes ?? ''}`;
+    notesCell.alignment = { horizontal: 'left' };
+
+    // Signatures area
+    // Prepared by (employee) signature box
+    const signRow = 12;
+    ws.mergeCells(signRow, 1, signRow + 3, 2);
+    const preparedCell = ws.getCell(signRow, 1);
+    preparedCell.value = `Prepared By: ${p.paid_by_name || ''}`;
+    preparedCell.alignment = { horizontal: 'left', vertical: 'bottom' };
+    const preparedRange = ws.getCell(signRow, 1);
+    // Owner signature box
+    ws.mergeCells(signRow, 3, signRow + 3, 4);
+    const ownerCell = ws.getCell(signRow, 3);
+    ownerCell.value = `Owner / Authorised Signatory: ${company.ceoName || ''}`;
+    ownerCell.alignment = { horizontal: 'left', vertical: 'bottom' };
+
+    // Add border outlines around signature boxes
+    function boxBorders(startRow: number, startCol: number, endRow: number, endCol: number) {
+      for (let r = startRow; r <= endRow; r++) {
+        for (let c = startCol; c <= endCol; c++) {
+          const cell = ws.getCell(r, c);
+          cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' }, bottom: { style: 'thin' } } as any;
+        }
+      }
+    }
+    boxBorders(signRow, 1, signRow + 3, 2);
+    boxBorders(signRow, 3, signRow + 3, 4);
+
+    // Styling currency fields
+    const amtCellRef = ws.getCell(6, 2);
+    formatCurrencyCell(amtCellRef);
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="supplier-payment-${p.id}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to export payment receipt" });
+  }
+});
+
 export default router;
 
 // --- Debug helper: build workbook and return sheet names or error ---

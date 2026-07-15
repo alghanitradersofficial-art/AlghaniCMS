@@ -112,7 +112,20 @@ export default function SupplierDetail() {
                     Rs {ledgerQuery.data.currentBalance.toLocaleString()}
                   </p>
                 </div>
-                <Button size="sm" onClick={() => setPaymentDialogOpen(true)} className="gap-1.5"><Wallet className="w-4 h-4" /> Record Payment</Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={() => setPaymentDialogOpen(true)} className="gap-1.5"><Wallet className="w-4 h-4" /> Record Payment</Button>
+                  <Button size="sm" variant="outline" onClick={async () => {
+                    try {
+                      const res = await apiGet<any[]>(`/api/suppliers/${supplierId}/payments`);
+                      const first = res?.[0];
+                      if (!first) return toast({ title: "No payments found for supplier", variant: 'destructive' });
+                      // open the export URL
+                      window.open(`/api/export/supplier-payment/${first.id}/excel`, "_blank");
+                    } catch (e: any) {
+                      toast({ title: "Failed to fetch payments", description: e.message, variant: 'destructive' });
+                    }
+                  }} className="gap-1.5"><Receipt className="w-4 h-4" /> Download Receipt</Button>
+                </div>
               </CardContent>
             </Card>
           )}
