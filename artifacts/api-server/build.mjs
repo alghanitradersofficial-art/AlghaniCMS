@@ -115,16 +115,42 @@ async function buildAll() {
       {
         name: 'workspace-resolve',
         setup(build) {
+          const fs = await import('node:fs');
           const workspaceRegex = /^@workspace\/(.+?)(?:\/(.*))?$/;
           build.onResolve({ filter: workspaceRegex }, (args) => {
             const m = args.path.match(workspaceRegex);
             if (!m) return;
             const pkg = m[1];
             const subpath = m[2];
-            // map to lib/<pkg>/dist
             const distRoot = path.resolve(repoRoot, 'lib', pkg, 'dist');
-            const target = subpath ? path.join(distRoot, subpath) : path.join(distRoot, 'index.js');
-            return { path: target };
+
+            const candidates = [];
+            if (subpath) {
+              const base = path.join(distRoot, subpath);
+              candidates.push(base);
+              candidates.push(base + '.js');
+              candidates.push(base + '.mjs');
+              candidates.push(path.join(base, 'index.js'));
+              candidates.push(path.join(base, 'index.mjs'));
+            } else {
+              candidates.push(path.join(distRoot, 'index.js'));
+              candidates.push(path.join(distRoot, 'index.mjs'));
+              candidates.push(path.join(distRoot, 'index.cjs'));
+              candidates.push(path.join(distRoot, 'index.ts'));
+            }
+
+            for (const c of candidates) {
+              try {
+                if (fs.existsSync(c) && fs.statSync(c).isFile()) {
+                  return { path: c };
+                }
+              } catch (e) {
+                // ignore and continue
+              }
+            }
+
+            // fallback: return original path so esbuild can try default resolution or report a helpful message
+            return { path: path.join(distRoot, subpath || '') };
           });
         }
       }
