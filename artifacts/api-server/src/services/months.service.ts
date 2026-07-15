@@ -175,24 +175,11 @@ async function buildWarnings(periodStart: Date, periodEnd: Date) {
   return warnings;
 }
 
-function normalizePeriodDate(value: Date) {
-  const date = new Date(value);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-function getNextPeriod(year: number, month: number) {
-  if (month === 12) return { year: year + 1, month: 1 };
-  return { year, month: month + 1 };
-}
-
 export async function closeMonth(year: number, month: number, actorUserId: number | null, periodStart: Date, periodEnd: Date) {
   await ensureFinancialTablesReady();
   if (!db) throw new Error("Database unavailable");
-  const normalizedPeriodStart = normalizePeriodDate(periodStart);
-  const normalizedPeriodEnd = normalizePeriodDate(periodEnd);
-  const summary = await computeMonthSummary(normalizedPeriodStart, normalizedPeriodEnd);
-  const warnings = await buildWarnings(normalizedPeriodStart, normalizedPeriodEnd);
+  const summary = await computeMonthSummary(periodStart, periodEnd);
+  const warnings = await buildWarnings(periodStart, periodEnd);
 
   const [existingClosure] = await db.select().from(monthClosuresTable).where(and(eq(monthClosuresTable.year, year), eq(monthClosuresTable.month, month)));
   if (existingClosure) {
@@ -318,7 +305,8 @@ export async function closeMonth(year: number, month: number, actorUserId: numbe
       metadata: { warnings },
     });
 
-    const { year: nextYear, month: nextMonth } = getNextPeriod(year, month);
+    const nextYear = month === 12 ? year + 1 : year;
+    const nextMonth = month === 12 ? 1 : month + 1;
     const [nextPeriod] = await tx.select().from(financialPeriodsTable).where(and(eq(financialPeriodsTable.year, nextYear), eq(financialPeriodsTable.month, nextMonth)));
     if (!nextPeriod) {
       await tx.insert(financialPeriodsTable).values({
@@ -330,14 +318,6 @@ export async function closeMonth(year: number, month: number, actorUserId: numbe
         openingCustomerBalance: String(summary.customerSummary.totalCustomerReceivables),
         openingSupplierBalance: String(summary.supplierSummary.totalSupplierPayables),
       });
-    } else {
-      await tx.update(financialPeriodsTable).set({
-        openingCash: String(summary.cashSummary.closingCashInHand),
-        openingStockValue: String(summary.inventorySummary.closingStockValue),
-        openingCustomerBalance: String(summary.customerSummary.totalCustomerReceivables),
-        openingSupplierBalance: String(summary.supplierSummary.totalSupplierPayables),
-        status: nextPeriod.status === "closed" ? "closed" : "open",
-      }).where(and(eq(financialPeriodsTable.year, nextYear), eq(financialPeriodsTable.month, nextMonth)));
     }
 
     return { closure: closureRow, period: periodRow, snapshot: { id: 0 }, summary, warnings };
@@ -404,16 +384,6 @@ export async function reopenMonth(year: number, month: number, actorUserId: numb
   if (!period) throw new Error("Period not found");
   await db.transaction(async (tx) => {
     await tx.update(financialPeriodsTable).set({ status: "open", updatedAfterClosing: true }).where(and(eq(financialPeriodsTable.year, year), eq(financialPeriodsTable.month, month)));
-    const { year: nextYear, month: nextMonth } = getNextPeriod(year, month);
-    const [nextPeriod] = await tx.select().from(financialPeriodsTable).where(and(eq(financialPeriodsTable.year, nextYear), eq(financialPeriodsTable.month, nextMonth)));
-    if (nextPeriod && nextPeriod.status === "closed") {
-      await tx.update(financialPeriodsTable).set({
-        openingCash: period.closingCash ?? nextPeriod.openingCash,
-        openingStockValue: period.closingStockValue ?? nextPeriod.openingStockValue,
-        openingCustomerBalance: period.closingCustomerBalance ?? nextPeriod.openingCustomerBalance,
-        openingSupplierBalance: period.closingSupplierBalance ?? nextPeriod.openingSupplierBalance,
-      }).where(and(eq(financialPeriodsTable.year, nextYear), eq(financialPeriodsTable.month, nextMonth)));
-    }
     await tx.insert(financialPeriodAuditLogsTable).values({
       periodId: period.id,
       entityType: "month_closure",

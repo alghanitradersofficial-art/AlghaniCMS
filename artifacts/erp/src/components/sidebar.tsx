@@ -33,7 +33,6 @@ export const MENU_ITEMS = [
   { icon: BookText, label: "Financial Periods", href: "/financial-periods", permission: "settings" },
   { icon: Users2, label: "Users", href: "/users", permission: "users" },
   { icon: Settings2, label: "Settings", href: "/settings", permission: "settings" },
-  { icon: Zap, label: "Calculator", href: "/calculator", permission: "dashboard" },
 ];
 
 export function SidebarContent({ onItemClick, collapsed = false }: { onItemClick?: () => void; collapsed?: boolean }) {

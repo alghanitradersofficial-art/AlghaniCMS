@@ -1,9 +1,8 @@
 import { Router } from "express";
-import { db, salesTable } from "@workspace/db";
+import { db } from "@workspace/db";
 import { customersTable } from "@workspace/db";
 import { eq, ilike, sql } from "drizzle-orm";
 import { CreateCustomerBody, UpdateCustomerBody } from "@workspace/api-zod";
-import { buildCustomerMetricsMap } from "../lib/customer-summary.js";
 
 const router = Router();
 
@@ -35,6 +34,8 @@ router.get("/", async (req, res): Promise<any> => {
       city: customersTable.city,
       type: customersTable.type,
       createdAt: customersTable.createdAt,
+      totalOrders: sql<number>`COALESCE((SELECT COUNT(*) FROM sales WHERE customer_id = ${customersTable.id} AND status != 'cancelled'), 0)`,
+      totalSpent: sql<number>`COALESCE((SELECT SUM(total::numeric) FROM sales WHERE customer_id = ${customersTable.id} AND status != 'cancelled'), 0)`,
       creditLimit: customersTable.creditLimit,
     })
       .from(customersTable)
@@ -42,30 +43,14 @@ router.get("/", async (req, res): Promise<any> => {
       .limit(limit)
       .offset(offset);
 
-    const customerIds = rows.map((row) => row.id);
-    const customerSales = customerIds.length
-      ? await db.select({
-          customerId: salesTable.customerId,
-          customerName: salesTable.customerName,
-          status: salesTable.status,
-          total: salesTable.total,
-        })
-          .from(salesTable)
-          .where(sql`${salesTable.customerId} IS NOT NULL AND ${salesTable.customerId} = ANY(${customerIds})`)
-      : [];
-    const metricsByCustomerId = buildCustomerMetricsMap(customerSales, rows);
-
     return res.json({
-      data: rows.map((r) => {
-        const metrics = metricsByCustomerId.get(r.id) ?? { totalOrders: 0, totalSpent: 0 };
-        return {
-          ...r,
-          totalOrders: metrics.totalOrders,
-          totalSpent: metrics.totalSpent,
-          creditLimit: parseFloat(String(r.creditLimit)),
-          createdAt: r.createdAt.toISOString(),
-        };
-      }),
+      data: rows.map(r => ({
+        ...r,
+        totalOrders: Number(r.totalOrders),
+        totalSpent: parseFloat(String(r.totalSpent)),
+        creditLimit: parseFloat(String(r.creditLimit)),
+        createdAt: r.createdAt.toISOString(),
+      })),
       total,
       page,
       limit,
@@ -103,14 +88,10 @@ router.get("/:id", async (req, res): Promise<any> => {
     const id = parseInt(req.params.id);
     const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, id));
     if (!customer) return res.status(404).json({ error: "Customer not found" });
-    const [salesSummary] = await db.select({
-      totalOrders: sql<number>`COALESCE(count(*), 0)`,
-      totalSpent: sql<number>`COALESCE(sum(${salesTable.total}::numeric), 0)`,
-    }).from(salesTable).where(sql`${salesTable.customerId} = ${id} AND ${salesTable.status} != 'cancelled' AND ${salesTable.status} != 'void'`);
     return res.json({
       ...customer,
-      totalOrders: Number(salesSummary?.totalOrders ?? 0),
-      totalSpent: Number(salesSummary?.totalSpent ?? 0),
+      totalOrders: 0,
+      totalSpent: 0,
       creditLimit: parseFloat(customer.creditLimit as string),
       createdAt: customer.createdAt.toISOString(),
     });
@@ -129,14 +110,10 @@ router.patch("/:id", async (req, res): Promise<any> => {
     }
     const [customer] = await db.update(customersTable).set(updateValues).where(eq(customersTable.id, id)).returning();
     if (!customer) return res.status(404).json({ error: "Customer not found" });
-    const [salesSummary] = await db.select({
-      totalOrders: sql<number>`COALESCE(count(*), 0)`,
-      totalSpent: sql<number>`COALESCE(sum(${salesTable.total}::numeric), 0)`,
-    }).from(salesTable).where(sql`${salesTable.customerId} = ${id} AND ${salesTable.status} != 'cancelled' AND ${salesTable.status} != 'void'`);
     return res.json({
       ...customer,
-      totalOrders: Number(salesSummary?.totalOrders ?? 0),
-      totalSpent: Number(salesSummary?.totalSpent ?? 0),
+      totalOrders: 0,
+      totalSpent: 0,
       creditLimit: parseFloat(customer.creditLimit as string),
       createdAt: customer.createdAt.toISOString(),
     });

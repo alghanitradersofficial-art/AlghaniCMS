@@ -14,7 +14,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { SectionLoading, PageLoading } from "@/components/loading-state";
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
-import { getAuthHeaders } from "@/lib/auth";
 import { useGetSuppliers } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Plus, Package, Receipt, ShoppingCart, CalendarIcon, Wallet, Edit, Trash2 } from "lucide-react";
@@ -53,9 +52,6 @@ export default function SupplierDetail() {
 
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
-  const [selectPaymentOpen, setSelectPaymentOpen] = useState(false);
-  const [paymentsList, setPaymentsList] = useState<Array<any>>([]);
-  const [previewPayment, setPreviewPayment] = useState<any | null>(null);
 
   const productsQuery = useQuery({
     queryKey: ["supplier-products", supplierId],
@@ -82,8 +78,6 @@ export default function SupplierDetail() {
       <Layout>
         <PageLoading label="Loading supplier" />
       </Layout>
-
-      
     );
   }
 
@@ -109,47 +103,20 @@ export default function SupplierDetail() {
               {supplier.phone} {supplier.city ? `• ${supplier.city}` : ""}
             </p>
           </div>
-
-          <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            <Button size="sm" onClick={() => setPaymentDialogOpen(true)} className="gap-1.5"><Wallet className="w-4 h-4" /> Record Payment</Button>
-            <Button size="sm" variant="outline" onClick={async () => {
-              try {
-                const payments = await apiGet<any[]>(`/api/suppliers/${supplierId}/payments`);
-                if (!payments || payments.length === 0) return toast({ title: "No payments found for supplier", variant: 'destructive' });
-                setPaymentsList(payments);
-                setSelectPaymentOpen(true);
-              } catch (e: any) {
-                toast({ title: "Failed to fetch payments", description: e.message, variant: 'destructive' });
-              }
-            }} className="gap-1.5"><Receipt className="w-4 h-4" /> Download Receipt</Button>
-          </div>
-        </div>
-
-        {ledgerQuery.data && (
-          <Card className="border-border bg-card">
-            <CardContent className="py-3 px-5 flex items-center gap-6">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">We Owe</p>
-                <p className={cn("text-lg font-bold", ledgerQuery.data.currentBalance > 0 ? "text-amber-500" : "text-emerald-500")}>
-                  Rs {ledgerQuery.data.currentBalance.toLocaleString()}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
+          {ledgerQuery.data && (
+            <Card className="border-border bg-card">
+              <CardContent className="py-3 px-5 flex items-center gap-6">
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">We Owe</p>
+                  <p className={cn("text-lg font-bold", ledgerQuery.data.currentBalance > 0 ? "text-amber-500" : "text-emerald-500")}>
+                    Rs {ledgerQuery.data.currentBalance.toLocaleString()}
+                  </p>
+                </div>
                 <Button size="sm" onClick={() => setPaymentDialogOpen(true)} className="gap-1.5"><Wallet className="w-4 h-4" /> Record Payment</Button>
-                <Button size="sm" variant="outline" onClick={async () => {
-                  try {
-                    const payments = await apiGet<any[]>(`/api/suppliers/${supplierId}/payments`);
-                    if (!payments || payments.length === 0) return toast({ title: "No payments found for supplier", variant: 'destructive' });
-                    setPaymentsList(payments);
-                    setSelectPaymentOpen(true);
-                  } catch (e: any) {
-                    toast({ title: "Failed to fetch payments", description: e.message, variant: 'destructive' });
-                  }
-                }} className="gap-1.5"><Receipt className="w-4 h-4" /> Download Receipt</Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
         <Tabs defaultValue="products" className="w-full">
           <TabsList>

@@ -1,12 +1,19 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const envPath = path.resolve(moduleDir, "..", ".env");
+if (typeof process.loadEnvFile === "function") {
+  process.loadEnvFile(envPath);
+}
+
 const { logger } = await import("./lib/logger.js");
 const { initializeDatabase } = await import("./lib/init-db.js");
 const { default: app } = await import("./app.js");
 
-// Initialize DB for serverless/runtime environments. Do not load local .env or
-// call app.listen here — the runtime (Vercel) will invoke the exported app.
+const rawPort = process.env["PORT"];
+
+// Initialize DB immediately for the serverless function environment
 initializeDatabase()
   .then(() => {
     logger.info("Database initialized successfully");
@@ -15,5 +22,24 @@ initializeDatabase()
     logger.error({ err }, "Database initialization failed");
   });
 
-// Export the express app for Vercel's Node runtime
+// ONLY call app.listen if we are NOT running on Vercel (local development)
+if (!process.env["VERCEL"]) {
+  if (!rawPort) {
+    throw new Error(
+      "PORT environment variable is required but was not provided.",
+    );
+  }
+
+  const port = Number(rawPort);
+
+  if (Number.isNaN(port) || port <= 0) {
+    throw new Error(`Invalid PORT value: "${rawPort}"`);
+  }
+
+  app.listen(port, () => {
+    logger.info({ port }, "Server listening locally");
+  });
+}
+
+// CRITICAL: Vercel needs the express app exported as default
 export default app;

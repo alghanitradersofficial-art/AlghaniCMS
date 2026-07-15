@@ -3,7 +3,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import fs from "node:fs";
 import { rm } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
@@ -14,32 +13,6 @@ const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
-  const repoRoot = path.resolve(artifactDir, "..", "..");
-  // Build with the repository root as the working directory so workspace packages
-  // (e.g. lib/api-zod) are resolved and bundled into the output instead of
-  // referencing files outside `dist`.
-
-  // Preflight: ensure workspace packages used by api-server have built outputs.
-  const apiServerPkg = JSON.parse(fs.readFileSync(path.resolve(artifactDir, 'package.json'), 'utf8'));
-  const workspaceDeps = Object.keys(apiServerPkg.dependencies || {}).filter((d) => d.startsWith('@workspace/'));
-  const missing = [];
-  for (const dep of workspaceDeps) {
-    const pkgName = dep.replace('@workspace/', '');
-    const expected = path.resolve(repoRoot, 'lib', pkgName, 'dist', 'index.js');
-    const expectedMjs = path.resolve(repoRoot, 'lib', pkgName, 'dist', 'index.mjs');
-    if (!fs.existsSync(expected) && !fs.existsSync(expectedMjs)) {
-      missing.push({ pkg: pkgName, expected: [expected, expectedMjs] });
-    }
-  }
-  if (missing.length > 0) {
-    console.warn('Warning: built workspace packages not found; esbuild will attempt to bundle from source.');
-    for (const m of missing) {
-      console.warn(` - ${m.pkg} (checked: ${m.expected.join(', ')})`);
-    }
-    console.warn('If you prefer prebuilt artifacts, run `pnpm --filter <pkg> run build` before this step.');
-    // continue and allow the workspace-resolve plugin to fallback to source files
-  }
-
 
   await esbuild({
     entryPoints: [path.resolve(artifactDir, "src/index.ts")],
@@ -48,7 +21,6 @@ async function buildAll() {
     format: "esm",
     outdir: distDir,
     outExtension: { ".js": ".mjs" },
-    absWorkingDir: repoRoot,
     logLevel: "info",
     // Some packages may not be bundleable, so we externalize them, we can add more here as needed.
     // Some of the packages below may not be imported or installed, but we're adding them in case they are in the future.
@@ -130,69 +102,7 @@ async function buildAll() {
     sourcemap: "linked",
     plugins: [
       // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
-      esbuildPluginPino({ transports: ["pino-pretty"] }),
-      // Resolve workspace packages to their built `dist` output in the monorepo.
-      // This ensures esbuild running on CI (Vercel) finds the compiled files
-      // produced by the earlier `pnpm --filter ... run build` step.
-      {
-        name: 'workspace-resolve',
-        setup(build) {
-          const workspaceRegex = /^@workspace\/(.+?)(?:\/(.*))?$/;
-          build.onResolve({ filter: workspaceRegex }, (args) => {
-            const m = args.path.match(workspaceRegex);
-            if (!m) return;
-            const pkg = m[1];
-            const subpath = m[2];
-            const distRoot = path.resolve(repoRoot, 'lib', pkg, 'dist');
-
-            const candidates = [];
-            if (subpath) {
-              const base = path.join(distRoot, subpath);
-              candidates.push(base);
-              candidates.push(base + '.js');
-              candidates.push(base + '.mjs');
-              candidates.push(path.join(base, 'index.js'));
-              candidates.push(path.join(base, 'index.mjs'));
-            } else {
-              candidates.push(path.join(distRoot, 'index.js'));
-              candidates.push(path.join(distRoot, 'index.mjs'));
-              candidates.push(path.join(distRoot, 'index.cjs'));
-              candidates.push(path.join(distRoot, 'index.ts'));
-            }
-
-            for (const c of candidates) {
-              try {
-                if (fs.existsSync(c) && fs.statSync(c).isFile()) {
-                  return { path: c };
-                }
-              } catch (e) {
-                // ignore and continue
-              }
-            }
-
-            // Fallback to explicit file paths (avoid returning a directory)
-            if (subpath) {
-              const candidateDirIndex = path.join(distRoot, subpath, 'index.js');
-              if (fs.existsSync(candidateDirIndex)) return { path: candidateDirIndex };
-              // try source fallback (src/<subpath>/index.ts)
-              const srcFallback = path.join(repoRoot, 'lib', pkg, 'src', subpath + (subpath.endsWith('.ts') ? '' : '.ts'));
-              if (fs.existsSync(srcFallback)) return { path: srcFallback };
-              const srcDirIndex = path.join(repoRoot, 'lib', pkg, 'src', subpath, 'index.ts');
-              if (fs.existsSync(srcDirIndex)) return { path: srcDirIndex };
-              return { path: candidateDirIndex };
-            }
-
-            // default to dist/index.js if present
-            const distIndex = path.join(distRoot, 'index.js');
-            if (fs.existsSync(distIndex)) return { path: distIndex };
-            // fallback to source index.ts in the package
-            const srcIndex = path.join(repoRoot, 'lib', pkg, 'src', 'index.ts');
-            if (fs.existsSync(srcIndex)) return { path: srcIndex };
-            // last resort: return dist index path (may trigger clearer error)
-            return { path: distIndex };
-          });
-        }
-      }
+      esbuildPluginPino({ transports: ["pino-pretty"] })
     ],
     // Make sure packages that are cjs only (e.g. express) but are bundled continue to work in our esm output file
     banner: {

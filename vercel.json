@@ -6,11 +6,6 @@
       "use": "@vercel/static-build",
       "config": { "distDir": "dist", "buildCommand": "pnpm --filter @workspace/erp run build" }
     },
-    {
-      "src": "artifacts/api-server/package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "dist", "buildCommand": "pnpm --filter @workspace/api-server run build" }
-    },
     { "src": "api/index.js", "use": "@vercel/node" }
   ],
   "routes": [

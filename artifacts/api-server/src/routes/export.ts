@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
 import ExcelJS from "exceljs";
-import PDFDocument from "pdfkit";
 import { buildFinancialReportSummary } from "../lib/reporting-engine.js";
 
 const router = Router();
@@ -462,10 +461,10 @@ router.get("/sales/excel", async (req, res) => {
     const totalRow = ws.addRow(["", "", "", "GRAND TOTAL", "", "", grandTotal]);
     totalRow.font = { bold: true, color: { argb: "FFDC2626" } };
     totalRow.getCell(7).font = { bold: true, color: { argb: "FFD97706" } };
-    const excelBuffer = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="sales-report.xlsx"');
-    return res.send(excelBuffer);
+    await wb.xlsx.write(res);
+    res.end();
   } catch (error) {
     try {
       console.error("Export route error:", (error as any)?.stack || JSON.stringify(error));
@@ -505,10 +504,10 @@ router.get("/purchases/excel", async (req, res) => {
     }
     const totalRow = ws.addRow(["", "", "", "GRAND TOTAL", "", grandTotal]);
     totalRow.font = { bold: true, color: { argb: "FFDC2626" } };
-    const excelBuffer = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="purchases-report.xlsx"');
-    return res.send(excelBuffer);
+    await wb.xlsx.write(res);
+    res.end();
   } catch (error) {
     return res.status(500).json({ error: "Failed to export Excel" });
   }
@@ -551,10 +550,10 @@ router.get("/inventory/excel", async (req, res) => {
     const totalRow = ws.addRow(["", "", "", "", "", "", "", "TOTAL VALUE", totalValue]);
     totalRow.font = { bold: true, color: { argb: "FFDC2626" } };
     totalRow.getCell(9).font = { bold: true, color: { argb: "FFD97706" } };
-    const excelBuffer = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="inventory-report.xlsx"');
-    return res.send(excelBuffer);
+    await wb.xlsx.write(res);
+    res.end();
   } catch (error) {
     return res.status(500).json({ error: "Failed to export Excel" });
   }
@@ -580,10 +579,10 @@ router.get("/expenses/excel", async (req, res) => {
     }
     const tr = ws.addRow(["", "", "TOTAL", total]);
     tr.font = { bold: true, color: { argb: "FFDC2626" } };
-    const excelBuffer = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="expenses-report.xlsx"');
-    return res.send(excelBuffer);
+    await wb.xlsx.write(res);
+    res.end();
   } catch (error) {
     return res.status(500).json({ error: "Failed to export Excel" });
   }
@@ -678,256 +677,13 @@ router.get("/report/excel", async (req, res) => {
     expenseTotalRow.font = { bold: true, color: { argb: "FFDC2626" } };
     formatCurrencyCell(expenseTotalRow.getCell(4));
 
-    const excelBuffer = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="full-report.xlsx"');
-    return res.send(excelBuffer);
+    await wb.xlsx.write(res);
+    res.end();
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to export Excel" });
-  }
-});
-
-// ─── SUPPLIER PAYMENT RECEIPT EXPORT ─────────────────────────────────────────
-router.get("/supplier-payment/:id/excel", async (req, res) => {
-  try {
-    const paymentId = parseInt(req.params.id);
-    if (!paymentId) return res.status(400).json({ error: "payment id required" });
-    const { company } = await getCompanySettings();
-
-    const q = await pool.query(`
-      SELECT sp.*, s.name as supplier_name, u.name as paid_by_name
-      FROM supplier_payments sp
-      LEFT JOIN suppliers s ON s.id = sp.supplier_id
-      LEFT JOIN users u ON u.id = sp.paid_by_user_id
-      WHERE sp.id = $1
-      LIMIT 1
-    `, [paymentId]);
-
-    if (!q.rows || q.rows.length === 0) return res.status(404).json({ error: "Payment not found" });
-    const p = q.rows[0];
-
-    const wb = new ExcelJS.Workbook();
-    wb.creator = company.name;
-    const ws = wb.addWorksheet("Payment Receipt");
-    // Page setup for print
-    ws.pageSetup = { paperSize: 9, orientation: 'portrait', fitToPage: true, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5 } } as any;
-
-    addExcelBranding(ws, company, "Supplier Payment Receipt", 4);
-    ws.columns = [{ key: 'k', width: 20 }, { key: 'v', width: 36 }, { key: 'k2', width: 18 }, { key: 'v2', width: 24 }];
-    ws.addRow([]);
-    ws.addRow(["Receipt #", `PAY-${String(p.id).padStart(6, '0')}`, "Date", new Date(p.payment_date).toLocaleDateString("en-PK")]);
-    ws.addRow(["Supplier", p.supplier_name || "-", "Method", (p.method || "cash").toString()]);
-    ws.addRow(["Reference", p.reference || "-", "Transaction ID", p.transaction_id || "-"]);
-    ws.addRow(["Amount", parseFloat(p.amount || 0), "Paid By", p.paid_by_name || "-"]);
-    ws.addRow([]);
-
-    // Amount in words row
-    const amountNum = parseFloat(p.amount || 0);
-    ws.mergeCells(8, 1, 8, 4);
-    const amtCell = ws.getCell("A8");
-    amtCell.value = `Amount (Rs): ${amountNum.toLocaleString()}  —  ${amountNum} only`;
-    amtCell.alignment = { horizontal: 'left' };
-
-    // Notes
-    ws.mergeCells(10, 1, 10, 4);
-    const notesCell = ws.getCell("A10");
-    notesCell.value = `Notes: ${p.notes ?? ''}`;
-    notesCell.alignment = { horizontal: 'left' };
-
-    // Allocations table (if present)
-    let allocations: Array<{ purchaseId: number; poNumber: string; amount: number }> = [];
-    try {
-      allocations = typeof p.allocations === 'string' ? JSON.parse(p.allocations) : (p.allocations || []);
-    } catch (e) {
-      allocations = p.allocations || [];
-    }
-
-    if (allocations && allocations.length > 0) {
-      ws.addRow([]);
-      ws.addRow(["Allocated To PO", "Amount", "", ""]);
-      styleExcelHeader(ws, ws.rowCount, 4);
-      for (const a of allocations) {
-        const r = ws.addRow([a.poNumber || (a.purchaseId ? `PO-${a.purchaseId}` : '-'), a.amount, "", ""]);
-        formatCurrencyCell(r.getCell(2));
-      }
-    }
-
-    // Signatures area
-    // Prepared by (employee) signature box
-    const signRow = ws.rowCount + 2;
-    ws.mergeCells(signRow, 1, signRow + 3, 2);
-    const preparedCell = ws.getCell(signRow, 1);
-    preparedCell.value = `Prepared By: ${p.paid_by_name || ''}`;
-    preparedCell.alignment = { horizontal: 'left', vertical: 'bottom' };
-    const preparedRange = ws.getCell(signRow, 1);
-    // Owner signature box
-    ws.mergeCells(signRow, 3, signRow + 3, 4);
-    const ownerCell = ws.getCell(signRow, 3);
-    ownerCell.value = `Owner / Authorised Signatory: ${company.ceoName || ''}`;
-    ownerCell.alignment = { horizontal: 'left', vertical: 'bottom' };
-
-    // Add border outlines around signature boxes
-    function boxBorders(startRow: number, startCol: number, endRow: number, endCol: number) {
-      for (let r = startRow; r <= endRow; r++) {
-        for (let c = startCol; c <= endCol; c++) {
-          const cell = ws.getCell(r, c);
-          cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' }, bottom: { style: 'thin' } } as any;
-        }
-      }
-    }
-    boxBorders(signRow, 1, signRow + 3, 2);
-    boxBorders(signRow, 3, signRow + 3, 4);
-
-    // Styling currency fields
-    const amtCellRef = ws.getCell(6, 2);
-    formatCurrencyCell(amtCellRef);
-
-    const excelBuffer = await wb.xlsx.writeBuffer();
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="supplier-payment-${p.id}.xlsx"`);
-    return res.send(excelBuffer);
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Failed to export payment receipt" });
-  }
-});
-
-// ─── SUPPLIER PAYMENT RECEIPT (PDF) ─────────────────────────────────────────
-router.get("/supplier-payment/:id/pdf", async (req, res) => {
-  try {
-    const paymentId = parseInt(req.params.id);
-    if (!paymentId) return res.status(400).json({ error: "payment id required" });
-    const { company } = await getCompanySettings();
-
-    const q = await pool.query(`
-      SELECT sp.*, s.name as supplier_name, u.name as paid_by_name
-      FROM supplier_payments sp
-      LEFT JOIN suppliers s ON s.id = sp.supplier_id
-      LEFT JOIN users u ON u.id = sp.paid_by_user_id
-      WHERE sp.id = $1
-      LIMIT 1
-    `, [paymentId]);
-
-    if (!q.rows || q.rows.length === 0) return res.status(404).json({ error: "Payment not found" });
-    const p = q.rows[0];
-
-    let allocations: Array<{ purchaseId: number; poNumber: string; amount: number }> = [];
-    try {
-      allocations = typeof p.allocations === 'string' ? JSON.parse(p.allocations) : (p.allocations || []);
-    } catch (e) {
-      allocations = p.allocations || [];
-    }
-
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
-    const chunks: Buffer[] = [];
-    doc.on('data', (chunk) => chunks.push(chunk));
-    const pdfPromise = new Promise<Buffer>((resolve, reject) => {
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
-    });
-
-    doc.fontSize(16).fillColor('#111111').text(company.name || 'Company Name', { align: 'center' });
-    doc.moveDown(0.2);
-    doc.fontSize(10).fillColor('#666666').text(`${company.branch || ''} | ${company.address || ''} | ${company.phone || ''}`, { align: 'center' });
-    doc.moveDown(0.6);
-
-    doc.fontSize(12).fillColor('#000').text(`Supplier Payment Receipt`, { align: 'left' });
-    doc.moveDown(0.4);
-
-    doc.fontSize(10).text(`Receipt #: PAY-${String(p.id).padStart(6, '0')}`);
-    doc.text(`Date: ${new Date(p.payment_date).toLocaleDateString('en-PK')}`);
-    doc.text(`Supplier: ${p.supplier_name || '-'}`);
-    doc.text(`Method: ${(p.method || 'cash').toString()}`);
-    doc.text(`Reference: ${p.reference || '-'}`);
-    doc.moveDown(0.4);
-    doc.fontSize(11).text(`Amount: Rs ${parseFloat(p.amount || 0).toLocaleString()}`, { continued: false });
-    doc.text(`Paid By: ${p.paid_by_name || '-'}`);
-    doc.moveDown(0.6);
-
-    if (allocations && allocations.length > 0) {
-      doc.fontSize(10).text('Allocations:', { underline: true });
-      doc.moveDown(0.2);
-      for (const a of allocations) {
-        doc.text(`${a.poNumber || `PO-${a.purchaseId}`} — Rs ${parseFloat(String(a.amount)).toLocaleString()}`);
-      }
-      doc.moveDown(0.6);
-    }
-
-    if (p.notes) {
-      doc.fontSize(10).text(`Notes: ${p.notes}`);
-      doc.moveDown(0.6);
-    }
-
-    // Signature lines
-    const y = doc.y + 40;
-    doc.moveTo(60, y).lineTo(240, y).stroke();
-    doc.text('Prepared By', 60, y + 6);
-    doc.moveTo(320, y).lineTo(520, y).stroke();
-    doc.text('Owner / Authorised Signatory', 320, y + 6);
-
-    doc.end();
-    const pdfBuffer = await pdfPromise;
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="supplier-payment-${p.id}.pdf"`);
-    return res.send(pdfBuffer);
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: 'Failed to export PDF' });
-  }
-});
-
-// ─── ADMIN: Backfill allocations for existing supplier payments ───────────────
-router.post('/admin/backfill-supplier-payment-allocations', async (req, res) => {
-  try {
-    // optional supplierId filter
-    const supplierIdFilter = req.body?.supplierId ? Number(req.body.supplierId) : null;
-
-    // fetch suppliers
-    const supQ = supplierIdFilter
-      ? await pool.query('SELECT id FROM suppliers WHERE id = $1', [supplierIdFilter])
-      : await pool.query('SELECT id FROM suppliers');
-
-    const suppliers = supQ.rows || [];
-    const results: any[] = [];
-
-    for (const s of suppliers) {
-      const sid = s.id;
-      const purchasesRes = await pool.query(`SELECT id, po_number, total, created_at FROM purchases WHERE supplier_id = $1 AND status = 'received' ORDER BY created_at ASC`, [sid]);
-      const paymentsRes = await pool.query(`SELECT id, amount, payment_date, created_at FROM supplier_payments WHERE supplier_id = $1 ORDER BY payment_date ASC, id ASC`, [sid]);
-
-      const purchases = (purchasesRes.rows || []).map((p: any) => ({ id: p.id, poNumber: p.po_number, total: parseFloat(p.total || 0), remaining: parseFloat(p.total || 0) }));
-
-      for (const pay of (paymentsRes.rows || [])) {
-        let remaining = parseFloat(pay.amount || 0);
-        const allocations: Array<{ purchaseId: number; poNumber: string; amount: number }> = [];
-        for (const po of purchases) {
-          if (remaining <= 0) break;
-          const due = po.remaining;
-          if (due <= 0) continue;
-          const apply = Math.min(due, remaining);
-          if (apply <= 0) continue;
-          po.remaining = +(po.remaining - apply).toFixed(2);
-          remaining = +(remaining - apply).toFixed(2);
-          allocations.push({ purchaseId: po.id, poNumber: po.poNumber, amount: apply });
-        }
-
-        // save allocations only if not present
-        const existing = await pool.query('SELECT allocations FROM supplier_payments WHERE id = $1', [pay.id]);
-        const existingAlloc = existing.rows?.[0]?.allocations;
-        if ((!existingAlloc || existingAlloc.length === 0) && allocations.length > 0) {
-          await pool.query('UPDATE supplier_payments SET allocations = $1 WHERE id = $2', [JSON.stringify(allocations), pay.id]);
-        }
-
-        results.push({ supplierId: sid, paymentId: pay.id, allocationsCount: allocations.length });
-      }
-    }
-
-    return res.json({ ok: true, results });
-  } catch (err) {
-    console.error('backfill failed', err);
-    return res.status(500).json({ error: 'backfill failed', detail: (err as any)?.message });
   }
 });
 

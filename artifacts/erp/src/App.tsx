@@ -16,7 +16,6 @@ import Suppliers from "@/pages/suppliers";
 import Expenses from "@/pages/expenses";
 import Users from "@/pages/users";
 import SupplierDetail from "@/pages/supplier-detail";
-import CalculatorPage from "@/pages/calculator";
 import Reports from "@/pages/reports";
 import RecentActivity from "@/pages/recent-activity";
 import Settings from "@/pages/settings";
@@ -68,7 +67,6 @@ function Router() {
       <Route path="/operations">{() => <AuthGuard component={Operations} permission="inventory" />}</Route>
       <Route path="/financial-periods">{() => <AuthGuard component={MonthsPage} permission="settings" />}</Route>
       <Route path="/settings">{() => <AuthGuard component={Settings} permission="settings" />}</Route>
-      <Route path="/calculator">{() => <AuthGuard component={CalculatorPage} permission="dashboard" />}</Route>
       <Route path="/">{() => <Redirect to={isLoggedIn() ? "/dashboard" : "/login"} />}</Route>
       <Route component={NotFound} />
     </Switch>

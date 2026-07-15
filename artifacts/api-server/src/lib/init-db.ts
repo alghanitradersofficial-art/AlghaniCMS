@@ -169,7 +169,6 @@ export async function initializeDatabase() {
         transaction_id text,
         reference text,
         notes text,
-        allocations jsonb NOT NULL DEFAULT '[]'::jsonb,
         paid_by_user_id integer,
         payment_date timestamp with time zone NOT NULL DEFAULT NOW(),
         is_voided boolean NOT NULL DEFAULT false,

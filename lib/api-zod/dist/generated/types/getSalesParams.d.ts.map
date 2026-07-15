@@ -1,1 +1,0 @@
-{"version":3,"file":"getSalesParams.d.ts","sourceRoot":"","sources":["../../../src/generated/types/getSalesParams.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AACH,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,kBAAkB,CAAC;AAEvD,MAAM,MAAM,cAAc,GAAG;IAC7B,MAAM,CAAC,EAAE,MAAM,CAAC;IAChB,MAAM,CAAC,EAAE,cAAc,CAAC;IACxB,IAAI,CAAC,EAAE,MAAM,CAAC;IACd,KAAK,CAAC,EAAE,MAAM,CAAC;CACd,CAAC"}
