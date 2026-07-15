@@ -14,6 +14,7 @@ const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
+  const repoRoot = path.resolve(artifactDir, "..", "..");
   // Build with the repository root as the working directory so workspace packages
   // (e.g. lib/api-zod) are resolved and bundled into the output instead of
   // referencing files outside `dist`.
@@ -39,10 +40,6 @@ async function buildAll() {
     process.exit(1);
   }
 
-  // Build with the repository root as the working directory so workspace packages
-  // (e.g. lib/api-zod) are resolved and bundled into the output instead of
-  // referencing files outside `dist`.
-  const repoRoot = path.resolve(artifactDir, "..", "..");
 
   await esbuild({
     entryPoints: [path.resolve(artifactDir, "src/index.ts")],
