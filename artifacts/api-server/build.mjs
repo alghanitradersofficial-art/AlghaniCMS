@@ -17,7 +17,6 @@ async function buildAll() {
   // Build with the repository root as the working directory so workspace packages
   // (e.g. lib/api-zod) are resolved and bundled into the output instead of
   // referencing files outside `dist`.
-  const repoRoot = path.resolve(artifactDir, "..", "..");
 
   // Preflight: ensure workspace packages used by api-server have built outputs.
   const apiServerPkg = JSON.parse(fs.readFileSync(path.resolve(artifactDir, 'package.json'), 'utf8'));
