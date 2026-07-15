@@ -83,53 +83,7 @@ export default function SupplierDetail() {
         <PageLoading label="Loading supplier" />
       </Layout>
 
-      <Dialog open={selectPaymentOpen} onOpenChange={(open) => { if (!open) setPaymentsList([]); setSelectPaymentOpen(open); }}>
-        <DialogContent className="bg-card border-border max-w-2xl">
-          <DialogHeader><DialogTitle>Select payment to download</DialogTitle></DialogHeader>
-          <div className="py-2 space-y-3">
-            {paymentsList.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No payments available.</p>
-            ) : (
-              <div className="space-y-2">
-                {paymentsList.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between border-b border-border/50 py-2">
-                    <div>
-                      <div className="font-medium">PAY-{String(p.id).padStart(6, '0')} • Rs {parseFloat(p.amount).toLocaleString()}</div>
-                      <div className="text-xs text-muted-foreground">{new Date(p.paymentDate || p.payment_date || p.createdAt || p.created_at).toLocaleDateString()}</div>
-                    </div>
-                    <div className="flex gap-2">
-                        <Button size="sm" onClick={async () => {
-                        try {
-                          const headers = getAuthHeaders();
-                          const resp = await fetch(`/api/export/supplier-payment/${p.id}/excel`, { headers });
-                          if (!resp.ok) throw new Error('Export failed');
-                          const blob = await resp.blob();
-                          const url = window.URL.createObjectURL(blob);
-                          const a = document.createElement('a'); a.href = url; a.download = `supplier-payment-${p.id}.xlsx`; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
-                        } catch (e: any) { toast({ title: 'Download failed', description: e.message, variant: 'destructive' }); }
-                        }} className="gap-1">XLSX</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setPreviewPayment(p)}>Preview</Button>
-                      <Button size="sm" variant="outline" onClick={async () => {
-                        try {
-                          const headers = getAuthHeaders();
-                          const resp = await fetch(`/api/export/supplier-payment/${p.id}/pdf`, { headers });
-                          if (!resp.ok) throw new Error('PDF export failed');
-                          const blob = await resp.blob();
-                          const url = window.URL.createObjectURL(blob);
-                          const a = document.createElement('a'); a.href = url; a.download = `supplier-payment-${p.id}.pdf`; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
-                        } catch (e: any) { toast({ title: 'PDF download failed', description: e.message, variant: 'destructive' }); }
-                      }} className="gap-1">PDF</Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setSelectPaymentOpen(false)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      
     );
   }
 
@@ -186,6 +140,55 @@ export default function SupplierDetail() {
           ) : null}
           <DialogFooter>
             <Button variant="ghost" onClick={() => setPreviewPayment(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Select Payment dialog */}
+      <Dialog open={selectPaymentOpen} onOpenChange={(open) => { if (!open) setPaymentsList([]); setSelectPaymentOpen(open); }}>
+        <DialogContent className="bg-card border-border max-w-2xl">
+          <DialogHeader><DialogTitle>Select payment to download</DialogTitle></DialogHeader>
+          <div className="py-2 space-y-3">
+            {paymentsList.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No payments available.</p>
+            ) : (
+              <div className="space-y-2">
+                {paymentsList.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between border-b border-border/50 py-2">
+                    <div>
+                      <div className="font-medium">PAY-{String(p.id).padStart(6, '0')} • Rs {parseFloat(p.amount).toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">{new Date(p.paymentDate || p.payment_date || p.createdAt || p.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={async () => {
+                        try {
+                          const headers = getAuthHeaders();
+                          const resp = await fetch(`/api/export/supplier-payment/${p.id}/excel`, { headers });
+                          if (!resp.ok) throw new Error('Export failed');
+                          const blob = await resp.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a'); a.href = url; a.download = `supplier-payment-${p.id}.xlsx`; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+                        } catch (e: any) { toast({ title: 'Download failed', description: e.message, variant: 'destructive' }); }
+                      }} className="gap-1">XLSX</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setPreviewPayment(p)}>Preview</Button>
+                      <Button size="sm" variant="outline" onClick={async () => {
+                        try {
+                          const headers = getAuthHeaders();
+                          const resp = await fetch(`/api/export/supplier-payment/${p.id}/pdf`, { headers });
+                          if (!resp.ok) throw new Error('PDF export failed');
+                          const blob = await resp.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a'); a.href = url; a.download = `supplier-payment-${p.id}.pdf`; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+                        } catch (e: any) { toast({ title: 'PDF download failed', description: e.message, variant: 'destructive' }); }
+                      }} className="gap-1">PDF</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSelectPaymentOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
