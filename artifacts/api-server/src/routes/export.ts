@@ -462,10 +462,10 @@ router.get("/sales/excel", async (req, res) => {
     const totalRow = ws.addRow(["", "", "", "GRAND TOTAL", "", "", grandTotal]);
     totalRow.font = { bold: true, color: { argb: "FFDC2626" } };
     totalRow.getCell(7).font = { bold: true, color: { argb: "FFD97706" } };
+    const excelBuffer = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="sales-report.xlsx"');
-    await wb.xlsx.write(res);
-    res.end();
+    return res.send(excelBuffer);
   } catch (error) {
     try {
       console.error("Export route error:", (error as any)?.stack || JSON.stringify(error));
@@ -505,10 +505,10 @@ router.get("/purchases/excel", async (req, res) => {
     }
     const totalRow = ws.addRow(["", "", "", "GRAND TOTAL", "", grandTotal]);
     totalRow.font = { bold: true, color: { argb: "FFDC2626" } };
+    const excelBuffer = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="purchases-report.xlsx"');
-    await wb.xlsx.write(res);
-    res.end();
+    return res.send(excelBuffer);
   } catch (error) {
     return res.status(500).json({ error: "Failed to export Excel" });
   }
@@ -551,10 +551,10 @@ router.get("/inventory/excel", async (req, res) => {
     const totalRow = ws.addRow(["", "", "", "", "", "", "", "TOTAL VALUE", totalValue]);
     totalRow.font = { bold: true, color: { argb: "FFDC2626" } };
     totalRow.getCell(9).font = { bold: true, color: { argb: "FFD97706" } };
+    const excelBuffer = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="inventory-report.xlsx"');
-    await wb.xlsx.write(res);
-    res.end();
+    return res.send(excelBuffer);
   } catch (error) {
     return res.status(500).json({ error: "Failed to export Excel" });
   }
@@ -580,10 +580,10 @@ router.get("/expenses/excel", async (req, res) => {
     }
     const tr = ws.addRow(["", "", "TOTAL", total]);
     tr.font = { bold: true, color: { argb: "FFDC2626" } };
+    const excelBuffer = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="expenses-report.xlsx"');
-    await wb.xlsx.write(res);
-    res.end();
+    return res.send(excelBuffer);
   } catch (error) {
     return res.status(500).json({ error: "Failed to export Excel" });
   }
@@ -678,10 +678,10 @@ router.get("/report/excel", async (req, res) => {
     expenseTotalRow.font = { bold: true, color: { argb: "FFDC2626" } };
     formatCurrencyCell(expenseTotalRow.getCell(4));
 
+    const excelBuffer = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="full-report.xlsx"');
-    await wb.xlsx.write(res);
-    res.end();
+    return res.send(excelBuffer);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to export Excel" });
@@ -783,10 +783,10 @@ router.get("/supplier-payment/:id/excel", async (req, res) => {
     const amtCellRef = ws.getCell(6, 2);
     formatCurrencyCell(amtCellRef);
 
+    const excelBuffer = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="supplier-payment-${p.id}.xlsx"`);
-    await wb.xlsx.write(res);
-    res.end();
+    return res.send(excelBuffer);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to export payment receipt" });
@@ -819,11 +819,13 @@ router.get("/supplier-payment/:id/pdf", async (req, res) => {
       allocations = p.allocations || [];
     }
 
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="supplier-payment-${p.id}.pdf"`);
-
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
-    doc.pipe(res);
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    const pdfPromise = new Promise<Buffer>((resolve, reject) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+    });
 
     doc.fontSize(16).fillColor('#111111').text(company.name || 'Company Name', { align: 'center' });
     doc.moveDown(0.2);
@@ -865,6 +867,11 @@ router.get("/supplier-payment/:id/pdf", async (req, res) => {
     doc.text('Owner / Authorised Signatory', 320, y + 6);
 
     doc.end();
+    const pdfBuffer = await pdfPromise;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="supplier-payment-${p.id}.pdf"`);
+    return res.send(pdfBuffer);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: 'Failed to export PDF' });

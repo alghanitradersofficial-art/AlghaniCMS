@@ -100,126 +100,56 @@ export default function SupplierDetail() {
           <Link href="/suppliers">
             <Button size="sm" variant="ghost" className="gap-1.5"><ArrowLeft className="w-4 h-4" /> Suppliers</Button>
           </Link>
-            </div>
+        </div>
 
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{supplier.name}</h1>
             <p className="text-muted-foreground text-sm mt-1">
               {supplier.phone} {supplier.city ? `• ${supplier.city}` : ""}
-
-      <Dialog open={!!previewPayment} onOpenChange={(open) => { if (!open) setPreviewPayment(null); }}>
-        <DialogContent className="bg-card border-border max-w-xl">
-          <DialogHeader><DialogTitle>Receipt Preview</DialogTitle></DialogHeader>
-          {previewPayment ? (
-            <div className="space-y-3 py-2">
-              <div className="font-medium">PAY-{String(previewPayment.id).padStart(6, '0')} • Rs {parseFloat(previewPayment.amount).toLocaleString()}</div>
-              <div className="text-sm text-muted-foreground">Date: {new Date(previewPayment.paymentDate || previewPayment.payment_date || previewPayment.createdAt || previewPayment.created_at).toLocaleString()}</div>
-              <div className="pt-2">
-                <div className="text-xs text-muted-foreground uppercase">Notes</div>
-                <div className="text-sm">{previewPayment.notes || '—'}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground uppercase">Allocations</div>
-                {((previewPayment.allocations) || []).length === 0 ? (
-                  <div className="text-sm">No allocations recorded.</div>
-                ) : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-xs text-muted-foreground uppercase"><th className="text-left">PO</th><th className="text-right">Amount</th></tr>
-                    </thead>
-                    <tbody>
-                      {previewPayment.allocations.map((a: any) => (
-                        <tr key={a.purchaseId}><td>{a.poNumber}</td><td className="text-right">Rs {parseFloat(a.amount).toLocaleString()}</td></tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          ) : null}
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setPreviewPayment(null)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Select Payment dialog */}
-      <Dialog open={selectPaymentOpen} onOpenChange={(open) => { if (!open) setPaymentsList([]); setSelectPaymentOpen(open); }}>
-        <DialogContent className="bg-card border-border max-w-2xl">
-          <DialogHeader><DialogTitle>Select payment to download</DialogTitle></DialogHeader>
-          <div className="py-2 space-y-3">
-            {paymentsList.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No payments available.</p>
-            ) : (
-              <div className="space-y-2">
-                {paymentsList.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between border-b border-border/50 py-2">
-                    <div>
-                      <div className="font-medium">PAY-{String(p.id).padStart(6, '0')} • Rs {parseFloat(p.amount).toLocaleString()}</div>
-                      <div className="text-xs text-muted-foreground">{new Date(p.paymentDate || p.payment_date || p.createdAt || p.created_at).toLocaleDateString()}</div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={async () => {
-                        try {
-                          const headers = getAuthHeaders();
-                          const resp = await fetch(`/api/export/supplier-payment/${p.id}/excel`, { headers });
-                          if (!resp.ok) throw new Error('Export failed');
-                          const blob = await resp.blob();
-                          const url = window.URL.createObjectURL(blob);
-                          const a = document.createElement('a'); a.href = url; a.download = `supplier-payment-${p.id}.xlsx`; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
-                        } catch (e: any) { toast({ title: 'Download failed', description: e.message, variant: 'destructive' }); }
-                      }} className="gap-1">XLSX</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setPreviewPayment(p)}>Preview</Button>
-                      <Button size="sm" variant="outline" onClick={async () => {
-                        try {
-                          const headers = getAuthHeaders();
-                          const resp = await fetch(`/api/export/supplier-payment/${p.id}/pdf`, { headers });
-                          if (!resp.ok) throw new Error('PDF export failed');
-                          const blob = await resp.blob();
-                          const url = window.URL.createObjectURL(blob);
-                          const a = document.createElement('a'); a.href = url; a.download = `supplier-payment-${p.id}.pdf`; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
-                        } catch (e: any) { toast({ title: 'PDF download failed', description: e.message, variant: 'destructive' }); }
-                      }} className="gap-1">PDF</Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setSelectPaymentOpen(false)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
             </p>
           </div>
-          {ledgerQuery.data && (
-            <Card className="border-border bg-card">
-              <CardContent className="py-3 px-5 flex items-center gap-6">
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">We Owe</p>
-                  <p className={cn("text-lg font-bold", ledgerQuery.data.currentBalance > 0 ? "text-amber-500" : "text-emerald-500")}>
-                    Rs {ledgerQuery.data.currentBalance.toLocaleString()}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button size="sm" onClick={() => setPaymentDialogOpen(true)} className="gap-1.5"><Wallet className="w-4 h-4" /> Record Payment</Button>
-                  <Button size="sm" variant="outline" onClick={async () => {
-                    try {
-                      const payments = await apiGet<any[]>(`/api/suppliers/${supplierId}/payments`);
-                      if (!payments || payments.length === 0) return toast({ title: "No payments found for supplier", variant: 'destructive' });
-                      setPaymentsList(payments);
-                      setSelectPaymentOpen(true);
-                    } catch (e: any) {
-                      toast({ title: "Failed to fetch payments", description: e.message, variant: 'destructive' });
-                    }
-                  }} className="gap-1.5"><Receipt className="w-4 h-4" /> Download Receipt</Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <Button size="sm" onClick={() => setPaymentDialogOpen(true)} className="gap-1.5"><Wallet className="w-4 h-4" /> Record Payment</Button>
+            <Button size="sm" variant="outline" onClick={async () => {
+              try {
+                const payments = await apiGet<any[]>(`/api/suppliers/${supplierId}/payments`);
+                if (!payments || payments.length === 0) return toast({ title: "No payments found for supplier", variant: 'destructive' });
+                setPaymentsList(payments);
+                setSelectPaymentOpen(true);
+              } catch (e: any) {
+                toast({ title: "Failed to fetch payments", description: e.message, variant: 'destructive' });
+              }
+            }} className="gap-1.5"><Receipt className="w-4 h-4" /> Download Receipt</Button>
+          </div>
         </div>
+
+        {ledgerQuery.data && (
+          <Card className="border-border bg-card">
+            <CardContent className="py-3 px-5 flex items-center gap-6">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">We Owe</p>
+                <p className={cn("text-lg font-bold", ledgerQuery.data.currentBalance > 0 ? "text-amber-500" : "text-emerald-500")}>
+                  Rs {ledgerQuery.data.currentBalance.toLocaleString()}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={() => setPaymentDialogOpen(true)} className="gap-1.5"><Wallet className="w-4 h-4" /> Record Payment</Button>
+                <Button size="sm" variant="outline" onClick={async () => {
+                  try {
+                    const payments = await apiGet<any[]>(`/api/suppliers/${supplierId}/payments`);
+                    if (!payments || payments.length === 0) return toast({ title: "No payments found for supplier", variant: 'destructive' });
+                    setPaymentsList(payments);
+                    setSelectPaymentOpen(true);
+                  } catch (e: any) {
+                    toast({ title: "Failed to fetch payments", description: e.message, variant: 'destructive' });
+                  }
+                }} className="gap-1.5"><Receipt className="w-4 h-4" /> Download Receipt</Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Tabs defaultValue="products" className="w-full">
           <TabsList>
