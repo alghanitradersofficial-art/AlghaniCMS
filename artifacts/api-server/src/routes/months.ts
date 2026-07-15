@@ -16,7 +16,9 @@ router.get("/", async (req, res) => {
 
 router.get("/overview", async (req, res) => {
   try {
-    const overview = await monthsService.getCurrentPeriodOverview();
+    const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+    const month = req.query.month ? parseInt(req.query.month as string) : undefined;
+    const overview = await monthsService.getCurrentPeriodOverview(year, month);
     return res.json(overview);
   } catch (error) {
     console.error(error);

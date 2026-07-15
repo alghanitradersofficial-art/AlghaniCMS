@@ -26,7 +26,7 @@ export default function MonthsPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const qc = useQueryClient();
 
-  const { data: overview, error: overviewError } = useQuery({ queryKey: ["financial-period-overview"], queryFn: () => apiGet(`/api/months/overview`), retry: false });
+  const { data: overview, error: overviewError } = useQuery({ queryKey: ["financial-period-overview", year, month], queryFn: () => apiGet(`/api/months/overview?year=${year}&month=${month}`), retry: false });
   const { data: closures, error: closuresError } = useQuery({ queryKey: ["months-closures"], queryFn: () => apiGet(`/api/months`), retry: false });
 
   const overviewWarnings = Array.isArray((overview as any)?.warnings) ? (overview as any).warnings : [];
@@ -36,8 +36,8 @@ export default function MonthsPage() {
     { label: "Current financial month", value: `${monthNames[(month - 1) % 12]} ${year}` },
     { label: "Current status", value: (overview as any)?.period?.status ?? "open" },
     { label: "Closing progress", value: `${overviewWarnings.length ? "Needs attention" : "Ready to close"}` },
-    { label: "Last closed month", value: closureRows[0] ? `${closureRows[0].year}-${String(closureRows[0].month).padStart(2, "0")}` : "None" },
-  ], [closureRows, month, overviewWarnings.length, year]);
+    { label: "Last closed month", value: (overview as any)?.lastClosure ? `${(overview as any).lastClosure.year}-${String((overview as any).lastClosure.month).padStart(2, "0")}` : "None" },
+  ], [overview, month, overviewWarnings.length, year]);
 
   async function handleClose() {
     try {
@@ -138,11 +138,11 @@ export default function MonthsPage() {
                 <div key={c.id} className="flex flex-col gap-2 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <div className="font-semibold">{c.year}-{String(c.month).padStart(2, "0")}</div>
-                    <div className="text-sm text-muted-foreground">Created: {formatSafeDate(c.created_at)}</div>
+                    <div className="text-sm text-muted-foreground">Created: {formatSafeDate(c.createdAt)}</div>
                   </div>
                   <div className="text-right text-sm">
-                    <div>Total Sales: Rs. {Number(c.total_sales).toLocaleString()}</div>
-                    <div>Closing Stock: Rs. {Number(c.closing_stock_value).toLocaleString()}</div>
+                    <div>Total Sales: Rs. {Number(c.totalSales ?? 0).toLocaleString()}</div>
+                    <div>Closing Stock: Rs. {Number(c.closingStockValue ?? 0).toLocaleString()}</div>
                   </div>
                 </div>
               ))}

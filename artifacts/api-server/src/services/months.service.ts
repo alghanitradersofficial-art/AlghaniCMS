@@ -338,13 +338,13 @@ export async function getClosure(id: number) {
   return row ?? null;
 }
 
-export async function getCurrentPeriodOverview() {
+export async function getCurrentPeriodOverview(requestedYear?: number, requestedMonth?: number) {
   logger.info({ dbPresent: Boolean(db), databaseEnvPresent: Boolean(process.env.DATABASE_URL) }, "months overview: db present?");
   await ensureFinancialTablesReady();
+  const now = new Date();
+  const year = requestedYear ?? now.getFullYear();
+  const month = requestedMonth ?? now.getMonth() + 1;
   if (!db) {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
     return {
       year,
       month,
@@ -356,16 +356,15 @@ export async function getCurrentPeriodOverview() {
       degraded: true,
     };
   }
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
   const periodStart = new Date(year, month - 1, 1);
   const periodEnd = new Date(year, month, 0, 23, 59, 59, 999);
   const [period] = await db.select().from(financialPeriodsTable).where(and(eq(financialPeriodsTable.year, year), eq(financialPeriodsTable.month, month)));
   const [snapshot] = await db.select().from(financialPeriodSnapshotsTable).where(eq(financialPeriodSnapshotsTable.periodId, period?.id ?? 0)).orderBy(desc(financialPeriodSnapshotsTable.createdAt));
   const summary = await computeMonthSummary(periodStart, periodEnd);
   const warnings = await buildWarnings(periodStart, periodEnd);
-  const [lastClosure] = await db.select().from(monthClosuresTable).where(and(eq(monthClosuresTable.year, year), eq(monthClosuresTable.month, month - 1))).limit(1);
+  // "Last closed month" should reflect the closure record for the month being viewed itself,
+  // not the previous month — previously this looked up (year, month - 1) which was always off by one.
+  const [lastClosure] = await db.select().from(monthClosuresTable).where(and(eq(monthClosuresTable.year, year), eq(monthClosuresTable.month, month))).limit(1);
   return {
     year,
     month,
