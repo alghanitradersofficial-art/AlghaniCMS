@@ -1,0 +1,10 @@
+# Ignore local node_modules and env files from upload
+node_modules
+**/node_modules
+.env
+.env.local
+.env.*.local
+.DS_Store
+.vscode
+dist
+.artifacts
