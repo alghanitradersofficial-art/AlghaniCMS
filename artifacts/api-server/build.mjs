@@ -108,7 +108,26 @@ async function buildAll() {
     sourcemap: "linked",
     plugins: [
       // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
-      esbuildPluginPino({ transports: ["pino-pretty"] })
+      esbuildPluginPino({ transports: ["pino-pretty"] }),
+      // Resolve workspace packages to their built `dist` output in the monorepo.
+      // This ensures esbuild running on CI (Vercel) finds the compiled files
+      // produced by the earlier `pnpm --filter ... run build` step.
+      {
+        name: 'workspace-resolve',
+        setup(build) {
+          const workspaceRegex = /^@workspace\/(.+?)(?:\/(.*))?$/;
+          build.onResolve({ filter: workspaceRegex }, (args) => {
+            const m = args.path.match(workspaceRegex);
+            if (!m) return;
+            const pkg = m[1];
+            const subpath = m[2];
+            // map to lib/<pkg>/dist
+            const distRoot = path.resolve(repoRoot, 'lib', pkg, 'dist');
+            const target = subpath ? path.join(distRoot, subpath) : path.join(distRoot, 'index.js');
+            return { path: target };
+          });
+        }
+      }
     ],
     // Make sure packages that are cjs only (e.g. express) but are bundled continue to work in our esm output file
     banner: {
