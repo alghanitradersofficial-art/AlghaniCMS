@@ -6,5 +6,6 @@ node_modules
 .env.*.local
 .DS_Store
 .vscode
+artifacts/api-server/api
 dist
 .artifacts
