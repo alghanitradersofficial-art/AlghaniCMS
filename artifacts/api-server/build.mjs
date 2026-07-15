@@ -14,6 +14,31 @@ const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
+  // Build with the repository root as the working directory so workspace packages
+  // (e.g. lib/api-zod) are resolved and bundled into the output instead of
+  // referencing files outside `dist`.
+  const repoRoot = path.resolve(artifactDir, "..", "..");
+
+  // Preflight: ensure workspace packages used by api-server have built outputs.
+  const apiServerPkg = JSON.parse(fs.readFileSync(path.resolve(artifactDir, 'package.json'), 'utf8'));
+  const workspaceDeps = Object.keys(apiServerPkg.dependencies || {}).filter((d) => d.startsWith('@workspace/'));
+  const missing = [];
+  for (const dep of workspaceDeps) {
+    const pkgName = dep.replace('@workspace/', '');
+    const expected = path.resolve(repoRoot, 'lib', pkgName, 'dist', 'index.js');
+    const expectedMjs = path.resolve(repoRoot, 'lib', pkgName, 'dist', 'index.mjs');
+    if (!fs.existsSync(expected) && !fs.existsSync(expectedMjs)) {
+      missing.push({ pkg: pkgName, expected: [expected, expectedMjs] });
+    }
+  }
+  if (missing.length > 0) {
+    console.error('Missing built workspace packages required by api-server:');
+    for (const m of missing) {
+      console.error(` - ${m.pkg} (checked: ${m.expected.join(', ')})`);
+    }
+    console.error('Please run `pnpm --filter <pkg> run build` for the missing packages before bundling.');
+    process.exit(1);
+  }
 
   // Build with the repository root as the working directory so workspace packages
   // (e.g. lib/api-zod) are resolved and bundled into the output instead of

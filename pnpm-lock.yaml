@@ -141,6 +141,12 @@ importers:
 
   .:
     devDependencies:
+      '@types/node':
+        specifier: ^25.9.4
+        version: 25.9.4
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
       prettier:
         specifier: ^3.8.4
         version: 3.8.4
