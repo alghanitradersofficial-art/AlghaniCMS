@@ -7,7 +7,7 @@ import { eq, desc, asc, and, sql, gt } from "drizzle-orm";
 // the ledger helpers compatible while preserving runtime behavior.
 export type DbTx = any;
 
-export type LedgerEntryType = "sale" | "payment" | "adjustment" | "opening_balance";
+export type LedgerEntryType = "sale" | "payment" | "return" | "adjustment" | "opening_balance";
 
 /**
  * Appends one immutable ledger entry for a customer, computing its running
