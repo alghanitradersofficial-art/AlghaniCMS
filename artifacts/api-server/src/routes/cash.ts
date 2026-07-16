@@ -45,19 +45,31 @@ router.get("/history", async (req, res) => {
 // financial month, same rule as expenses/payments.
 router.post("/entries", async (req, res): Promise<any> => {
   try {
-    const { entryDate, type, direction, amount, note } = req.body ?? {};
-    if (!entryDate || !direction || !amount) {
-      return res.status(400).json({ error: "entryDate, direction, and amount are required" });
+    const body = req.body ?? {};
+    // Accept both `entryDate` and `date` — the frontend historically sent
+    // `date`, which meant every request from it failed with a 400 here.
+    const entryDate = body.entryDate ?? body.date;
+    const { type, direction, amount, note } = body;
+    if (!entryDate || !direction || amount === undefined || amount === null) {
+      return res.status(400).json({ error: "entryDate (or date), direction, and amount are required" });
+    }
+    const parsedDate = new Date(entryDate);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return res.status(400).json({ error: "entryDate is not a valid date" });
+    }
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ error: "amount must be a positive number" });
     }
     if (!["in", "out"].includes(direction)) {
       return res.status(400).json({ error: "direction must be 'in' or 'out'" });
     }
     const actorUserId = getUserIdFromRequest(req);
     const row = await cashService.addManualCashEntry({
-      entryDate: new Date(entryDate),
+      entryDate: parsedDate,
       type: ["opening_balance", "old_entry", "adjustment"].includes(type) ? type : "old_entry",
       direction,
-      amount: Number(amount),
+      amount: parsedAmount,
       note: note ?? null,
       actorUserId,
     });

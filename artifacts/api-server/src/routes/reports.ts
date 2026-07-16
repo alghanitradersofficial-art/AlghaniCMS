@@ -6,6 +6,8 @@ import { eq, sql } from "drizzle-orm";
 import { buildFinancialReportSummary } from "../lib/reporting-engine.js";
 import cashService from "../services/cash.service.js";
 import { resolveRange, defaultBucketForRange } from "../lib/date-range.js";
+import { groqChat } from "../lib/groq.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -163,6 +165,175 @@ router.get("/inventory", async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to generate inventory report" });
+  }
+});
+
+// GET /api/reports/sales-by-product?from=&to=
+// How much of each product sold, by revenue and quantity, over the given
+// range (defaults to all-time). Previously missing entirely — there was no
+// way to see which product actually moved.
+router.get("/sales-by-product", async (req, res) => {
+  try {
+    const { start, end } = resolveRange(req);
+    const params: unknown[] = [];
+    let whereClause = "WHERE s.status != 'cancelled'";
+    if (start) { params.push(start.toISOString()); whereClause += ` AND s.sale_date >= $${params.length}`; }
+    if (end) { params.push(end.toISOString()); whereClause += ` AND s.sale_date <= $${params.length}`; }
+
+    const result = await pool.query(
+      `
+      SELECT
+        (item->>'productId')::int AS product_id,
+        MAX(item->>'productName') AS product_name,
+        SUM((item->>'quantity')::numeric) AS quantity_sold,
+        SUM((item->>'total')::numeric) AS revenue,
+        COUNT(DISTINCT s.id) AS invoice_count
+      FROM sales s
+      LEFT JOIN LATERAL jsonb_array_elements(s.items) AS item ON TRUE
+      ${whereClause}
+      GROUP BY (item->>'productId')::int
+      ORDER BY revenue DESC
+      `,
+      params,
+    );
+
+    return res.json({
+      data: result.rows.map((r) => ({
+        productId: r.product_id,
+        productName: r.product_name,
+        quantitySold: parseFloat(r.quantity_sold),
+        revenue: parseFloat(r.revenue),
+        invoiceCount: Number(r.invoice_count),
+      })),
+    });
+  } catch (error) {
+    logger.error({ err: error }, "Failed to generate sales-by-product report");
+    return res.status(500).json({ error: "Failed to generate sales-by-product report" });
+  }
+});
+
+// GET /api/reports/customer-outstanding
+// Convenience alias for the outstanding-balances report that already lived
+// at GET /api/customers/ledger/reports/outstanding — kept there too, but
+// exposed under /reports as well since that's where clients actually looked
+// for it.
+router.get("/customer-outstanding", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT c.id, c.name, c.phone, c.credit_limit,
+             COALESCE(SUM(s.total - s.amount_paid) FILTER (WHERE s.status = 'completed'), 0) AS outstanding,
+             COUNT(*) FILTER (WHERE s.status = 'completed' AND (s.total - s.amount_paid) > 0.005) AS pending_invoices,
+             MIN(s.created_at) FILTER (WHERE s.status = 'completed' AND (s.total - s.amount_paid) > 0.005) AS oldest_unpaid_date
+      FROM customers c
+      LEFT JOIN sales s ON s.customer_id = c.id
+      GROUP BY c.id, c.name, c.phone, c.credit_limit
+      HAVING COALESCE(SUM(s.total - s.amount_paid) FILTER (WHERE s.status = 'completed'), 0) > 0.005
+      ORDER BY outstanding DESC
+    `);
+    return res.json({
+      data: result.rows.map((r) => ({
+        customerId: r.id,
+        customerName: r.name,
+        phone: r.phone,
+        creditLimit: parseFloat(r.credit_limit),
+        outstanding: parseFloat(r.outstanding),
+        pendingInvoices: Number(r.pending_invoices),
+        oldestUnpaidDate: r.oldest_unpaid_date,
+        overdueDays: r.oldest_unpaid_date
+          ? Math.floor((Date.now() - new Date(r.oldest_unpaid_date).getTime()) / 86400000)
+          : 0,
+      })),
+    });
+  } catch (error) {
+    logger.error({ err: error }, "Failed to generate customer outstanding report");
+    return res.status(500).json({ error: "Failed to generate customer outstanding report" });
+  }
+});
+
+// GET /api/reports/supplier-outstanding
+// Mirror of customer-outstanding, for what we owe suppliers. Was entirely
+// missing before, so there was no report of unpaid POs.
+router.get("/supplier-outstanding", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT sup.id, sup.name, sup.phone,
+             COALESCE(SUM(p.total - p.amount_paid) FILTER (WHERE p.status != 'cancelled'), 0) AS outstanding,
+             COUNT(*) FILTER (WHERE p.status != 'cancelled' AND (p.total - p.amount_paid) > 0.005) AS pending_purchase_orders,
+             MIN(p.purchase_date) FILTER (WHERE p.status != 'cancelled' AND (p.total - p.amount_paid) > 0.005) AS oldest_unpaid_date
+      FROM suppliers sup
+      LEFT JOIN purchases p ON p.supplier_id = sup.id
+      GROUP BY sup.id, sup.name, sup.phone
+      HAVING COALESCE(SUM(p.total - p.amount_paid) FILTER (WHERE p.status != 'cancelled'), 0) > 0.005
+      ORDER BY outstanding DESC
+    `);
+    return res.json({
+      data: result.rows.map((r) => ({
+        supplierId: r.id,
+        supplierName: r.name,
+        phone: r.phone,
+        outstanding: parseFloat(r.outstanding),
+        pendingPurchaseOrders: Number(r.pending_purchase_orders),
+        oldestUnpaidDate: r.oldest_unpaid_date,
+        overdueDays: r.oldest_unpaid_date
+          ? Math.floor((Date.now() - new Date(r.oldest_unpaid_date).getTime()) / 86400000)
+          : 0,
+      })),
+    });
+  } catch (error) {
+    logger.error({ err: error }, "Failed to generate supplier outstanding report");
+    return res.status(500).json({ error: "Failed to generate supplier outstanding report" });
+  }
+});
+
+// POST /api/reports/ai-insight { question: string }
+// Answers a free-form question ("which product is most profitable?") using
+// the existing Groq client (lib/groq.ts) grounded in a snapshot of the
+// current profit/loss, inventory, and outstanding-balance numbers — the
+// client already existed but had no route wired up to it.
+router.post("/ai-insight", async (req, res): Promise<any> => {
+  try {
+    const question = typeof req.body?.question === "string" ? req.body.question.trim() : "";
+    if (!question) return res.status(400).json({ error: "question is required" });
+
+    const [invTotalRes, custOutRes, suppOutRes] = await Promise.all([
+      pool.query(`SELECT COUNT(*) AS total_products, COALESCE(SUM(current_stock), 0) AS total_stock, COALESCE(SUM(current_stock::numeric * cost_price::numeric), 0) AS total_value FROM products`),
+      pool.query(`SELECT COALESCE(SUM(s.total - s.amount_paid) FILTER (WHERE s.status = 'completed'), 0) AS total FROM sales s`),
+      pool.query(`SELECT COALESCE(SUM(p.total - p.amount_paid) FILTER (WHERE p.status != 'cancelled'), 0) AS total FROM purchases p`),
+    ]);
+
+    const topProducts = await pool.query(`
+      SELECT MAX(item->>'productName') AS product_name, SUM((item->>'total')::numeric) AS revenue
+      FROM sales s LEFT JOIN LATERAL jsonb_array_elements(s.items) AS item ON TRUE
+      WHERE s.status != 'cancelled'
+      GROUP BY (item->>'productId')::int
+      ORDER BY revenue DESC
+      LIMIT 5
+    `);
+
+    const context = `
+Inventory: ${invTotalRes.rows[0].total_products} products, ${invTotalRes.rows[0].total_stock} units in stock, value ${invTotalRes.rows[0].total_value} PKR.
+Customer outstanding (receivable): ${custOutRes.rows[0].total} PKR.
+Supplier outstanding (payable): ${suppOutRes.rows[0].total} PKR.
+Top 5 products by revenue: ${topProducts.rows.map((r) => `${r.product_name}: ${r.revenue} PKR`).join(", ")}
+`.trim();
+
+    const answer = await groqChat([
+      {
+        role: "system",
+        content:
+          "You are a business analyst assistant for a wholesale trading ERP (Al Ghani Wholesale Traders). " +
+          "Answer the user's question using only the numbers given in the context. Be concise, use PKR, and say clearly if the data given can't answer the question.",
+      },
+      { role: "user", content: `Context:\n${context}\n\nQuestion: ${question}` },
+    ]);
+
+    return res.json({ question, answer, context });
+  } catch (error) {
+    logger.error({ err: error }, "Failed to generate AI insight");
+    const message = error instanceof Error && error.message === "GROQ_API_KEY not configured"
+      ? "AI insights are not configured on this server (missing GROQ_API_KEY)."
+      : "Failed to generate AI insight";
+    return res.status(error instanceof Error && error.message === "GROQ_API_KEY not configured" ? 503 : 500).json({ error: message });
   }
 });
 
