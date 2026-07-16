@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build outputs — never commit these. A committed *.tsbuildinfo with no
+# matching dist/ folder makes `tsc` (in incremental mode) believe its output
+# is already up to date and skip emitting entirely, which is what broke the
+# Vercel build (lib/api-zod build produced no dist/ at all).
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor/OS
+.DS_Store
+.vscode/
+.idea/
+
+# Vercel
+.vercel/
