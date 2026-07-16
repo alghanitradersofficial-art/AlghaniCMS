@@ -23,6 +23,7 @@ const moreItems = [
   { href: "/customers", label: "Contacts", icon: Users },
   { href: "/reports", label: "Reports", icon: BarChart2 },
   { href: "/financial-periods", label: "Financial Periods", icon: Wallet },
+  { href: "/cash-in-hand", label: "Cash in Hand", icon: Wallet },
   { href: "/settings", label: "Settings", icon: Settings2 },
 ];
 

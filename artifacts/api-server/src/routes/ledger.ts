@@ -1,9 +1,41 @@
 import { Router } from "express";
-import { db, customersTable, ledgerEntriesTable } from "@workspace/db";
+import { z } from "zod";
+import { db, customersTable, ledgerEntriesTable, generalLedgerEntriesTable } from "@workspace/db";
 import { eq, and, gte, lte, asc, desc, sql } from "drizzle-orm";
-import { getCustomerLedgerSummary, round2 } from "../lib/ledger.js";
+import { appendLedgerEntry, getCustomerLedgerSummary, recomputeCustomerLedgerRunningBalances, round2 } from "../lib/ledger.js";
+import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
+import { getUserIdFromRequest } from "../lib/auth-context.js";
 
 const router = Router();
+
+const AddAdjustmentBody = z.object({
+  type: z.enum(["return", "adjustment"]),
+  amount: z.number().positive(),
+  description: z.string().optional(),
+  entryDate: z.string().optional(),
+});
+
+const EditAdjustmentBody = z.object({
+  type: z.enum(["return", "adjustment"]).optional(),
+  amount: z.number().positive().optional(),
+  description: z.string().optional(),
+  entryDate: z.string().optional(),
+});
+
+function fmtLedgerEntry(e: typeof ledgerEntriesTable.$inferSelect) {
+  return {
+    id: e.id,
+    customerId: e.customerId,
+    type: e.type,
+    amount: parseFloat(e.amount as string),
+    runningBalance: parseFloat(e.runningBalance as string),
+    saleId: e.saleId,
+    paymentId: e.paymentId,
+    description: e.description,
+    entryDate: e.entryDate.toISOString(),
+    createdAt: e.createdAt.toISOString(),
+  };
+}
 
 /** GET /api/customers/:id/ledger — the Customer Dashboard summary (section 6/7). */
 router.get("/:id/ledger", async (req, res) => {
@@ -151,6 +183,180 @@ router.get("/ledger/reports/outstanding", async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to generate outstanding report" });
+  }
+});
+
+/** POST /api/customers/:id/ledger — manual return/adjustment entry (with date picker). Mirrors supplier-ledger.ts. */
+router.post("/:id/ledger", async (req, res): Promise<any> => {
+  try {
+    const customerId = parseInt(req.params.id);
+    const body = AddAdjustmentBody.parse(req.body);
+    const createdByUserId = getUserIdFromRequest(req);
+    const entryDate = body.entryDate ? new Date(body.entryDate) : new Date();
+
+    const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, customerId));
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+    // Returns/credits reduce what the customer owes us.
+    const signedAmount = -body.amount;
+
+    const entry = await db.transaction(async (tx) => {
+      try {
+        const months = await import("../services/months.service.js");
+        if (await months.isDateInClosedPeriod(entryDate)) {
+          throw new months.MonthClosedError(entryDate);
+        }
+      } catch (err) {
+        if (err && (err as Error).name === "MonthClosedError") throw err;
+      }
+
+      const ledgerEntry = await appendLedgerEntry(tx, {
+        customerId,
+        type: body.type,
+        amount: signedAmount,
+        description: body.description ?? null,
+        createdByUserId,
+        entryDate,
+      });
+
+      await recomputeCustomerLedgerRunningBalances(tx, customerId);
+
+      // A return/credit to the customer's account is cash leaving hand
+      // (a refund) — the mirror of a supplier return, which is cash
+      // effectively coming back to us.
+      await appendGeneralLedgerEntry(tx, {
+        date: entryDate,
+        type: "adjustment",
+        referenceId: ledgerEntry.id,
+        partyType: "customer",
+        partyId: customerId,
+        partyName: customer.name,
+        amount: body.amount,
+        direction: "debit",
+        note: body.description ?? `Customer ${body.type}`,
+        createdByUserId,
+      });
+
+      return ledgerEntry;
+    });
+
+    return res.status(201).json(fmtLedgerEntry(entry));
+  } catch (error) {
+    console.error(error);
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues });
+    if (error && (error as Error).name === "MonthClosedError") return res.status(409).json({ error: (error as Error).message });
+    return res.status(500).json({ error: "Failed to add ledger entry" });
+  }
+});
+
+/** PATCH /api/customers/:id/ledger/:entryId — edit a manual return/adjustment entry. */
+router.patch("/:id/ledger/:entryId", async (req, res): Promise<any> => {
+  try {
+    const customerId = parseInt(req.params.id);
+    const entryId = parseInt(req.params.entryId);
+    const body = EditAdjustmentBody.parse(req.body);
+
+    const [existingEntry] = await db
+      .select()
+      .from(ledgerEntriesTable)
+      .where(and(eq(ledgerEntriesTable.id, entryId), eq(ledgerEntriesTable.customerId, customerId)));
+
+    if (!existingEntry) return res.status(404).json({ error: "Ledger entry not found" });
+    if (existingEntry.saleId || existingEntry.paymentId || !["return", "adjustment"].includes(existingEntry.type)) {
+      return res.status(400).json({ error: "Only manual return/adjustment entries can be edited" });
+    }
+
+    const updateValues: Partial<{ type: "return" | "adjustment"; amount: string; description: string | null; entryDate: Date }> = {};
+    if (body.type) updateValues.type = body.type;
+    if (body.amount !== undefined) updateValues.amount = String(round2(-body.amount));
+    if (body.description !== undefined) updateValues.description = body.description ?? null;
+    if (body.entryDate !== undefined) updateValues.entryDate = new Date(body.entryDate);
+
+    if (Object.keys(updateValues).length === 0) return res.status(400).json({ error: "No changes provided" });
+
+    const effectiveEntryDate = updateValues.entryDate ?? new Date(existingEntry.entryDate);
+    try {
+      const months = await import("../services/months.service.js");
+      if (await months.isDateInClosedPeriod(effectiveEntryDate)) {
+        throw new months.MonthClosedError(effectiveEntryDate);
+      }
+    } catch (err) {
+      if (err && (err as Error).name === "MonthClosedError") throw err;
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.update(ledgerEntriesTable).set(updateValues).where(eq(ledgerEntriesTable.id, entryId));
+      await recomputeCustomerLedgerRunningBalances(tx, customerId);
+
+      await tx
+        .update(generalLedgerEntriesTable)
+        .set({
+          amount: String(round2(body.amount !== undefined ? body.amount : Math.abs(parseFloat(existingEntry.amount as string)))),
+          date: effectiveEntryDate,
+          note: body.description ?? existingEntry.description,
+          type: "adjustment",
+        })
+        .where(and(
+          eq(generalLedgerEntriesTable.referenceId, entryId),
+          eq(generalLedgerEntriesTable.partyType, "customer"),
+          eq(generalLedgerEntriesTable.partyId, customerId),
+          eq(generalLedgerEntriesTable.type, "adjustment"),
+        ));
+    });
+
+    const [updatedEntry] = await db.select().from(ledgerEntriesTable).where(eq(ledgerEntriesTable.id, entryId));
+    return res.json(fmtLedgerEntry(updatedEntry));
+  } catch (error) {
+    console.error(error);
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues });
+    return res.status(500).json({ error: "Failed to edit ledger entry" });
+  }
+});
+
+/** DELETE /api/customers/:id/ledger/:entryId — delete a manual return/adjustment entry. */
+router.delete("/:id/ledger/:entryId", async (req, res): Promise<any> => {
+  try {
+    const customerId = parseInt(req.params.id);
+    const entryId = parseInt(req.params.entryId);
+
+    const [existingEntry] = await db
+      .select()
+      .from(ledgerEntriesTable)
+      .where(and(eq(ledgerEntriesTable.id, entryId), eq(ledgerEntriesTable.customerId, customerId)));
+
+    if (!existingEntry) return res.status(404).json({ error: "Ledger entry not found" });
+    if (existingEntry.saleId || existingEntry.paymentId || !["return", "adjustment"].includes(existingEntry.type)) {
+      return res.status(400).json({ error: "Only manual return/adjustment entries can be deleted" });
+    }
+
+    try {
+      const months = await import("../services/months.service.js");
+      if (await months.isDateInClosedPeriod(existingEntry.entryDate)) {
+        throw new months.MonthClosedError(existingEntry.entryDate);
+      }
+    } catch (err) {
+      if (err && (err as Error).name === "MonthClosedError") return res.status(409).json({ error: "Financial period is closed for this entry date" });
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.delete(ledgerEntriesTable).where(eq(ledgerEntriesTable.id, entryId));
+
+      await tx
+        .delete(generalLedgerEntriesTable)
+        .where(and(
+          eq(generalLedgerEntriesTable.referenceId, entryId),
+          eq(generalLedgerEntriesTable.partyType, "customer"),
+          eq(generalLedgerEntriesTable.partyId, customerId),
+          eq(generalLedgerEntriesTable.type, "adjustment"),
+        ));
+
+      await recomputeCustomerLedgerRunningBalances(tx, customerId);
+    });
+
+    return res.status(204).send();
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to delete ledger entry" });
   }
 });
 

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db, paymentsTable, customersTable, ledgerEntriesTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { appendLedgerEntry, allocatePayment, round2, recomputeCustomerLedgerRunningBalances } from "../lib/ledger.js";
+import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
 import { getUserIdFromRequest } from "../lib/auth-context.js";
 import { isDateInClosedPeriod, MonthClosedError } from "../services/months.service.js";
 
@@ -110,6 +111,22 @@ router.post("/", async (req, res): Promise<any> => {
       // re-chain every entry's running balance in chronological order
       // rather than trusting insertion order.
       await recomputeCustomerLedgerRunningBalances(tx, body.customerId);
+
+      // This is the actual cash-in-hand event — the invoice itself never
+      // touches the cash ledger (see sales.service.ts), only the payment
+      // does, whenever it actually arrives.
+      await appendGeneralLedgerEntry(tx, {
+        date: paymentDate,
+        type: "customer_payment",
+        referenceId: inserted.id,
+        partyType: "customer",
+        partyId: body.customerId,
+        partyName: customer.name,
+        amount: body.amount,
+        direction: "credit",
+        note: body.reference ?? "Payment received",
+        createdByUserId: receivedByUserId,
+      });
 
       return inserted;
     });
@@ -225,6 +242,23 @@ router.post("/:id/void", async (req, res): Promise<any> => {
       });
 
       await recomputeCustomerLedgerRunningBalances(tx, payment.customerId);
+
+      // Reverse the cash-in-hand effect of this payment. Recorded as a
+      // compensating adjustment rather than deleting the original row, so
+      // the cash timeline stays an honest, append-only audit trail.
+      const [customer] = await tx.select().from(customersTable).where(eq(customersTable.id, payment.customerId));
+      await appendGeneralLedgerEntry(tx, {
+        date: new Date(),
+        type: "adjustment",
+        referenceId: payment.id,
+        partyType: "customer",
+        partyId: payment.customerId,
+        partyName: customer?.name ?? null,
+        amount: parseFloat(payment.amount as string),
+        direction: "debit",
+        note: `Payment voided: ${reason}`,
+        createdByUserId,
+      });
     });
 
     return res.json({ success: true });

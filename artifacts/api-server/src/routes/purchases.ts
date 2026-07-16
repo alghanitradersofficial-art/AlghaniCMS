@@ -49,7 +49,15 @@ router.post("/", async (req, res) => {
   try {
     const body = CreatePurchaseBody.parse(req.body);
     const actorUserId = getUserIdFromRequest(req);
-    const purchase = await purchasesService.createPurchase({ ...body, purchaseDate: (req.body as any).purchaseDate }, actorUserId);
+    const purchase = await purchasesService.createPurchase({
+      ...body,
+      purchaseDate: (req.body as any).purchaseDate,
+      // Cash paid at the counter right now (khata suppliers only — purchases
+      // with no supplier are always treated as paid in full). Not yet part
+      // of the generated OpenAPI schema, so read straight off the raw body.
+      amountPaidNow: (req.body as any).amountPaidNow,
+      paymentMethod: (req.body as any).paymentMethod,
+    }, actorUserId);
     return res.status(201).json(formatPurchase(purchase));
   } catch (error) {
     console.error("purchase create failed", error);
@@ -81,6 +89,9 @@ router.patch("/:id", async (req, res) => {
   } catch (error) {
     console.error(error);
     if (error instanceof MonthClosedError) {
+      return res.status(409).json({ error: error.message });
+    }
+    if (error instanceof Error && error.message.startsWith("Cannot change status")) {
       return res.status(409).json({ error: error.message });
     }
     return res.status(500).json({ error: "Failed to update purchase" });

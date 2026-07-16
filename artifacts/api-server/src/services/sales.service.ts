@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { salesTable, productsTable, priceHistoryTable, ledgerEntriesTable } from "@workspace/db";
+import { salesTable, productsTable, priceHistoryTable, ledgerEntriesTable, paymentsTable, customersTable } from "@workspace/db";
 import { eq, sql, inArray } from "drizzle-orm";
 import { appendLedgerEntry, round2, recomputeCustomerLedgerRunningBalances } from "../lib/ledger.js";
 import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
@@ -103,6 +103,17 @@ export async function createSale(body: any, actorUserId: number | null) {
     throw new MonthClosedError(invoiceDate);
   }
 
+  // Cash actually collected right now (at the counter), as opposed to the
+  // invoice total. Walk-in sales (no customerId — nobody to owe us later)
+  // are always treated as fully paid in cash. Sales against a khata
+  // customer default to zero received (pure udhaar/credit) unless the
+  // caller explicitly says otherwise, and can be any amount from 0 up to
+  // the invoice total (partial payment at time of sale).
+  const receivedNow = body.customerId
+    ? round2(Math.max(0, Math.min(Number(body.amountReceived) || 0, total)))
+    : total;
+  const paymentMethod = body.paymentMethod || "cash";
+
   const sale = await db.transaction(async (tx) => {
     if (status === "completed") {
       for (const item of items) {
@@ -118,6 +129,9 @@ export async function createSale(body: any, actorUserId: number | null) {
       subtotal: String(subtotal),
       discount: String(discount),
       total: String(total),
+      // Cash collected at the counter is recorded immediately; the rest
+      // stays outstanding on the customer's khata until a later payment.
+      amountPaid: String(body.customerId && status === "completed" ? receivedNow : 0),
       notes: body.notes ?? null,
       items: items.map(({ productId, productName, quantity, unitPrice, total: t }) => ({ productId, productName, quantity, unitPrice, total: t })),
       saleDate: invoiceDate,
@@ -146,6 +160,10 @@ export async function createSale(body: any, actorUserId: number | null) {
         });
       }
 
+      // Full invoice amount always goes on the customer's khata (accounts
+      // receivable) regardless of how much cash came in right now — this
+      // is what "sale on credit" means: the sale is recorded in full, the
+      // cash follows separately (now, later, or in installments).
       await appendLedgerEntry(tx, {
         customerId: body.customerId,
         type: "sale",
@@ -156,20 +174,64 @@ export async function createSale(body: any, actorUserId: number | null) {
         entryDate: invoiceDate,
       });
 
+      let paymentIdForLedger: number | null = null;
+      if (receivedNow > 0) {
+        // Cash received at the counter is its own payment record — same
+        // shape as a payment recorded later via /api/payments — so it
+        // shows up consistently in payment history/allocations.
+        const [customer] = await tx.select().from(customersTable).where(eq(customersTable.id, body.customerId));
+        const [insertedPayment] = await tx.insert(paymentsTable).values({
+          customerId: body.customerId,
+          amount: String(receivedNow),
+          method: paymentMethod,
+          reference: `Invoice ${invoiceNumber}`,
+          notes: "Received at time of sale",
+          receivedByUserId: actorUserId,
+          allocations: [{ saleId: insertedSale.id, amount: receivedNow }],
+          paymentDate: invoiceDate,
+        }).returning();
+        paymentIdForLedger = insertedPayment.id;
+
+        await appendLedgerEntry(tx, {
+          customerId: body.customerId,
+          type: "payment",
+          amount: -receivedNow,
+          saleId: insertedSale.id,
+          paymentId: insertedPayment.id,
+          description: `Payment received with Invoice ${invoiceNumber}`,
+          createdByUserId: actorUserId,
+          entryDate: invoiceDate,
+        });
+
+        await appendGeneralLedgerEntry(tx, {
+          date: invoiceDate,
+          type: "customer_payment",
+          referenceId: insertedPayment.id,
+          partyType: "customer",
+          partyId: body.customerId,
+          partyName: customer?.name ?? body.customerName,
+          amount: receivedNow,
+          direction: "credit",
+          note: `Payment with Invoice ${invoiceNumber}`,
+          createdByUserId: actorUserId,
+        });
+      }
+      void paymentIdForLedger;
+
       // invoiceDate can be backdated relative to other ledger entries, so
       // re-chain every entry's running balance in chronological order
       // rather than trusting insertion order.
       await recomputeCustomerLedgerRunningBalances(tx, body.customerId);
-    }
-
-    if (status === "completed") {
+    } else if (status === "completed") {
+      // Walk-in sale, no customer on record — always immediate cash, goes
+      // straight to the cash-in-hand ledger.
       const profitSummary = calculateDailyProfitSummary({ sales: total, cogs: items.reduce((sum, item) => sum + item.costPrice * item.quantity, 0), expenses: 0 });
       await appendGeneralLedgerEntry(tx, {
         date: invoiceDate,
         type: "sale",
         referenceId: insertedSale.id,
-        partyType: body.customerId ? "customer" : "none",
-        partyId: body.customerId ?? null,
+        partyType: "none",
+        partyId: null,
         partyName: body.customerName,
         amount: total,
         direction: "credit",
@@ -196,6 +258,18 @@ export async function updateSale(id: number, body: any, actorUserId: number | nu
   if (body.status !== undefined) updateData.status = body.status;
   if (body.discount !== undefined) updateData.discount = String(body.discount);
   if (body.notes !== undefined) updateData.notes = body.notes;
+
+  if (
+    body.status !== undefined &&
+    body.status !== existingSale.status &&
+    existingSale.status === "completed" &&
+    body.status !== "completed" &&
+    round2(parseFloat((existingSale.amountPaid as string) ?? "0")) > 0
+  ) {
+    throw new Error(
+      `Cannot void Invoice ${existingSale.invoiceNumber}: it has ${parseFloat(existingSale.amountPaid as string)} already received against it. Void the linked payment(s) first so cash-in-hand stays accurate.`,
+    );
+  }
 
   const sale = await db.transaction(async (tx) => {
     if (body.status !== undefined && body.status !== existingSale.status) {

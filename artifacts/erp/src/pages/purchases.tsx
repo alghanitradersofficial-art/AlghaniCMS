@@ -26,6 +26,8 @@ export default function Purchases() {
   const [supplierId, setSupplierId] = useState<number | undefined>(undefined);
   const [notes, setNotes] = useState("");
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10));
+  const [amountPaidNow, setAmountPaidNow] = useState("0");
+  const [paymentMethod, setPaymentMethod] = useState("cash");
   const [items, setItems] = useState<LineItem[]>([]);
   const [editOpen, setEditOpen] = useState(false);
   const [editPurchaseId, setEditPurchaseId] = useState<number | null>(null);
@@ -40,7 +42,7 @@ export default function Purchases() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getGetPurchasesQueryKey() });
 
-  const openNew = () => { setSupplierName(""); setSupplierId(undefined); setNotes(""); setPurchaseDate(new Date().toISOString().slice(0, 10)); setItems([]); setOpen(true); };
+  const openNew = () => { setSupplierName(""); setSupplierId(undefined); setNotes(""); setPurchaseDate(new Date().toISOString().slice(0, 10)); setAmountPaidNow("0"); setPaymentMethod("cash"); setItems([]); setOpen(true); };
 
   const addItem = () => {
     if (products?.data[0]) {
@@ -71,9 +73,15 @@ export default function Purchases() {
         notes: notes || undefined,
         items: items.map(i => ({ productId: i.productId, quantity: i.quantity, unitCost: i.unitCost })),
         // supplierId links this PO to a real supplier record so it posts to
-        // their ledger/khata; purchaseDate enables backdated entry. Both are
-        // accepted by the backend but not yet part of the generated type.
-        ...({ supplierId, purchaseDate: new Date(purchaseDate).toISOString() } as {}),
+        // their ledger/khata; purchaseDate enables backdated entry; cash
+        // paid now only applies to khata suppliers (ad-hoc/no-supplier
+        // purchases are always treated as fully paid). All accepted by the
+        // backend but not yet part of the generated type.
+        ...({
+          supplierId,
+          purchaseDate: new Date(purchaseDate).toISOString(),
+          ...(supplierId ? { amountPaidNow: parseFloat(amountPaidNow || "0"), paymentMethod } : {}),
+        } as {}),
       }
     });
     invalidate(); setOpen(false);
@@ -222,6 +230,35 @@ export default function Purchases() {
                 <Input type="date" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)} className="bg-background/50 border-border" />
               </div>
             </div>
+
+            {supplierId !== undefined && (
+              <div className="space-y-2 rounded-2xl border border-border/60 bg-background/60 p-3">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Payment Made Now</Label>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" className="border-border text-xs" onClick={() => setAmountPaidNow(String(total))}>Full (Rs. {total.toLocaleString()})</Button>
+                  <Button type="button" size="sm" variant="outline" className="border-border text-xs" onClick={() => setAmountPaidNow(String(Math.round(total / 2)))}>Half</Button>
+                  <Button type="button" size="sm" variant="outline" className="border-border text-xs" onClick={() => setAmountPaidNow("0")}>None — Full Credit</Button>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input type="number" value={amountPaidNow} onChange={e => setAmountPaidNow(e.target.value)} className="bg-background/50 border-border" placeholder="Amount paid" />
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger className="bg-background/50 border-border sm:w-40"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-border">
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="cheque">Cheque</SelectItem>
+                      <SelectItem value="jazzcash">JazzCash</SelectItem>
+                      <SelectItem value="easypaisa">Easypaisa</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Remaining Rs. {Math.max(0, total - parseFloat(amountPaidNow || "0")).toLocaleString()} will stay on this supplier's khata (ledger) as credit. Only cash actually paid shows up in Cash-in-Hand.
+                </p>
+              </div>
+            )}
+
             <div className="border-t border-border pt-3 text-right">
               <p className="text-lg font-bold text-secondary">Total: Rs. {total.toLocaleString()}</p>
             </div>

@@ -28,6 +28,8 @@ export default function Sales() {
   const [discount, setDiscount] = useState("0");
   const [notes, setNotes] = useState("");
   const [saleDate, setSaleDate] = useState(new Date().toISOString().slice(0, 10));
+  const [amountReceived, setAmountReceived] = useState("0");
+  const [paymentMethod, setPaymentMethod] = useState("cash");
   const [items, setItems] = useState<LineItem[]>([]);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [editSaleOpen, setEditSaleOpen] = useState(false);
@@ -50,7 +52,7 @@ export default function Sales() {
   };
 
   const openNew = () => {
-    setCustomerName(""); setCustomerId(undefined); setDiscount("0"); setNotes(""); setSaleDate(new Date().toISOString().slice(0, 10)); setItems([]); setEditingSale(null); setExpandedRow(null); setOpen(true);
+    setCustomerName(""); setCustomerId(undefined); setDiscount("0"); setNotes(""); setSaleDate(new Date().toISOString().slice(0, 10)); setAmountReceived("0"); setPaymentMethod("cash"); setItems([]); setEditingSale(null); setExpandedRow(null); setOpen(true);
   };
 
   const addItem = () => {
@@ -109,9 +111,14 @@ export default function Sales() {
         discount: parseFloat(discount || "0"),
         notes: notes || undefined,
         items: items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
-        // saleDate enables backdated/historical invoice entry — accepted by
-        // the backend but not yet part of the generated CreateSaleBody type.
-        ...({ saleDate: new Date(saleDate).toISOString() } as {}),
+        // saleDate/amountReceived/paymentMethod are accepted by the backend
+        // but not yet part of the generated CreateSaleBody type. Cash
+        // received now only applies to khata (registered) customers —
+        // walk-in sales are always treated as fully paid.
+        ...({
+          saleDate: new Date(saleDate).toISOString(),
+          ...(customerId ? { amountReceived: parseFloat(amountReceived || "0"), paymentMethod } : {}),
+        } as {}),
       }
     });
     invalidate();
@@ -311,6 +318,35 @@ export default function Sales() {
                 <Input type="date" value={saleDate} onChange={e => setSaleDate(e.target.value)} className="bg-background/50 border-border" />
               </div>
             </div>
+
+            {customerId !== undefined && (
+              <div className="space-y-2 rounded-2xl border border-border/60 bg-background/60 p-3">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Payment Received Now</Label>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" className="border-border text-xs" onClick={() => setAmountReceived(String(total))}>Full (Rs. {total.toLocaleString()})</Button>
+                  <Button type="button" size="sm" variant="outline" className="border-border text-xs" onClick={() => setAmountReceived(String(Math.round(total / 2)))}>Half</Button>
+                  <Button type="button" size="sm" variant="outline" className="border-border text-xs" onClick={() => setAmountReceived("0")}>None — Full Udhaar</Button>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input type="number" value={amountReceived} onChange={e => setAmountReceived(e.target.value)} className="bg-background/50 border-border" placeholder="Amount received" />
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger className="bg-background/50 border-border sm:w-40"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-border">
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="cheque">Cheque</SelectItem>
+                      <SelectItem value="jazzcash">JazzCash</SelectItem>
+                      <SelectItem value="easypaisa">Easypaisa</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Remaining Rs. {Math.max(0, total - parseFloat(amountReceived || "0")).toLocaleString()} will stay on this customer's khata (ledger) as udhaar. Only cash actually received shows up in Cash-in-Hand.
+                </p>
+              </div>
+            )}
+
             <div className="space-y-1">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
               <Input value={notes} onChange={e => setNotes(e.target.value)} className="bg-background/50 border-border" />

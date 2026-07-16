@@ -1,9 +1,10 @@
 import { db } from "@workspace/db";
-import { purchasesTable, productsTable } from "@workspace/db";
+import { purchasesTable, productsTable, supplierPaymentsTable, suppliersTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { appendSupplierLedgerEntry } from "../lib/supplier-ledger.js";
 import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
 import { calculateWeightedAverageCost, calculateWeightedAverageCostAfterChange } from "../lib/inventory-accounting.js";
+import { round2 } from "../lib/ledger.js";
 import { isDateInClosedPeriod, MonthClosedError } from "./months.service.js";
 
 export async function listPurchases(params: Record<string, any>) {
@@ -59,6 +60,16 @@ export async function createPurchase(body: any, actorUserId: number | null) {
   const subtotal = items.reduce((sum: number, i: any) => sum + i.total, 0);
   const poNumber = `PO-${Date.now()}`;
 
+  // Cash actually paid out right now, as opposed to the PO total. Purchases
+  // with no supplier on record (nobody to owe later) are always treated as
+  // paid in full immediately. Purchases against a khata supplier default to
+  // zero paid now (pure credit purchase) unless told otherwise, and can be
+  // any amount up to the PO total (partial payment at time of purchase).
+  const paidNow = body.supplierId
+    ? round2(Math.max(0, Math.min(Number(body.amountPaidNow) || 0, subtotal)))
+    : subtotal;
+  const paymentMethod = body.paymentMethod || "cash";
+
   const purchase = await db.transaction(async (tx) => {
     const [inserted] = await tx.insert(purchasesTable).values({
       poNumber,
@@ -67,12 +78,17 @@ export async function createPurchase(body: any, actorUserId: number | null) {
       status: body.status || "received",
       subtotal: String(subtotal),
       total: String(subtotal),
+      // Cash paid at the counter is recorded immediately; the rest stays
+      // outstanding on the supplier's khata until a later payment.
+      amountPaid: String(body.supplierId ? paidNow : 0),
       notes: body.notes ?? null,
       items: items,
       purchaseDate,
     }).returning();
 
     if (body.supplierId) {
+      // Full PO amount always goes on the supplier's khata (accounts
+      // payable) regardless of how much cash went out right now.
       const ledgerEntry = await appendSupplierLedgerEntry(tx, {
         supplierId: body.supplierId,
         type: "purchase",
@@ -82,20 +98,59 @@ export async function createPurchase(body: any, actorUserId: number | null) {
         createdByUserId: actorUserId,
         entryDate: purchaseDate,
       });
+      void ledgerEntry;
 
+      if (paidNow > 0) {
+        const [supplier] = await tx.select().from(suppliersTable).where(eq(suppliersTable.id, body.supplierId));
+        const [insertedPayment] = await tx.insert(supplierPaymentsTable).values({
+          supplierId: body.supplierId,
+          amount: String(paidNow),
+          method: paymentMethod,
+          reference: `Purchase ${poNumber}`,
+          notes: "Paid at time of purchase",
+          paidByUserId: actorUserId,
+          paymentDate: purchaseDate,
+        }).returning();
+
+        await appendSupplierLedgerEntry(tx, {
+          supplierId: body.supplierId,
+          type: "payment",
+          amount: -paidNow,
+          purchaseId: inserted.id,
+          paymentId: insertedPayment.id,
+          description: `Payment made with Purchase ${poNumber}`,
+          createdByUserId: actorUserId,
+          entryDate: purchaseDate,
+        });
+
+        await appendGeneralLedgerEntry(tx, {
+          date: purchaseDate,
+          type: "supplier_payment",
+          referenceId: insertedPayment.id,
+          partyType: "supplier",
+          partyId: body.supplierId,
+          partyName: supplier?.name ?? body.supplierName,
+          amount: paidNow,
+          direction: "debit",
+          note: `Payment with Purchase ${poNumber}`,
+          createdByUserId: actorUserId,
+        });
+      }
+    } else {
+      // No supplier on record — always immediate cash, goes straight to
+      // the cash-in-hand ledger.
       await appendGeneralLedgerEntry(tx, {
         date: purchaseDate,
         type: "purchase",
         referenceId: inserted.id,
-        partyType: "supplier",
-        partyId: body.supplierId,
+        partyType: "none",
+        partyId: null,
         partyName: body.supplierName,
         amount: subtotal,
         direction: "debit",
         note: `PO ${poNumber}`,
         createdByUserId: actorUserId,
       });
-      void ledgerEntry;
     }
 
     return inserted;
@@ -115,6 +170,18 @@ export async function updatePurchase(id: number, body: any, actorUserId: number 
   const updateData: Record<string, unknown> = {};
   if (body.status !== undefined) updateData.status = body.status;
   if (body.notes !== undefined) updateData.notes = body.notes;
+
+  if (
+    body.status !== undefined &&
+    body.status !== existingPurchase.status &&
+    existingPurchase.status === "received" &&
+    body.status !== "received" &&
+    round2(parseFloat((existingPurchase.amountPaid as string) ?? "0")) > 0
+  ) {
+    throw new Error(
+      `Cannot change status of Purchase ${existingPurchase.poNumber}: it has ${parseFloat(existingPurchase.amountPaid as string)} already paid against it. Void the linked payment(s) first so cash-in-hand stays accurate.`,
+    );
+  }
 
   if (body.status !== undefined && body.status !== existingPurchase.status) {
     const items = existingPurchase.items as Array<any>;

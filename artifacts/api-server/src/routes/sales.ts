@@ -51,7 +51,15 @@ router.post("/", async (req, res) => {
   try {
     const body = CreateSaleBody.parse(req.body);
     const actorUserId = getUserIdFromRequest(req);
-    const sale = await salesService.createSale({ ...body, saleDate: (req.body as any).saleDate }, actorUserId);
+    const sale = await salesService.createSale({
+      ...body,
+      saleDate: (req.body as any).saleDate,
+      // Cash received at the counter right now (khata customers only —
+      // walk-in sales are always treated as fully paid). Not yet part of
+      // the generated OpenAPI schema, so read straight off the raw body.
+      amountReceived: (req.body as any).amountReceived,
+      paymentMethod: (req.body as any).paymentMethod,
+    }, actorUserId);
     return res.status(201).json(formatSale(sale));
   } catch (error) {
     console.error("sale create failed", error);
@@ -92,6 +100,9 @@ router.patch("/:id", async (req, res) => {
     if (error instanceof MonthClosedError) {
       return res.status(409).json({ error: error.message });
     }
+    if (error instanceof Error && error.message.startsWith("Cannot void")) {
+      return res.status(409).json({ error: error.message });
+    }
     return res.status(500).json({ error: "Failed to update sale" });
   }
 });
@@ -125,6 +136,12 @@ router.post("/:id/void", async (req, res) => {
     return res.status(200).send();
   } catch (err) {
     console.error(err);
+    if (err instanceof MonthClosedError) {
+      return res.status(409).json({ error: err.message });
+    }
+    if (err instanceof Error && err.message.startsWith("Cannot void")) {
+      return res.status(409).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Failed to void sale' });
   }
 });
