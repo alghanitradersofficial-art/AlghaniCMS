@@ -4,6 +4,8 @@ import { db } from "@workspace/db";
 import { productsTable, categoriesTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { buildFinancialReportSummary } from "../lib/reporting-engine.js";
+import cashService from "../services/cash.service.js";
+import { resolveRange, defaultBucketForRange } from "../lib/date-range.js";
 
 const router = Router();
 
@@ -20,6 +22,24 @@ router.get("/summary", async (req, res) => {
     return res.status(500).json({ error: "Failed to generate shared report summary" });
   }
 });
+
+// GET /api/reports/cash?period=daily|weekly|monthly&range=&from=&to=
+// Cash-in-hand summary for the Reports page — same underlying data as
+// /api/cash/report, exposed here too so Reports & Analytics can show it
+// alongside Profit & Loss without a second page visit.
+router.get("/cash", async (req, res) => {
+  try {
+    const { start, end } = resolveRange(req);
+    const range = (req.query.range as string) || "all";
+    const period = (req.query.period as "daily" | "weekly" | "monthly") || defaultBucketForRange(range);
+    const report = await cashService.getCashReport(start, end, period);
+    return res.json({ period, range, from: start?.toISOString() ?? null, to: end?.toISOString() ?? null, ...report });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to generate cash report" });
+  }
+});
+
 
 router.get("/profit-loss", async (req, res) => {
   try {

@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { Link } from "wouter";
+import { Wallet } from "lucide-react";
 
 const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -85,6 +87,9 @@ export default function MonthsPage() {
             </select>
             <Button onClick={handleClose}>Close Month</Button>
             <Button variant="outline" onClick={handleReopen}>Reopen</Button>
+            <Link href="/cash-in-hand">
+              <Button variant="outline" className="gap-2"><Wallet className="w-4 h-4" /> Cash in Hand</Button>
+            </Link>
           </div>
         </div>
 
@@ -121,6 +126,7 @@ export default function MonthsPage() {
                 <div className="mt-2 space-y-2 text-sm text-muted-foreground">
                   <div>Sales: Rs. {Number(overviewSummary?.salesSummary?.totalSales ?? 0).toLocaleString()}</div>
                   <div>Net profit: Rs. {Number(overviewSummary?.profitSummary?.netProfit ?? 0).toLocaleString()}</div>
+                  <div>Cash in hand: Rs. {Number(overviewSummary?.cashSummary?.closingCashInHand ?? 0).toLocaleString()}</div>
                   <div>Closing stock: Rs. {Number(overviewSummary?.inventorySummary?.closingStockValue ?? 0).toLocaleString()}</div>
                 </div>
               </div>

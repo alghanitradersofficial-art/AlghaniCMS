@@ -15,6 +15,7 @@ import {
   financialPeriodSnapshotsTable,
   financialPeriodBalancesTable,
   financialPeriodAuditLogsTable,
+  cashLedgerEntriesTable,
 } from "@workspace/db/schema";
 
 function toNumber(value: unknown): number {
@@ -83,8 +84,13 @@ export async function computeMonthSummary(periodStart: Date, periodEnd: Date) {
   const [{ total_sales_discount }] = await db.select({ total_sales_discount: sql<number>`coalesce(sum(${salesTable.discount}::numeric), 0)` }).from(salesTable).where(sql`${salesTable.saleDate} >= ${periodStart} AND ${salesTable.saleDate} <= ${periodEnd} AND ${salesTable.status} = 'completed'`);
   const [{ total_purchases }] = await db.select({ total_purchases: sql<number>`coalesce(sum(${purchasesTable.total}::numeric), 0)` }).from(purchasesTable).where(sql`${purchasesTable.purchaseDate} >= ${periodStart} AND ${purchasesTable.purchaseDate} <= ${periodEnd}`);
   const [{ total_expenses }] = await db.select({ total_expenses: sql<number>`coalesce(sum(${expensesTable.amount}::numeric), 0)` }).from(expensesTable).where(sql`${expensesTable.createdAt} >= ${periodStart} AND ${expensesTable.createdAt} <= ${periodEnd}`);
-  const [{ cash_received }] = await db.select({ cash_received: sql<number>`coalesce(sum(${paymentsTable.amount}::numeric), 0)` }).from(paymentsTable).where(sql`${paymentsTable.paymentDate} >= ${periodStart} AND ${paymentsTable.paymentDate} <= ${periodEnd}`);
-  const [{ supplier_payments }] = await db.select({ supplier_payments: sql<number>`coalesce(sum(${supplierPaymentsTable.amount}::numeric), 0)` }).from(supplierPaymentsTable).where(sql`${supplierPaymentsTable.paymentDate} >= ${periodStart} AND ${supplierPaymentsTable.paymentDate} <= ${periodEnd}`);
+  // Only method='cash', non-voided payments count toward cash-in-hand — bank
+  // transfers, cheques, and mobile wallet payments don't touch the physical
+  // cash drawer. This matches cash.service.ts's definition of a cash movement.
+  const [{ cash_received }] = await db.select({ cash_received: sql<number>`coalesce(sum(${paymentsTable.amount}::numeric), 0)` }).from(paymentsTable).where(sql`${paymentsTable.paymentDate} >= ${periodStart} AND ${paymentsTable.paymentDate} <= ${periodEnd} AND ${paymentsTable.method} = 'cash' AND ${paymentsTable.isVoided} = false`);
+  const [{ supplier_payments }] = await db.select({ supplier_payments: sql<number>`coalesce(sum(${supplierPaymentsTable.amount}::numeric), 0)` }).from(supplierPaymentsTable).where(sql`${supplierPaymentsTable.paymentDate} >= ${periodStart} AND ${supplierPaymentsTable.paymentDate} <= ${periodEnd} AND ${supplierPaymentsTable.method} = 'cash' AND ${supplierPaymentsTable.isVoided} = false`);
+  const [{ manual_cash_in }] = await db.select({ manual_cash_in: sql<number>`coalesce(sum(case when ${cashLedgerEntriesTable.direction} = 'in' then ${cashLedgerEntriesTable.amount}::numeric else 0 end), 0)` }).from(cashLedgerEntriesTable).where(sql`${cashLedgerEntriesTable.entryDate} >= ${periodStart} AND ${cashLedgerEntriesTable.entryDate} <= ${periodEnd}`);
+  const [{ manual_cash_out }] = await db.select({ manual_cash_out: sql<number>`coalesce(sum(case when ${cashLedgerEntriesTable.direction} = 'out' then ${cashLedgerEntriesTable.amount}::numeric else 0 end), 0)` }).from(cashLedgerEntriesTable).where(sql`${cashLedgerEntriesTable.entryDate} >= ${periodStart} AND ${cashLedgerEntriesTable.entryDate} <= ${periodEnd}`);
   const [{ closing_stock_value }] = await db.select({ closing_stock_value: sql<number>`coalesce(sum(${productsTable.currentStock}::numeric * ${productsTable.costPrice}::numeric), 0)` }).from(productsTable);
   const [{ closing_stock_quantity }] = await db.select({ closing_stock_quantity: sql<number>`coalesce(sum(${productsTable.currentStock}::numeric), 0)` }).from(productsTable);
   const [{ customer_outstanding }] = await db.select({ customer_outstanding: sql<number>`coalesce(sum((${salesTable.total}::numeric - ${salesTable.amountPaid}::numeric)), 0)` }).from(salesTable).where(sql`${salesTable.saleDate} <= ${periodEnd} AND ${salesTable.status} = 'completed'`);
@@ -138,10 +144,10 @@ export async function computeMonthSummary(periodStart: Date, periodEnd: Date) {
     },
     cashSummary: {
       openingCash: 0,
-      cashReceived: toNumber(cash_received),
-      cashPaid: toNumber(supplier_payments) + totalExpenses,
+      cashReceived: toNumber(cash_received) + toNumber(manual_cash_in),
+      cashPaid: toNumber(supplier_payments) + totalExpenses + toNumber(manual_cash_out),
       expenses: totalExpenses,
-      closingCashInHand: toNumber(cash_received) - (toNumber(supplier_payments) + totalExpenses),
+      closingCashInHand: (toNumber(cash_received) + toNumber(manual_cash_in)) - (toNumber(supplier_payments) + totalExpenses + toNumber(manual_cash_out)),
     },
   };
 }
@@ -217,6 +223,23 @@ export async function closeMonth(year: number, month: number, actorUserId: numbe
       closedAt: new Date(),
       closedByUserId: actorUserId,
       updatedAfterClosing: false,
+    }).onConflictDoUpdate({
+      target: [financialPeriodsTable.year, financialPeriodsTable.month],
+      set: {
+        status: "closed",
+        openingCash: String(openingCash),
+        openingStockValue: String(openingStockValue),
+        openingCustomerBalance: String(openingCustomerBalance),
+        openingSupplierBalance: String(openingSupplierBalance),
+        closingCash: String(summary.cashSummary.closingCashInHand),
+        closingStockValue: String(summary.inventorySummary.closingStockValue),
+        closingCustomerBalance: String(summary.customerSummary.totalCustomerReceivables),
+        closingSupplierBalance: String(summary.supplierSummary.totalSupplierPayables),
+        closedAt: new Date(),
+        closedByUserId: actorUserId,
+        updatedAfterClosing: false,
+        updatedAt: new Date(),
+      },
     }).returning();
 
     const [closureRow] = await tx.insert(monthClosuresTable).values({
@@ -317,7 +340,7 @@ export async function closeMonth(year: number, month: number, actorUserId: numbe
         openingStockValue: String(summary.inventorySummary.closingStockValue),
         openingCustomerBalance: String(summary.customerSummary.totalCustomerReceivables),
         openingSupplierBalance: String(summary.supplierSummary.totalSupplierPayables),
-      });
+      }).onConflictDoNothing({ target: [financialPeriodsTable.year, financialPeriodsTable.month] });
     }
 
     return { closure: closureRow, period: periodRow, snapshot: { id: 0 }, summary, warnings };
@@ -358,7 +381,7 @@ export async function getCurrentPeriodOverview(requestedYear?: number, requested
   }
   const periodStart = new Date(year, month - 1, 1);
   const periodEnd = new Date(year, month, 0, 23, 59, 59, 999);
-  const [period] = await db.select().from(financialPeriodsTable).where(and(eq(financialPeriodsTable.year, year), eq(financialPeriodsTable.month, month)));
+  const [period] = await db.select().from(financialPeriodsTable).where(and(eq(financialPeriodsTable.year, year), eq(financialPeriodsTable.month, month))).orderBy(sql`(status = 'closed') desc`, desc(financialPeriodsTable.updatedAt));
   const [snapshot] = await db.select().from(financialPeriodSnapshotsTable).where(eq(financialPeriodSnapshotsTable.periodId, period?.id ?? 0)).orderBy(desc(financialPeriodSnapshotsTable.createdAt));
   const summary = await computeMonthSummary(periodStart, periodEnd);
   const warnings = await buildWarnings(periodStart, periodEnd);
