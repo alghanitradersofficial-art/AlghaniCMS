@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "pnpm --filter @workspace/api-zod --filter @workspace/db run build && rm -rf node_modules/@workspace/api-zod node_modules/@workspace/db && mkdir -p node_modules/@workspace && cp -RL ../../lib/api-zod node_modules/@workspace/api-zod && cp -RL ../../lib/db node_modules/@workspace/db",
+  "buildCommand": "sh scripts/vercel-build.sh",
   "functions": {
     "api/index.ts": {
       "maxDuration": 30,
