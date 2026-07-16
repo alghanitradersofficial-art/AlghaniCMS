@@ -5,9 +5,7 @@ const router = Router();
 
 router.get("/", async (req, res) => {
   try {
-    // Use the authenticated caller's own role first — falling back to "ceo"
-    // meant every non-CEO user only ever saw the CEO's notifications.
-    const role = (req.auth?.role as string) || (req.query.role as string) || "ceo";
+    const role = (req.query.role as string) || "ceo";
     const result = await pool.query(
       `SELECT * FROM notifications WHERE recipient_role = $1 OR recipient_role = 'all' ORDER BY created_at DESC LIMIT 50`,
       [role]
@@ -30,7 +28,7 @@ router.patch("/:id/read", async (req, res) => {
 
 router.patch("/read-all", async (req, res) => {
   try {
-    const role = (req.auth?.role as string) || (req.body.role as string) || "ceo";
+    const role = (req.body.role as string) || "ceo";
     await pool.query(`UPDATE notifications SET is_read = true WHERE recipient_role = $1 OR recipient_role = 'all'`, [role]);
     return res.json({ success: true });
   } catch (error) {

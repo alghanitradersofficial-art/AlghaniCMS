@@ -22,7 +22,6 @@ import Settings from "@/pages/settings";
 import QuickEntry from "@/pages/quick-entry";
 import Operations from "@/pages/operations";
 import MonthsPage from "@/pages/months";
-import CashInHand from "@/pages/cash-in-hand";
 import SaleDetail from "@/pages/sale-detail";
 import PurchaseDetail from "@/pages/purchase-detail";
 import ExpenseDetail from "@/pages/expense-detail";
@@ -67,7 +66,6 @@ function Router() {
       <Route path="/quick-entry">{() => <AuthGuard component={QuickEntry} permission="sales" />}</Route>
       <Route path="/operations">{() => <AuthGuard component={Operations} permission="inventory" />}</Route>
       <Route path="/financial-periods">{() => <AuthGuard component={MonthsPage} permission="settings" />}</Route>
-      <Route path="/cash-in-hand">{() => <AuthGuard component={CashInHand} permission="reports" />}</Route>
       <Route path="/settings">{() => <AuthGuard component={Settings} permission="settings" />}</Route>
       <Route path="/">{() => <Redirect to={isLoggedIn() ? "/dashboard" : "/login"} />}</Route>
       <Route component={NotFound} />

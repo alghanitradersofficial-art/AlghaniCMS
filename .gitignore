@@ -1,29 +1,54 @@
-# Dependencies
-node_modules/
+# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
-# Build outputs — never commit these. A committed *.tsbuildinfo with no
-# matching dist/ folder makes `tsc` (in incremental mode) believe its output
-# is already up to date and skip emitting entirely, which is what broke the
-# Vercel build (lib/api-zod build produced no dist/ at all).
-dist/
-build/
-.turbo/
+# compiled output
+dist
+tmp
+out-tsc
 *.tsbuildinfo
+.expo
+.expo-shared
 
-# Env
-.env
-.env.local
-.env.*.local
+# dependencies
+node_modules
 
-# Logs
-*.log
-npm-debug.log*
-pnpm-debug.log*
+# IDEs and editors
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
 
-# Editor/OS
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# misc
+/.sass-cache
+/connect.lock
+/coverage
+/libpeerconnection.log
+npm-debug.log
+yarn-error.log
+testem.log
+/typings
+
+# System Files
 .DS_Store
-.vscode/
-.idea/
+Thumbs.db
 
-# Vercel
-.vercel/
+.cursor/rules/nx-rules.mdc
+.github/instructions/nx.instructions.md
+
+# Replit
+.cache/
+.local/
+
+# Ignore environment files
+.env
+**/.env
+artifacts/**/.env

@@ -690,17 +690,13 @@ router.get("/report/excel", async (req, res) => {
 export default router;
 
 // --- Debug helper: build workbook and return sheet names or error ---
-// Dev-only — this duplicated /_debug/build-wb and was reachable in
-// production by anyone with "settings" permission.
-if (process.env.NODE_ENV !== "production") {
-  router.get('/debug/build-wb', async (_req, res) => {
-    try {
-      const wb = await buildFullReportWorkbook({ preset: 'all' });
-      return res.json({ sheets: wb.worksheets.map(ws => ws.name) });
-    } catch (err) {
-      try { console.error('buildFullReportWorkbook failed:', (err as any)?.stack || JSON.stringify(err)); } catch (e) { console.error('buildFullReportWorkbook failed (unknown):', err); }
-      return res.status(500).json({ error: 'build failed', detail: (err as any)?.message || String(err) });
-    }
-  });
-}
+router.get('/debug/build-wb', async (_req, res) => {
+  try {
+    const wb = await buildFullReportWorkbook({ preset: 'all' });
+    return res.json({ sheets: wb.worksheets.map(ws => ws.name) });
+  } catch (err) {
+    try { console.error('buildFullReportWorkbook failed:', (err as any)?.stack || JSON.stringify(err)); } catch (e) { console.error('buildFullReportWorkbook failed (unknown):', err); }
+    return res.status(500).json({ error: 'build failed', detail: (err as any)?.message || String(err) });
+  }
+});
 

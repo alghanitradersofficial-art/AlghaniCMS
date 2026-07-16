@@ -4,12 +4,90 @@ import { db } from "@workspace/db";
 import { productsTable, generalLedgerEntriesTable } from "@workspace/db";
 import { lte, sql, and, gte } from "drizzle-orm";
 import { buildFinancialReportSummary } from "../lib/reporting-engine.js";
-import { resolveRange } from "../lib/date-range.js";
 
 import { getCached, setCached, clearCachePrefix } from "../lib/dashboard-cache.js";
 
 const router = Router();
 
+
+/**
+ * Resolves a `range` query param (today | week | month | year | all | custom)
+ * plus optional `from`/`to` into a concrete [start, end] Date pair. Shared by
+ * every date-range-aware endpoint below and intended to match the same
+ * presets used by the frontend's shared DateRangeSelector component.
+ */
+function resolveRange(req: import("express").Request): { start: Date | null; end: Date | null } {
+  const range = (req.query.range as string) || "all";
+  const now = new Date();
+
+  if (range === "custom") {
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+    return {
+      start: from ? new Date(from) : null,
+      end: to ? new Date(new Date(to).setHours(23, 59, 59, 999)) : null,
+    };
+  }
+
+  if (range === "today") {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return { start, end: now };
+  }
+
+  if (range === "yesterday") {
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    yesterday.setHours(0, 0, 0, 0);
+    return { start: yesterday, end: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999) };
+  }
+
+  if (range === "last7days") {
+    const start = new Date(now);
+    start.setDate(now.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
+    return { start, end: now };
+  }
+
+  if (range === "thisweek" || range === "week") {
+    const start = new Date(now);
+    start.setDate(now.getDate() - now.getDay());
+    start.setHours(0, 0, 0, 0);
+    return { start, end: now };
+  }
+
+  if (range === "lastweek") {
+    const start = new Date(now);
+    start.setDate(now.getDate() - now.getDay() - 7);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  if (range === "thismonth" || range === "month") {
+    return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now };
+  }
+
+  if (range === "lastmonth") {
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const end = new Date(now.getFullYear(), now.getMonth(), 0);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  if (range === "thisyear" || range === "year") {
+    return { start: new Date(now.getFullYear(), 0, 1), end: now };
+  }
+
+  if (range === "lastyear") {
+    const start = new Date(now.getFullYear() - 1, 0, 1);
+    const end = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
+    return { start, end };
+  }
+
+  return { start: null, end: null }; // "all"
+}
 
 // GET /api/dashboard/summary-range?range=today|week|month|year|all|custom&from=&to=
 // Range-aware KPI summary driven by the shared date-range selector (section 5).

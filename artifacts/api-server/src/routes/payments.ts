@@ -5,7 +5,6 @@ import { eq, and, desc, sql } from "drizzle-orm";
 import { appendLedgerEntry, allocatePayment, round2, recomputeCustomerLedgerRunningBalances } from "../lib/ledger.js";
 import { getUserIdFromRequest } from "../lib/auth-context.js";
 import { isDateInClosedPeriod, MonthClosedError } from "../services/months.service.js";
-import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -195,39 +194,24 @@ router.get("/customer/:id/summary", async (req, res): Promise<any> => {
 router.post("/:id/void", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid payment id" });
-
-    const parsedBody = z.object({ reason: z.string().min(1, "reason is required") }).safeParse(req.body ?? {});
-    if (!parsedBody.success) {
-      return res.status(400).json({ error: "reason is required", details: parsedBody.error.issues });
-    }
-    const reason = parsedBody.data.reason;
+    const reason = z.object({ reason: z.string().min(1) }).parse(req.body).reason;
     const createdByUserId = getUserIdFromRequest(req);
 
     const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
     if (!payment) return res.status(404).json({ error: "Payment not found" });
     if (payment.isVoided) return res.status(400).json({ error: "Payment is already voided" });
 
-    if (payment.paymentDate) {
-      const paymentDate = new Date(payment.paymentDate);
-      if (!Number.isNaN(paymentDate.getTime()) && await isDateInClosedPeriod(paymentDate)) {
-        return res.status(409).json({ error: `Financial period is closed for ${paymentDate.toISOString().slice(0, 10)}` });
-      }
+    if (payment.paymentDate && await isDateInClosedPeriod(new Date(payment.paymentDate))) {
+      return res.status(409).json({ error: `Financial period is closed for ${new Date(payment.paymentDate).toISOString().slice(0,10)}` });
     }
 
     await db.transaction(async (tx) => {
       await tx.update(paymentsTable).set({ isVoided: true, voidReason: reason }).where(eq(paymentsTable.id, id));
 
-      // Guard against a malformed/missing allocations array — a single bad
-      // entry here used to throw partway through the transaction and crash
-      // the whole void request.
-      const rawAllocations = Array.isArray(payment.allocations) ? payment.allocations : [];
-      for (const alloc of rawAllocations as Array<{ saleId?: number; amount?: number }>) {
-        const saleId = Number(alloc?.saleId);
-        const amount = Number(alloc?.amount);
-        if (!Number.isFinite(saleId) || !Number.isFinite(amount)) continue;
+      const allocations = (payment.allocations as Array<{ saleId: number; amount: number }>) || [];
+      for (const alloc of allocations) {
         await tx.execute(
-          sql`UPDATE sales SET amount_paid = amount_paid - ${amount} WHERE id = ${saleId}`,
+          sql`UPDATE sales SET amount_paid = amount_paid - ${alloc.amount} WHERE id = ${alloc.saleId}`,
         );
       }
 
@@ -245,9 +229,8 @@ router.post("/:id/void", async (req, res): Promise<any> => {
 
     return res.json({ success: true });
   } catch (error) {
-    logger.error({ err: error }, "Failed to void payment");
-    if (error instanceof MonthClosedError) return res.status(409).json({ error: error.message });
-    return res.status(500).json({ error: error instanceof Error ? error.message : "Failed to void payment" });
+    console.error(error);
+    return res.status(500).json({ error: "Failed to void payment" });
   }
 });
 

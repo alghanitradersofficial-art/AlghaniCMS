@@ -1,25 +1,9 @@
 import { Router } from "express";
-import { z } from "zod";
 import { CreateProductBody, UpdateProductBody, GetProductsQueryParams } from "@workspace/api-zod";
 import productsService from "../services/products.service.js";
 import { getUserIdFromRequest } from "../lib/auth-context.js";
-import { logger } from "../lib/logger.js";
 
 const router = Router();
-
-const BulkPriceUpdateBody = z.object({
-  updates: z
-    .array(
-      z.object({
-        id: z.number().int().positive(),
-        costPrice: z.number().positive().optional(),
-        salePrice: z.number().positive().optional(),
-        // e.g. 10 = +10%, -5 = -5%. Applied to the product's current sale price.
-        salePricePercentAdjust: z.number().optional(),
-      }),
-    )
-    .min(1),
-});
 
 // GET /api/products
 router.get("/", async (req, res): Promise<any> => {
@@ -43,36 +27,6 @@ router.post("/", async (req, res): Promise<any> => {
   } catch (error) {
     console.error("product create failed", error);
     return res.status(500).json({ error: "Failed to create product" });
-  }
-});
-
-// GET /api/products/low-stock — alias for GET /api/products?lowStock=true.
-// Must be declared before GET /:id below, or Express would treat
-// "low-stock" as an :id value and this route would never be reached.
-router.get("/low-stock", async (req, res): Promise<any> => {
-  try {
-    const params = GetProductsQueryParams.parse({ ...req.query, lowStock: "true" });
-    const result = await productsService.listProducts(params as Record<string, unknown>);
-    return res.json(result);
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Failed to fetch low-stock products" });
-  }
-});
-
-// POST /api/products/bulk-price-update — update cost/sale price (fixed value
-// or a % adjustment) for many products in one request. Must be declared
-// before GET/PATCH /:id below so "bulk-price-update" isn't swallowed as an id.
-router.post("/bulk-price-update", async (req, res): Promise<any> => {
-  try {
-    const body = BulkPriceUpdateBody.parse(req.body);
-    const actorUserId = getUserIdFromRequest(req);
-    const result = await productsService.bulkUpdatePrices(body.updates, actorUserId);
-    return res.json(result);
-  } catch (error) {
-    logger.error({ err: error }, "Bulk price update failed");
-    if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid payload", details: error.issues });
-    return res.status(500).json({ error: "Failed to bulk update prices" });
   }
 });
 

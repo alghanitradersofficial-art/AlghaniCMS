@@ -334,44 +334,7 @@ export async function initializeDatabase() {
         created_at timestamp with time zone NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS financial_period_audit_logs_period_idx ON financial_period_audit_logs (period_id, created_at);
-
-      CREATE TABLE IF NOT EXISTS cash_ledger_entries (
-        id serial PRIMARY KEY,
-        entry_date timestamp with time zone NOT NULL,
-        type text NOT NULL DEFAULT 'old_entry',
-        direction text NOT NULL,
-        amount numeric(14,2) NOT NULL,
-        note text,
-        created_by_user_id integer,
-        created_at timestamp with time zone NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS cash_ledger_entries_date_idx ON cash_ledger_entries (entry_date);
     `);
-
-    // financial_periods previously only had a non-unique index on (year, month), which allowed
-    // duplicate rows to be created (e.g. one "open" carry-forward row plus one "closed" row for
-    // the same period). That made status lookups pick an arbitrary row instead of the correct one.
-    // Dedupe any existing duplicates (keep the most authoritative: closed > open, then most recent),
-    // then enforce a real unique constraint so this can't happen again.
-    await pool.query(`
-      WITH ranked AS (
-        SELECT id,
-          ROW_NUMBER() OVER (
-            PARTITION BY year, month
-            ORDER BY (status = 'closed') DESC, updated_at DESC, id DESC
-          ) AS rn
-        FROM financial_periods
-      )
-      DELETE FROM financial_periods
-      WHERE id IN (SELECT id FROM ranked WHERE rn > 1);
-    `);
-    await pool.query(`
-      ALTER TABLE financial_periods
-      ADD CONSTRAINT financial_periods_year_month_unique UNIQUE (year, month);
-    `).catch((err: any) => {
-      // Constraint already exists — fine to ignore.
-      if (!/already exists/i.test(String(err?.message))) throw err;
-    });
 
     const usersTableCheck = await pool.query(`
       SELECT to_regclass('public.users') AS table_name

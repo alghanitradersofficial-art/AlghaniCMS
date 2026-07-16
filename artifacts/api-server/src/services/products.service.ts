@@ -236,40 +236,4 @@ export async function deleteProduct(id: number, actorUserId: number | null) {
   }
 }
 
-export async function bulkUpdatePrices(
-  updates: Array<{ id: number; costPrice?: number; salePrice?: number; salePricePercentAdjust?: number }>,
-  actorUserId: number | null,
-) {
-  if (!updates.length) return { updated: [], failed: [] };
-  const updated: unknown[] = [];
-  const failed: Array<{ id: number; error: string }> = [];
-
-  for (const u of updates) {
-    try {
-      if (u.salePricePercentAdjust !== undefined) {
-        // Percentage adjustment relative to the CURRENT sale price, e.g.
-        // +10 raises every selected product's price by 10%.
-        const current = await getProduct(u.id);
-        if (!current) throw new Error("Product not found");
-        const newSalePrice = Math.round(current.salePrice * (1 + u.salePricePercentAdjust / 100) * 100) / 100;
-        const product = await updateProduct(u.id, { salePrice: newSalePrice }, actorUserId);
-        if (!product) throw new Error("Product not found");
-        updated.push(product);
-      } else {
-        const body: Record<string, unknown> = {};
-        if (u.costPrice !== undefined) body.costPrice = u.costPrice;
-        if (u.salePrice !== undefined) body.salePrice = u.salePrice;
-        if (Object.keys(body).length === 0) throw new Error("Nothing to update for this product");
-        const product = await updateProduct(u.id, body, actorUserId);
-        if (!product) throw new Error("Product not found");
-        updated.push(product);
-      }
-    } catch (err) {
-      failed.push({ id: u.id, error: err instanceof Error ? err.message : "Unknown error" });
-    }
-  }
-
-  return { updated, failed };
-}
-
-export default { listProducts, createProduct, getProduct, updateProduct, deleteProduct, bulkUpdatePrices };
+export default { listProducts, createProduct, getProduct, updateProduct, deleteProduct };

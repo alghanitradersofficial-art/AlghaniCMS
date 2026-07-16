@@ -30,7 +30,7 @@ function getTokenFromHeader(req: Request): string | null {
 }
 
 export function authenticate(req: Request, res: Response, next: NextFunction) {
-  logger.debug({ path: req.path }, "auth middleware invoked");
+  logger.info({ path: req.path, nodeEnv: process.env.NODE_ENV }, "auth middleware invoked");
 
   if (!JWT_SECRET) {
     return res.status(500).json({ error: "Authentication is not configured on this server." });
@@ -59,12 +59,14 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
 export function requirePermission(permission: string) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.auth) return res.status(401).json({ error: "Unauthorized" });
+    // Detailed debug log to help diagnose unexpected 403s during seeding.
+    logger.info({ path: req.path, method: req.method, auth: req.auth, permission, authHeaderPresent: Boolean(req.headers.authorization) }, "requirePermission invoked");
     const role = req.auth.role?.toLowerCase() ?? "";
-    // Allow top-level admin-like roles to bypass permission checks.
+    // Allow top-level admin-like roles to bypass permission checks in local/dev.
     if (role === "ceo" || role === "developer" || role === "admin") return next();
     if (req.auth.permissions?.includes(permission)) return next();
-    logger.debug({ path: req.path, method: req.method, role, permission }, "permission denied");
-    return res.status(403).json({ error: "Forbidden" });
+    // Temporary debug: include auth summary in response to aid local debugging of 403.
+    return res.status(403).json({ error: "Forbidden", debug: { path: req.path, permission, role: req.auth.role, permissions: req.auth.permissions } });
   };
 }
 

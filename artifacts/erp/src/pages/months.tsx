@@ -5,8 +5,6 @@ import { useMemo, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Link } from "wouter";
-import { Wallet } from "lucide-react";
 
 const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -28,7 +26,7 @@ export default function MonthsPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const qc = useQueryClient();
 
-  const { data: overview, error: overviewError } = useQuery({ queryKey: ["financial-period-overview", year, month], queryFn: () => apiGet(`/api/months/overview?year=${year}&month=${month}`), retry: false });
+  const { data: overview, error: overviewError } = useQuery({ queryKey: ["financial-period-overview"], queryFn: () => apiGet(`/api/months/overview`), retry: false });
   const { data: closures, error: closuresError } = useQuery({ queryKey: ["months-closures"], queryFn: () => apiGet(`/api/months`), retry: false });
 
   const overviewWarnings = Array.isArray((overview as any)?.warnings) ? (overview as any).warnings : [];
@@ -38,8 +36,8 @@ export default function MonthsPage() {
     { label: "Current financial month", value: `${monthNames[(month - 1) % 12]} ${year}` },
     { label: "Current status", value: (overview as any)?.period?.status ?? "open" },
     { label: "Closing progress", value: `${overviewWarnings.length ? "Needs attention" : "Ready to close"}` },
-    { label: "Last closed month", value: (overview as any)?.lastClosure ? `${(overview as any).lastClosure.year}-${String((overview as any).lastClosure.month).padStart(2, "0")}` : "None" },
-  ], [overview, month, overviewWarnings.length, year]);
+    { label: "Last closed month", value: closureRows[0] ? `${closureRows[0].year}-${String(closureRows[0].month).padStart(2, "0")}` : "None" },
+  ], [closureRows, month, overviewWarnings.length, year]);
 
   async function handleClose() {
     try {
@@ -87,9 +85,6 @@ export default function MonthsPage() {
             </select>
             <Button onClick={handleClose}>Close Month</Button>
             <Button variant="outline" onClick={handleReopen}>Reopen</Button>
-            <Link href="/cash-in-hand">
-              <Button variant="outline" className="gap-2"><Wallet className="w-4 h-4" /> Cash in Hand</Button>
-            </Link>
           </div>
         </div>
 
@@ -126,7 +121,6 @@ export default function MonthsPage() {
                 <div className="mt-2 space-y-2 text-sm text-muted-foreground">
                   <div>Sales: Rs. {Number(overviewSummary?.salesSummary?.totalSales ?? 0).toLocaleString()}</div>
                   <div>Net profit: Rs. {Number(overviewSummary?.profitSummary?.netProfit ?? 0).toLocaleString()}</div>
-                  <div>Cash in hand: Rs. {Number(overviewSummary?.cashSummary?.closingCashInHand ?? 0).toLocaleString()}</div>
                   <div>Closing stock: Rs. {Number(overviewSummary?.inventorySummary?.closingStockValue ?? 0).toLocaleString()}</div>
                 </div>
               </div>
@@ -144,11 +138,11 @@ export default function MonthsPage() {
                 <div key={c.id} className="flex flex-col gap-2 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <div className="font-semibold">{c.year}-{String(c.month).padStart(2, "0")}</div>
-                    <div className="text-sm text-muted-foreground">Created: {formatSafeDate(c.createdAt)}</div>
+                    <div className="text-sm text-muted-foreground">Created: {formatSafeDate(c.created_at)}</div>
                   </div>
                   <div className="text-right text-sm">
-                    <div>Total Sales: Rs. {Number(c.totalSales ?? 0).toLocaleString()}</div>
-                    <div>Closing Stock: Rs. {Number(c.closingStockValue ?? 0).toLocaleString()}</div>
+                    <div>Total Sales: Rs. {Number(c.total_sales).toLocaleString()}</div>
+                    <div>Closing Stock: Rs. {Number(c.closing_stock_value).toLocaleString()}</div>
                   </div>
                 </div>
               ))}

@@ -14,7 +14,6 @@ import {
   BookText,
   Users2,
   Zap,
-  Wallet,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { clearAuth, getUser, hasPermission } from "@/lib/auth";
@@ -30,7 +29,6 @@ export const MENU_ITEMS = [
   { icon: Zap, label: "Quick Entry", href: "/quick-entry", permission: "sales" },
   { icon: Package, label: "Operations", href: "/operations", permission: "inventory" },
   { icon: FileBarChart, label: "Reports & Analytics", href: "/reports", permission: "reports" },
-  { icon: Wallet, label: "Cash in Hand", href: "/cash-in-hand", permission: "reports" },
   { icon: ActivityIcon, label: "Recent Activity", href: "/recent-activity", permission: "reports" },
   { icon: BookText, label: "Financial Periods", href: "/financial-periods", permission: "settings" },
   { icon: Users2, label: "Users", href: "/users", permission: "users" },

@@ -10,8 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { Switch } from "@/components/ui/switch";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { FileBarChart, Wallet } from "lucide-react";
-import { Link } from "wouter";
+import { FileBarChart } from "lucide-react";
 
 type ReportSummary = {
   current: {
@@ -22,13 +21,6 @@ type ReportSummary = {
     inventoryValue: number;
     expenses: number;
   };
-};
-
-type CashReportSummary = {
-  openingBalance: number;
-  closingBalance: number;
-  totalIn: number;
-  totalOut: number;
 };
 
 export default function Reports() {
@@ -42,11 +34,6 @@ export default function Reports() {
   const { data: summary, isLoading } = useQuery({
     queryKey: ["report-summary", params.toString()],
     queryFn: () => apiGet<ReportSummary>(`/api/reports/summary?${params.toString()}`),
-  });
-
-  const { data: cashSummary } = useQuery({
-    queryKey: ["report-cash-summary", params.toString()],
-    queryFn: () => apiGet<CashReportSummary>(`/api/reports/cash?${params.toString()}`),
   });
 
   const stats = [
@@ -129,35 +116,6 @@ export default function Reports() {
             Send to Telegram
           </Button>
         </div>
-
-        <Card className="border-border bg-card">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base sm:text-lg flex items-center gap-2"><Wallet className="w-4 h-4 text-primary" /> Cash in Hand</CardTitle>
-            <Link href="/cash-in-hand">
-              <Button variant="ghost" size="sm" className="text-xs">View full report →</Button>
-            </Link>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Opening</p>
-                <p className="text-sm font-semibold">Rs. {(cashSummary?.openingBalance ?? 0).toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Cash In</p>
-                <p className="text-sm font-semibold text-green-400">Rs. {(cashSummary?.totalIn ?? 0).toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Cash Out</p>
-                <p className="text-sm font-semibold text-red-400">Rs. {(cashSummary?.totalOut ?? 0).toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Closing</p>
-                <p className="text-sm font-semibold text-primary">Rs. {(cashSummary?.closingBalance ?? 0).toLocaleString()}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         <Card className="border-border bg-card">
           <CardHeader>
