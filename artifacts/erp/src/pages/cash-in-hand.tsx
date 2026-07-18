@@ -14,97 +14,96 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { useQuery } from "@tanstack/react-query";
-import { apiGet } from "@/lib/api";
-import { Wallet, TrendingUp, TrendingDown, Banknote } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiGet, apiPost, apiDelete } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
+import { Wallet, Plus, Banknote, Trash2 } from "lucide-react";
+import Confirm from "@/components/ui/confirm";
+import { cn } from "@/lib/utils";
 
-const monthNames = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
-type DailyHistoryDay = {
-  date: string;
-  sales: number;
-  purchases: number;
-  expenses: number;
-  totalIn: number;
-  totalOut: number;
-  profit: number;
-  cashFlow: number;
-  cashInHand: number;
-  cumulativeProfit: number;
-  transactionCount: number;
+type CashEntry = {
+  id: number;
+  amount: number;
+  entryDate: string; // YYYY-MM-DD
+  note: string | null;
+  createdAt: string;
 };
 
-type DailyHistoryResult = {
-  year: number;
-  month: number;
-  days: DailyHistoryDay[];
+type CashEntriesResponse = {
+  data: CashEntry[];
+  total: number;
+  count: number;
 };
 
-type DayDetail = {
-  date: string;
-  totalIn: number;
-  totalOut: number;
-  netFlow: number;
-  transactionCount: number;
-  byType: Record<
-    string,
-    Array<{
-      id: number;
-      partyName?: string | null;
-      amount: number;
-      direction: string;
-      note?: string | null;
-      date: string;
-    }>
-  >;
-};
+type FilterType = "daily" | "weekly" | "monthly" | "custom";
 
 function money(value: number) {
   return `Rs. ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
+function toDateStr(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function formatDay(dateStr: string) {
   const d = new Date(`${dateStr}T00:00:00`);
   if (Number.isNaN(d.getTime())) return dateStr;
-  return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", weekday: "short" });
+  return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric", weekday: "short" });
 }
 
 export default function CashInHandPage() {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const today = useMemo(() => new Date(), []);
+  const todayStr = toDateStr(today);
 
-  const { data: history, isLoading } = useQuery({
-    queryKey: ["cash-in-hand-history", year, month],
-    queryFn: () => apiGet<DailyHistoryResult>(`/api/calendar/history?year=${year}&month=${month}`),
-  });
+  const [filter, setFilter] = useState<FilterType>("daily");
+  const [customFrom, setCustomFrom] = useState(todayStr);
+  const [customTo, setCustomTo] = useState(todayStr);
+  const [addOpen, setAddOpen] = useState(false);
 
-  const { data: dayDetail, isLoading: dayLoading } = useQuery({
-    queryKey: ["cash-in-hand-day", selectedDate],
-    queryFn: () => apiGet<DayDetail>(`/api/calendar/day?date=${selectedDate}`),
-    enabled: !!selectedDate,
-  });
-
-  const days = history?.days ?? [];
-
-  const summary = useMemo(() => {
-    if (days.length === 0) {
-      return { openingCash: 0, totalIn: 0, totalOut: 0, closingCash: 0 };
+  const range = useMemo(() => {
+    if (filter === "daily") return { from: todayStr, to: todayStr };
+    if (filter === "weekly") {
+      const start = new Date(today);
+      start.setDate(start.getDate() - 6);
+      return { from: toDateStr(start), to: todayStr };
     }
-    const totalIn = days.reduce((s, d) => s + d.totalIn, 0);
-    const totalOut = days.reduce((s, d) => s + d.totalOut, 0);
-    const closingCash = days[days.length - 1].cashInHand;
-    const openingCash = days[0].cashInHand - days[0].cashFlow;
-    return { openingCash, totalIn, totalOut, closingCash };
-  }, [days]);
+    if (filter === "monthly") {
+      const start = new Date(today.getFullYear(), today.getMonth(), 1);
+      const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      return { from: toDateStr(start), to: toDateStr(end) };
+    }
+    return { from: customFrom, to: customTo };
+  }, [filter, todayStr, today, customFrom, customTo]);
 
-  const daysWithActivity = days.filter((d) => d.transactionCount > 0);
+  const entriesQuery = useQuery({
+    queryKey: ["cash-entries", range.from, range.to],
+    queryFn: () => apiGet<CashEntriesResponse>(`/api/cash-entries?from=${range.from}&to=${range.to}`),
+  });
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["cash-entries"] });
+
+  const handleDelete = async (entry: CashEntry) => {
+    try {
+      await apiDelete(`/api/cash-entries/${entry.id}`);
+      toast({ title: "Cash entry deleted" });
+      invalidate();
+    } catch (e: any) {
+      toast({ title: "Failed to delete entry", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const entries = entriesQuery.data?.data ?? [];
+  const total = entriesQuery.data?.total ?? 0;
 
   return (
     <Layout>
@@ -117,123 +116,101 @@ export default function CashInHandPage() {
             </div>
             <h1 className="mt-3 text-2xl font-semibold tracking-tight">Daily Cash Book</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Day-by-day cash movement and running cash-in-hand balance.
+              Manual entry only — add today's cash by hand and keep a filterable history.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              className="rounded-md border px-3 py-2 text-sm"
-            >
-              {Array.from({ length: 5 }).map((_, i) => {
-                const y = now.getFullYear() - i;
-                return (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                );
-              })}
-            </select>
-            <select
-              value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
-              className="rounded-md border px-3 py-2 text-sm"
-            >
-              {monthNames.map((name, i) => (
-                <option key={name} value={i + 1}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Button onClick={() => setAddOpen(true)} className="gap-1.5">
+            <Plus className="w-4 h-4" /> Add Cash
+          </Button>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Opening Cash</CardTitle>
-              <Wallet className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold">{money(summary.openingCash)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Cash In</CardTitle>
-              <TrendingUp className="h-4 w-4 text-emerald-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold text-emerald-600">{money(summary.totalIn)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Cash Out</CardTitle>
-              <TrendingDown className="h-4 w-4 text-red-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold text-red-600">{money(summary.totalOut)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Closing Cash in Hand</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Cash ({filter})</CardTitle>
               <Banknote className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold">{money(summary.closingCash)}</div>
+              <div className="text-2xl font-semibold">{money(total)}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Entries</CardTitle>
+              <Wallet className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold">{entries.length}</div>
             </CardContent>
           </Card>
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle>
-              {monthNames[month - 1]} {year} — Daily Ledger
-            </CardTitle>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>Cash History</CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              {(["daily", "weekly", "monthly", "custom"] as FilterType[]).map((f) => (
+                <Button
+                  key={f}
+                  size="sm"
+                  variant={filter === f ? "default" : "outline"}
+                  className={cn("capitalize", filter !== f && "border-border")}
+                  onClick={() => setFilter(f)}
+                >
+                  {f}
+                </Button>
+              ))}
+              {filter === "custom" && (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={customFrom}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    className="h-8 w-[150px] border-border bg-background/50 text-sm"
+                  />
+                  <span className="text-muted-foreground text-sm">to</span>
+                  <Input
+                    type="date"
+                    value={customTo}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    className="h-8 w-[150px] border-border bg-background/50 text-sm"
+                  />
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
+            {entriesQuery.isLoading ? (
               <div className="p-4 text-sm text-muted-foreground">Loading…</div>
-            ) : daysWithActivity.length === 0 ? (
-              <div className="p-4 text-sm text-muted-foreground">No cash transactions recorded for this month.</div>
+            ) : entries.length === 0 ? (
+              <div className="p-4 text-sm text-muted-foreground">No cash entries recorded for this period.</div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Sales</TableHead>
-                    <TableHead className="text-right">Purchases</TableHead>
-                    <TableHead className="text-right">Expenses</TableHead>
-                    <TableHead className="text-right">Cash In</TableHead>
-                    <TableHead className="text-right">Cash Out</TableHead>
-                    <TableHead className="text-right">Net Flow</TableHead>
-                    <TableHead className="text-right">Cash in Hand</TableHead>
-                    <TableHead className="text-right">Txns</TableHead>
+                    <TableHead>Note</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {daysWithActivity.map((d) => (
-                    <TableRow
-                      key={d.date}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => setSelectedDate(d.date)}
-                    >
-                      <TableCell className="font-medium">{formatDay(d.date)}</TableCell>
-                      <TableCell className="text-right">{money(d.sales)}</TableCell>
-                      <TableCell className="text-right">{money(d.purchases)}</TableCell>
-                      <TableCell className="text-right">{money(d.expenses)}</TableCell>
-                      <TableCell className="text-right text-emerald-600">{money(d.totalIn)}</TableCell>
-                      <TableCell className="text-right text-red-600">{money(d.totalOut)}</TableCell>
-                      <TableCell className={`text-right ${d.cashFlow >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                        {d.cashFlow >= 0 ? "+" : ""}
-                        {money(d.cashFlow)}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold">{money(d.cashInHand)}</TableCell>
+                  {entries.map((e) => (
+                    <TableRow key={e.id}>
+                      <TableCell className="font-medium">{formatDay(e.entryDate)}</TableCell>
+                      <TableCell className="text-muted-foreground">{e.note || "—"}</TableCell>
+                      <TableCell className="text-right font-semibold">{money(e.amount)}</TableCell>
                       <TableCell className="text-right">
-                        <Badge variant="secondary">{d.transactionCount}</Badge>
+                        <Confirm
+                          title="Delete this cash entry?"
+                          description="This will permanently remove this manual cash entry."
+                          onConfirm={() => handleDelete(e)}
+                          trigger={
+                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -244,64 +221,54 @@ export default function CashInHandPage() {
         </Card>
       </div>
 
-      <Dialog open={!!selectedDate} onOpenChange={(open) => !open && setSelectedDate(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{selectedDate ? formatDay(selectedDate) : ""} — Transactions</DialogTitle>
-          </DialogHeader>
-          {dayLoading ? (
-            <div className="p-4 text-sm text-muted-foreground">Loading…</div>
-          ) : dayDetail ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-3 text-sm">
-                <div className="rounded-md border p-3">
-                  <div className="text-muted-foreground">Cash In</div>
-                  <div className="font-semibold text-emerald-600">{money(dayDetail.totalIn)}</div>
-                </div>
-                <div className="rounded-md border p-3">
-                  <div className="text-muted-foreground">Cash Out</div>
-                  <div className="font-semibold text-red-600">{money(dayDetail.totalOut)}</div>
-                </div>
-                <div className="rounded-md border p-3">
-                  <div className="text-muted-foreground">Net Flow</div>
-                  <div className={`font-semibold ${dayDetail.netFlow >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                    {money(dayDetail.netFlow)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="max-h-[50vh] space-y-3 overflow-y-auto">
-                {Object.entries(dayDetail.byType).map(([type, entries]) => (
-                  <div key={type}>
-                    <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {type}
-                    </div>
-                    <div className="space-y-1">
-                      {entries.map((e) => (
-                        <div
-                          key={e.id}
-                          className="flex items-center justify-between rounded border border-border/40 p-2 text-sm"
-                        >
-                          <div>
-                            <div className="font-medium">{e.partyName || e.note || `#${e.id}`}</div>
-                            {e.note && e.partyName && (
-                              <div className="text-xs text-muted-foreground">{e.note}</div>
-                            )}
-                          </div>
-                          <div className={e.direction === "credit" ? "text-emerald-600" : "text-red-600"}>
-                            {e.direction === "credit" ? "+" : "-"}
-                            {money(e.amount)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </DialogContent>
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <AddCashForm
+          onSubmit={async (payload) => {
+            try {
+              await apiPost("/api/cash-entries", payload);
+              toast({ title: "Cash entry added" });
+              invalidate();
+              setAddOpen(false);
+            } catch (e: any) {
+              toast({ title: "Failed to add cash entry", description: e.message, variant: "destructive" });
+            }
+          }}
+        />
       </Dialog>
     </Layout>
+  );
+}
+
+function AddCashForm({ onSubmit }: { onSubmit: (payload: { amount: number; entryDate: string; note?: string }) => void }) {
+  const [amount, setAmount] = useState("");
+  const [entryDate, setEntryDate] = useState(toDateStr(new Date()));
+  const [note, setNote] = useState("");
+
+  return (
+    <DialogContent className="bg-card border-border max-w-md">
+      <DialogHeader><DialogTitle>Add Cash</DialogTitle></DialogHeader>
+      <div className="grid gap-3 py-2">
+        <div className="space-y-1">
+          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Amount *</Label>
+          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="bg-background/50 border-border" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Date</Label>
+          <Input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="bg-background/50 border-border" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Note (optional)</Label>
+          <Input value={note} onChange={(e) => setNote(e.target.value)} className="bg-background/50 border-border" />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button
+          disabled={!amount}
+          onClick={() => onSubmit({ amount: parseFloat(amount), entryDate, note: note || undefined })}
+        >
+          Add Cash
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   );
 }

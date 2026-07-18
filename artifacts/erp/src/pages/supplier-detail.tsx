@@ -39,7 +39,7 @@ type PurchaseRow = {
   id: number; poNumber: string; status: string; total: number; amountPaid: number; purchaseDate: string;
 };
 
-type Product = { id: number; name: string; sku: string };
+type Product = { id: number; name: string; sku: string; costPrice?: number | null };
 
 export default function SupplierDetail() {
   const params = useParams<{ id: string }>();
@@ -526,13 +526,25 @@ function LinkProductForm({ products, onSubmit }: { products: Product[]; onSubmit
   const [supplierProductName, setSupplierProductName] = useState("");
   const [costPrice, setCostPrice] = useState("");
 
+  const handleProductChange = (value: string) => {
+    setProductId(value);
+    const selected = products.find((p) => String(p.id) === value);
+    if (selected) {
+      // Auto-fill from the product's own record so nothing has to be typed twice —
+      // the supplier's SKU/code and cost price default to the product's, and the
+      // user can still edit either field afterwards if the supplier uses a different one.
+      setSupplierSku(selected.sku ?? "");
+      setCostPrice(selected.costPrice != null ? String(selected.costPrice) : "");
+    }
+  };
+
   return (
     <DialogContent className="bg-card border-border max-w-md">
       <DialogHeader><DialogTitle>Link Product to Supplier</DialogTitle></DialogHeader>
       <div className="grid gap-3 py-2">
         <div className="space-y-1">
           <Label className="text-xs uppercase tracking-wider text-muted-foreground">Product *</Label>
-          <Select value={productId} onValueChange={setProductId}>
+          <Select value={productId} onValueChange={handleProductChange}>
             <SelectTrigger className="bg-background/50 border-border"><SelectValue placeholder="Select a product" /></SelectTrigger>
             <SelectContent>
               {products.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.name} ({p.sku})</SelectItem>)}
