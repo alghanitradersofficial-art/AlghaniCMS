@@ -76,6 +76,31 @@ export interface LedgerTimelineEntry {
   date: string;
 }
 
+export interface SupplierPurchaseOccurrence {
+  purchaseId: number;
+  poNumber: string;
+  purchaseDate: string;
+  quantity: number;
+  unitCost: number;
+  total: number;
+}
+
+export interface SupplierPriceHistoryResponse {
+  hasHistory: boolean;
+  lastCostPrice?: number;
+  lastPurchaseDate?: string;
+  lastPoNumber?: string;
+  lastQuantity?: number;
+  daysSincePurchase?: number;
+  previousPurchases?: SupplierPurchaseOccurrence[];
+  lowestCostEver?: number;
+  highestCostEver?: number;
+  averageCostPrice?: number;
+  totalQuantityPurchased?: number;
+  totalPurchaseValue?: number;
+  totalOrders?: number;
+}
+
 export interface Payment {
   id: number;
   customerId: number;
@@ -144,6 +169,20 @@ export function usePriceSuggestion(customerId: number | undefined, productId: nu
         `/api/customers/${customerId}/price-suggestion/${productId}${proposedPrice != null ? `?proposedPrice=${proposedPrice}` : ""}`,
       ),
     enabled: !!customerId && !!productId,
+  });
+}
+
+export function useSupplierPriceHistory(supplierId: number | undefined, productId: number | undefined, from?: string, to?: string) {
+  return useQuery({
+    queryKey: ["supplier-price-history", supplierId, productId, from, to],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+      const qs = params.toString() ? `?${params.toString()}` : "";
+      return customFetch<SupplierPriceHistoryResponse>(`/api/suppliers/${supplierId}/price-history/${productId}${qs}`);
+    },
+    enabled: !!supplierId && !!productId,
   });
 }
 
