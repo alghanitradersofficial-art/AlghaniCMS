@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useCustomerLedger, useLedgerTimeline, useRecordPayment, useVoidPayment, type RecordPaymentInput } from "@/hooks/use-ledger";
+import { useCustomerLedger, useLedgerTimeline, useRecordPayment, useDeletePayment, type RecordPaymentInput } from "@/hooks/use-ledger";
 import { useUpdateCustomer, getGetCustomersQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Wallet, Receipt, ArrowDownCircle, ArrowUpCircle, AlertTriangle, ShieldCheck, Trash2 } from "lucide-react";
@@ -31,7 +31,7 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
   const { data: ledger, isLoading, isError, error } = useCustomerLedger(customerId ?? undefined);
   const { data: timeline, isError: timelineError } = useLedgerTimeline(customerId ?? undefined);
   const recordPayment = useRecordPayment();
-  const voidPayment = useVoidPayment();
+  const deletePayment = useDeletePayment();
   const updateCustomer = useUpdateCustomer();
   const qc = useQueryClient();
 
@@ -83,7 +83,7 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
 
   const handleDeletePayment = async (paymentId: number) => {
     try {
-      await voidPayment.mutateAsync({ paymentId, reason: "Deleted from ledger (duplicate/incorrect entry)" });
+      await deletePayment.mutateAsync({ paymentId });
     } catch (err) {
       console.error("Failed to delete payment:", err);
       alert(err instanceof Error ? err.message : "Failed to delete payment. Please try again.");
@@ -181,7 +181,7 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
                           description="Use this if a payment was accidentally saved twice or entered incorrectly. It will be removed and the customer's balance recalculated automatically."
                           onConfirm={() => handleDeletePayment(entry.paymentId!)}
                           trigger={
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10" disabled={voidPayment.isPending}>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10" disabled={deletePayment.isPending}>
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           }

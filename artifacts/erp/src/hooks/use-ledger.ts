@@ -194,11 +194,11 @@ export function usePaymentSummary(customerId: number | undefined) {
   });
 }
 
-export function useVoidPayment() {
+export function useDeletePayment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ paymentId, reason }: { paymentId: number; reason: string }) =>
-      customFetch<{ success: boolean }>(`/api/payments/${paymentId}/void`, { method: "POST", body: JSON.stringify({ reason }) }),
+    mutationFn: ({ paymentId }: { paymentId: number }) =>
+      customFetch<void>(`/api/payments/${paymentId}`, { method: "DELETE" }),
     onSuccess: () => {
       // We don't know the customerId here without threading it through, so
       // invalidate broadly — these queries are cheap and infrequent.

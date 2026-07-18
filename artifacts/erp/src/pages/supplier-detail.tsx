@@ -257,13 +257,14 @@ function LedgerTab({ supplierId, data, isLoading, onChanged }: { supplierId: num
     }
   };
 
-  // Payments accidentally saved twice (or entered incorrectly) get voided
-  // here — this reverses the purchase allocation + ledger effect and
-  // recalculates the supplier's balance automatically.
+  // Payments accidentally saved twice (or entered incorrectly) get
+  // permanently deleted here — this removes the payment and its ledger/cash
+  // entries entirely, reverses the purchase allocation, and recalculates
+  // the supplier's balance automatically.
   const handleDeletePayment = async (entry: LedgerEntry) => {
     if (!entry.paymentId) return;
     try {
-      await apiPost(`/api/suppliers/${supplierId}/payments/${entry.paymentId}/void`, { reason: "Deleted from ledger (duplicate/incorrect entry)" });
+      await apiDelete(`/api/suppliers/${supplierId}/payments/${entry.paymentId}`);
       toast({ title: "Payment deleted" });
       onChanged();
     } catch (e: any) {

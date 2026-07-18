@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { db, paymentsTable, customersTable, ledgerEntriesTable } from "@workspace/db";
+import { db, paymentsTable, customersTable, ledgerEntriesTable, generalLedgerEntriesTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { appendLedgerEntry, allocatePayment, round2, recomputeCustomerLedgerRunningBalances } from "../lib/ledger.js";
 import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
@@ -207,64 +207,62 @@ router.get("/customer/:id/summary", async (req, res): Promise<any> => {
   }
 });
 
-/** POST /api/payments/:id/void — soft-delete a payment (never hard-delete financial records). */
-router.post("/:id/void", async (req, res): Promise<any> => {
+/**
+ * DELETE /api/payments/:id — permanently delete a payment.
+ *
+ * Hard-deletes the payment row and every trace it left behind (its ledger
+ * entry, its cash-ledger entry), reverses whatever it was allocated to on
+ * the customer's invoices, and re-chains running balances — so deleting a
+ * mistaken/duplicate entry actually removes it from history instead of
+ * leaving a "voided" pair of rows behind.
+ */
+router.delete("/:id", async (req, res): Promise<any> => {
   try {
     const id = parseInt(req.params.id);
-    const reason = z.object({ reason: z.string().min(1) }).parse(req.body).reason;
-    const createdByUserId = getUserIdFromRequest(req);
 
     const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
     if (!payment) return res.status(404).json({ error: "Payment not found" });
-    if (payment.isVoided) return res.status(400).json({ error: "Payment is already voided" });
 
     if (payment.paymentDate && await isDateInClosedPeriod(new Date(payment.paymentDate))) {
       return res.status(409).json({ error: `Financial period is closed for ${new Date(payment.paymentDate).toISOString().slice(0,10)}` });
     }
 
     await db.transaction(async (tx) => {
-      await tx.update(paymentsTable).set({ isVoided: true, voidReason: reason }).where(eq(paymentsTable.id, id));
-
-      const allocations = (payment.allocations as Array<{ saleId: number; amount: number }>) || [];
-      for (const alloc of allocations) {
-        await tx.execute(
-          sql`UPDATE sales SET amount_paid = amount_paid - ${alloc.amount} WHERE id = ${alloc.saleId}`,
-        );
+      // Only reverse invoice allocations if this payment hadn't already
+      // been voided under the old system (which already reversed them) —
+      // avoids double-subtracting for legacy voided rows being cleaned up.
+      if (!payment.isVoided) {
+        const allocations = (payment.allocations as Array<{ saleId: number; amount: number }>) || [];
+        for (const alloc of allocations) {
+          await tx.execute(
+            sql`UPDATE sales SET amount_paid = amount_paid - ${alloc.amount} WHERE id = ${alloc.saleId}`,
+          );
+        }
       }
 
-      await appendLedgerEntry(tx, {
-        customerId: payment.customerId,
-        type: "adjustment",
-        amount: parseFloat(payment.amount as string),
-        paymentId: payment.id,
-        description: `Payment voided: ${reason}`,
-        createdByUserId,
-      });
+      // Remove every ledger entry this payment ever produced — the original
+      // "payment" entry, and (for legacy rows) any old "voided" reversal entry.
+      await tx.delete(ledgerEntriesTable).where(eq(ledgerEntriesTable.paymentId, id));
+
+      // Remove every cash-ledger entry tied to this payment.
+      await tx
+        .delete(generalLedgerEntriesTable)
+        .where(and(
+          eq(generalLedgerEntriesTable.referenceId, id),
+          eq(generalLedgerEntriesTable.partyType, "customer"),
+          eq(generalLedgerEntriesTable.partyId, payment.customerId),
+        ));
+
+      // Remove the payment itself.
+      await tx.delete(paymentsTable).where(eq(paymentsTable.id, id));
 
       await recomputeCustomerLedgerRunningBalances(tx, payment.customerId);
-
-      // Reverse the cash-in-hand effect of this payment. Recorded as a
-      // compensating adjustment rather than deleting the original row, so
-      // the cash timeline stays an honest, append-only audit trail.
-      const [customer] = await tx.select().from(customersTable).where(eq(customersTable.id, payment.customerId));
-      await appendGeneralLedgerEntry(tx, {
-        date: new Date(),
-        type: "adjustment",
-        referenceId: payment.id,
-        partyType: "customer",
-        partyId: payment.customerId,
-        partyName: customer?.name ?? null,
-        amount: parseFloat(payment.amount as string),
-        direction: "debit",
-        note: `Payment voided: ${reason}`,
-        createdByUserId,
-      });
     });
 
-    return res.json({ success: true });
+    return res.status(204).send();
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: "Failed to void payment" });
+    return res.status(500).json({ error: "Failed to delete payment" });
   }
 });
 

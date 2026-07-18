@@ -372,23 +372,21 @@ router.post("/:id/payments", async (req, res): Promise<any> => {
   }
 });
 
-// POST /api/suppliers/:id/payments/:paymentId/void — soft-delete a payment
-// (e.g. accidentally saved twice). Never hard-deletes financial records;
-// reverses its ledger + purchase-allocation + cash effect and recomputes
-// running balances so the khata stays correct.
-router.post("/:id/payments/:paymentId/void", async (req, res): Promise<any> => {
+// DELETE /api/suppliers/:id/payments/:paymentId — permanently delete a payment
+// (e.g. accidentally saved twice, or entered slowly and double-submitted).
+// Hard-deletes the payment row and its ledger/cash traces, reverses its
+// purchase-order allocation, and recomputes running balances — the entry
+// actually disappears from history instead of leaving a "voided" pair behind.
+router.delete("/:id/payments/:paymentId", async (req, res): Promise<any> => {
   try {
     const supplierId = parseInt(req.params.id);
     const paymentId = parseInt(req.params.paymentId);
-    const reason = z.object({ reason: z.string().min(1) }).parse(req.body).reason;
-    const createdByUserId = getUserIdFromRequest(req);
 
     const [payment] = await db
       .select()
       .from(supplierPaymentsTable)
       .where(and(eq(supplierPaymentsTable.id, paymentId), eq(supplierPaymentsTable.supplierId, supplierId)));
     if (!payment) return res.status(404).json({ error: "Payment not found" });
-    if (payment.isVoided) return res.status(400).json({ error: "Payment is already voided" });
 
     if (payment.paymentDate) {
       try {
@@ -404,54 +402,46 @@ router.post("/:id/payments/:paymentId/void", async (req, res): Promise<any> => {
     const [supplier] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, supplierId));
     if (!supplier) return res.status(404).json({ error: "Supplier not found" });
 
+    // Permanently delete the payment and every trace it left behind — the
+    // original ledger entry, the cash-ledger entry, and (for legacy rows)
+    // any old "voided" reversal entry — instead of soft-deleting and
+    // leaving a compensating pair of rows in history.
     await db.transaction(async (tx) => {
-      await tx.update(supplierPaymentsTable).set({ isVoided: true, voidReason: reason }).where(eq(supplierPaymentsTable.id, paymentId));
-
-      // Reverse exactly the purchase orders this payment was applied to.
-      const allocations = (payment.allocations as Array<{ purchaseId: number; amount: number }>) || [];
-      for (const alloc of allocations) {
-        await tx.execute(
-          sql`UPDATE purchases SET amount_paid = amount_paid - ${alloc.amount} WHERE id = ${alloc.purchaseId}`,
-        );
+      // Only reverse purchase-order allocations if this payment hadn't
+      // already been voided under the old system (already reversed then) —
+      // avoids double-subtracting for legacy voided rows being cleaned up.
+      if (!payment.isVoided) {
+        const allocations = (payment.allocations as Array<{ purchaseId: number; amount: number }>) || [];
+        for (const alloc of allocations) {
+          await tx.execute(
+            sql`UPDATE purchases SET amount_paid = amount_paid - ${alloc.amount} WHERE id = ${alloc.purchaseId}`,
+          );
+        }
       }
 
-      // Compensating ledger entry: the original payment was recorded as a
-      // negative amount (reduces what we owe); reversing it adds that
-      // amount back so the balance is correct again.
-      await appendSupplierLedgerEntry(tx, {
-        supplierId,
-        type: "adjustment",
-        amount: round2(parseFloat(payment.amount as string)),
-        paymentId: payment.id,
-        description: `Payment voided: ${reason}`,
-        createdByUserId,
-        entryDate: new Date(),
-      });
+      // Remove every supplier-ledger entry this payment ever produced.
+      await tx.delete(supplierLedgerEntriesTable).where(eq(supplierLedgerEntriesTable.paymentId, paymentId));
+
+      // Remove every cash-ledger entry tied to this payment.
+      await tx
+        .delete(generalLedgerEntriesTable)
+        .where(and(
+          eq(generalLedgerEntriesTable.referenceId, paymentId),
+          eq(generalLedgerEntriesTable.partyType, "supplier"),
+          eq(generalLedgerEntriesTable.partyId, supplierId),
+        ));
+
+      // Remove the payment itself.
+      await tx.delete(supplierPaymentsTable).where(eq(supplierPaymentsTable.id, paymentId));
 
       await recomputeSupplierLedgerRunningBalances(tx, supplierId);
-
-      // Reverse the cash-in-hand effect of this payment (it never actually
-      // left, or was a duplicate), recorded as a compensating entry rather
-      // than deleting the original row.
-      await appendGeneralLedgerEntry(tx, {
-        date: new Date(),
-        type: "adjustment",
-        referenceId: payment.id,
-        partyType: "supplier",
-        partyId: supplierId,
-        partyName: supplier.name,
-        amount: parseFloat(payment.amount as string),
-        direction: "credit",
-        note: `Payment voided: ${reason}`,
-        createdByUserId,
-      });
     });
 
-    return res.json({ success: true });
+    return res.status(204).send();
   } catch (error) {
     console.error(error);
     if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues });
-    return res.status(500).json({ error: "Failed to void payment" });
+    return res.status(500).json({ error: "Failed to delete payment" });
   }
 });
 
