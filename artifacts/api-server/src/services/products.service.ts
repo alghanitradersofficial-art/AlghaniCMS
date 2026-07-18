@@ -12,6 +12,31 @@ async function destroyCloudinaryAsset(publicId: string) {
   await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/destroy`, { method: "POST", body: params });
 }
 
+// Auto-generates a unique SKU (e.g. "SKU-M5F3K2-A7B9") when the user doesn't
+// provide one manually. Product ID is the real identifier now; SKU is kept
+// only as an optional, editable secondary code.
+function generateSku(): string {
+  const timePart = Date.now().toString(36).toUpperCase().slice(-6);
+  const randPart = crypto.randomBytes(3).toString("hex").toUpperCase();
+  return `SKU-${timePart}-${randPart}`;
+}
+
+async function isSkuTaken(sku: string): Promise<boolean> {
+  const result = await pool.query(`SELECT 1 FROM products WHERE sku = $1 LIMIT 1`, [sku]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+async function resolveSku(providedSku: unknown): Promise<string> {
+  const trimmed = typeof providedSku === "string" ? providedSku.trim() : "";
+  if (trimmed) return trimmed;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = generateSku();
+    if (!(await isSkuTaken(candidate))) return candidate;
+  }
+  // Extremely unlikely fallback if 5 random collisions happen in a row.
+  return `${generateSku()}-${crypto.randomBytes(2).toString("hex").toUpperCase()}`;
+}
+
 export async function listProducts(params: Record<string, any>) {
   const { search, categoryId, brandId, lowStock, page = 1, limit = 20 } = params;
   const whereClauses: string[] = [];
@@ -49,7 +74,7 @@ export async function listProducts(params: Record<string, any>) {
     data: rowsResult.rows.map((r: Record<string, unknown>) => ({
       ...r,
       costPrice: parseFloat(r.costPrice as string),
-      salePrice: parseFloat(r.salePrice as string),
+      salePrice: r.salePrice != null ? parseFloat(r.salePrice as string) : null,
       createdAt: r.createdAt instanceof Date ? (r.createdAt as Date).toISOString() : r.createdAt,
     })),
     total,
@@ -59,6 +84,7 @@ export async function listProducts(params: Record<string, any>) {
 }
 
 export async function createProduct(body: any, actorUserId: number | null) {
+  const sku = await resolveSku(body.sku);
   const result = await pool.query(
     `INSERT INTO products (name, sku, description, category_id, brand_id,
                            cost_price, sale_price, current_stock, min_stock,
@@ -73,12 +99,12 @@ export async function createProduct(body: any, actorUserId: number | null) {
                created_at AS "createdAt"`,
     [
       body.name,
-      body.sku,
+      sku,
       body.description ?? null,
       body.categoryId ?? null,
       body.brandId ?? null,
       String(body.costPrice),
-      String(body.salePrice),
+      body.salePrice != null ? String(body.salePrice) : null,
       body.currentStock ?? 0,
       body.minStock ?? 5,
       body.unit ?? "pcs",
@@ -97,7 +123,7 @@ export async function createProduct(body: any, actorUserId: number | null) {
   return {
     ...product,
     costPrice: parseFloat(product.costPrice as string),
-    salePrice: parseFloat(product.salePrice as string),
+    salePrice: product.salePrice != null ? parseFloat(product.salePrice as string) : null,
     createdAt: product.createdAt instanceof Date ? (product.createdAt as Date).toISOString() : product.createdAt,
   };
 }
@@ -123,7 +149,7 @@ export async function getProduct(id: number) {
   return {
     ...row,
     costPrice: parseFloat(row.costPrice as string),
-    salePrice: parseFloat(row.salePrice as string),
+    salePrice: row.salePrice != null ? parseFloat(row.salePrice as string) : null,
     createdAt: row.createdAt instanceof Date ? (row.createdAt as Date).toISOString() : row.createdAt,
   };
 }
@@ -138,7 +164,7 @@ export async function updateProduct(id: number, body: any, actorUserId: number |
   if (body.categoryId !== undefined) { updates.push(`category_id = $${idx++}`); values.push(body.categoryId); }
   if (body.brandId !== undefined) { updates.push(`brand_id = $${idx++}`); values.push(body.brandId); }
   if (body.costPrice !== undefined) { updates.push(`cost_price = $${idx++}`); values.push(String(body.costPrice)); }
-  if (body.salePrice !== undefined) { updates.push(`sale_price = $${idx++}`); values.push(String(body.salePrice)); }
+  if (body.salePrice !== undefined) { updates.push(`sale_price = $${idx++}`); values.push(body.salePrice != null ? String(body.salePrice) : null); }
   if (body.currentStock !== undefined) { updates.push(`current_stock = $${idx++}`); values.push(body.currentStock); }
   if (body.minStock !== undefined) { updates.push(`min_stock = $${idx++}`); values.push(body.minStock); }
   if (body.unit !== undefined) { updates.push(`unit = $${idx++}`); values.push(body.unit); }
@@ -171,7 +197,7 @@ export async function updateProduct(id: number, body: any, actorUserId: number |
   return {
     ...product,
     costPrice: parseFloat(product.costPrice as string),
-    salePrice: parseFloat(product.salePrice as string),
+    salePrice: product.salePrice != null ? parseFloat(product.salePrice as string) : null,
     createdAt: product.createdAt instanceof Date ? (product.createdAt as Date).toISOString() : product.createdAt,
   };
 }

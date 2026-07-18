@@ -15,13 +15,15 @@ import {
   Users2,
   Zap,
   Wallet,
+  Briefcase,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { clearAuth, getUser, hasPermission } from "@/lib/auth";
 
 export const MENU_ITEMS = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", permission: "dashboard" },
-  { icon: Package, label: "Inventory & Brands", href: "/inventory", permission: "inventory" },
+  { icon: Package, label: "Inventory", href: "/inventory", permission: "inventory" },
+  { icon: Briefcase, label: "Brands", href: "/brands", permission: "brands" },
   { icon: ShoppingCart, label: "Sales", href: "/sales", permission: "sales" },
   { icon: Truck, label: "Purchases", href: "/purchases", permission: "purchases" },
   { icon: Wallet, label: "Cash in Hand", href: "/cash-in-hand", permission: "reports" },

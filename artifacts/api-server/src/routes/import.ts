@@ -29,12 +29,17 @@ async function ensureProduct(productData: Record<string, unknown>) {
   const sku = parseStr(productData.sku) || `LEGACY-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   if (!name) return null;
 
+  // Product-level sale price was removed (price now varies per customer per
+  // sale), so only set it if the import source explicitly provided one.
+  const hasSalePrice = productData.salePrice !== undefined && productData.salePrice !== null && productData.salePrice !== "";
+  const salePrice = hasSalePrice ? String(parseNumber(productData.salePrice)) : null;
+
   const [existing] = await db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.sku, sku));
   if (existing) {
     await db.update(productsTable).set({
       name,
       costPrice: String(parseNumber(productData.costPrice)),
-      salePrice: String(parseNumber(productData.salePrice)),
+      ...(hasSalePrice ? { salePrice } : {}),
       currentStock: parseInt(String(productData.currentStock || 0), 10) || 0,
       minStock: parseInt(String(productData.minStock || 5), 10) || 5,
       unit: parseStr(productData.unit) || "pcs",
@@ -46,7 +51,7 @@ async function ensureProduct(productData: Record<string, unknown>) {
     name,
     sku,
     costPrice: String(parseNumber(productData.costPrice)),
-    salePrice: String(parseNumber(productData.salePrice)),
+    salePrice,
     currentStock: parseInt(String(productData.currentStock || 0), 10) || 0,
     minStock: parseInt(String(productData.minStock || 5), 10) || 5,
     unit: parseStr(productData.unit) || "pcs",
@@ -172,7 +177,7 @@ router.post("/legacy", upload.single("file"), async (req, res) => {
           productId = product?.id;
         }
         if (!productId) {
-          const created = await ensureProduct({ name: parseStr(item.productName) || `Imported item ${Date.now()}`, sku: parseStr(item.sku) || `ITEM-${Math.random().toString(36).slice(2, 8)}`, costPrice: item.unitCost, salePrice: item.unitCost });
+          const created = await ensureProduct({ name: parseStr(item.productName) || `Imported item ${Date.now()}`, sku: parseStr(item.sku) || `ITEM-${Math.random().toString(36).slice(2, 8)}`, costPrice: item.unitCost });
           productId = created?.id;
         }
         return {
@@ -267,7 +272,7 @@ router.post("/legacy", upload.single("file"), async (req, res) => {
           productId = product?.id;
         }
         if (!productId) {
-          const created = await ensureProduct({ name: parseStr(item.productName) || `Imported item ${Date.now()}`, sku: parseStr(item.sku) || `ITEM-${Math.random().toString(36).slice(2, 8)}`, costPrice: item.unitPrice, salePrice: item.unitPrice });
+          const created = await ensureProduct({ name: parseStr(item.productName) || `Imported item ${Date.now()}`, sku: parseStr(item.sku) || `ITEM-${Math.random().toString(36).slice(2, 8)}`, costPrice: item.unitPrice });
           productId = created?.id;
         }
         return {
@@ -366,7 +371,7 @@ router.post("/ai/image", upload.single("file"), async (req, res) => {
     const mimeType = req.file.mimetype || "image/jpeg";
 
     const prompts: Record<string, string> = {
-      products: `Extract ALL product/inventory data from this image. Return ONLY a JSON array like: [{"name":"Product Name","sku":"SKU-001","costPrice":500,"salePrice":750,"currentStock":100,"unit":"pcs","category":""}]. Extract every product visible. If no clear price, use 0.`,
+      products: `Extract ALL product/inventory data from this image. Return ONLY a JSON array like: [{"name":"Product Name","sku":"SKU-001","costPrice":500,"currentStock":100,"unit":"pcs","category":""}]. Extract every product visible. If no clear price, use 0.`,
       customers: `Extract ALL customer/contact data from this image. Return ONLY a JSON array like: [{"name":"Customer Name","phone":"+92...","email":"","city":"Lahore","address":""}]. Extract every person/business visible.`,
       suppliers: `Extract ALL supplier/vendor data from this image. Return ONLY a JSON array like: [{"name":"Supplier Name","contactPerson":"","phone":"+92...","email":"","city":""}].`,
     };
@@ -385,8 +390,8 @@ router.post("/ai/image", upload.single("file"), async (req, res) => {
       for (const item of extracted) {
         try {
           await pool.query(
-            `INSERT INTO products (name, sku, cost_price, sale_price, current_stock, unit) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (sku) DO UPDATE SET name=$1,cost_price=$3,sale_price=$4,current_stock=$5`,
-            [parseStr(item.name), parseStr(item.sku) || `AI-${Date.now()}-${count}`, parseNumber(item.costPrice).toFixed(2), parseNumber(item.salePrice).toFixed(2), parseInt(item.currentStock) || 0, parseStr(item.unit) || "pcs"]
+            `INSERT INTO products (name, sku, cost_price, current_stock, unit) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (sku) DO UPDATE SET name=$1,cost_price=$3,current_stock=$4`,
+            [parseStr(item.name), parseStr(item.sku) || `AI-${Date.now()}-${count}`, parseNumber(item.costPrice).toFixed(2), parseInt(item.currentStock) || 0, parseStr(item.unit) || "pcs"]
           );
           count++;
         } catch (e: unknown) { errors.push((e as Error).message); }
@@ -439,7 +444,7 @@ router.post("/ai/document", upload.single("file"), async (req, res) => {
     }
 
     const prompts: Record<string, string> = {
-      products: `Extract product/inventory data from this document text. Return ONLY a JSON array: [{"name":"","sku":"","costPrice":0,"salePrice":0,"currentStock":0,"unit":"pcs","category":""}]\n\nDocument:\n${textContent.substring(0, 6000)}`,
+      products: `Extract product/inventory data from this document text. Return ONLY a JSON array: [{"name":"","sku":"","costPrice":0,"currentStock":0,"unit":"pcs","category":""}]\n\nDocument:\n${textContent.substring(0, 6000)}`,
       customers: `Extract customer data from this document. Return ONLY JSON array: [{"name":"","phone":"","email":"","city":"","address":""}]\n\nDocument:\n${textContent.substring(0, 6000)}`,
       suppliers: `Extract supplier/vendor data. Return ONLY JSON array: [{"name":"","contactPerson":"","phone":"","email":"","city":""}]\n\nDocument:\n${textContent.substring(0, 6000)}`,
       expenses: `Extract expense data. Return ONLY JSON array: [{"title":"","amount":0,"category":"","date":""}]\n\nDocument:\n${textContent.substring(0, 6000)}`,
@@ -461,8 +466,8 @@ router.post("/ai/document", upload.single("file"), async (req, res) => {
       for (const item of extracted) {
         try {
           await pool.query(
-            `INSERT INTO products (name, sku, cost_price, sale_price, current_stock, unit) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (sku) DO UPDATE SET name=$1,cost_price=$3,sale_price=$4`,
-            [parseStr(item.name) || "Unknown", parseStr(item.sku) || `DOC${Date.now()}${count}`, parseNumber(item.costPrice).toFixed(2), parseNumber(item.salePrice).toFixed(2), parseInt(item.currentStock) || 0, parseStr(item.unit) || "pcs"]
+            `INSERT INTO products (name, sku, cost_price, current_stock, unit) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (sku) DO UPDATE SET name=$1,cost_price=$3`,
+            [parseStr(item.name) || "Unknown", parseStr(item.sku) || `DOC${Date.now()}${count}`, parseNumber(item.costPrice).toFixed(2), parseInt(item.currentStock) || 0, parseStr(item.unit) || "pcs"]
           );
           count++;
         } catch (e: unknown) { errors.push((e as Error).message); }
@@ -525,9 +530,15 @@ router.post("/products", upload.single("file"), async (req, res) => {
       const name = parseStr(cells[nameIdx]);
       if (!name) return;
       const sku = skuIdx >= 0 ? parseStr(cells[skuIdx]) : `IMP-${Date.now()}-${rn}`;
+      const hasSaleCol = saleIdx >= 0 && parseStr(cells[saleIdx]) !== "";
       try {
-        await pool.query(`INSERT INTO products (name,sku,cost_price,sale_price,current_stock,min_stock,unit) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (sku) DO UPDATE SET name=$1,cost_price=$3,sale_price=$4,current_stock=$5,min_stock=$6`,
-          [name, sku || `IMP${rn}`, parseNumber(costIdx >= 0 ? cells[costIdx] : 0).toFixed(2), parseNumber(saleIdx >= 0 ? cells[saleIdx] : 0).toFixed(2), parseInt(String(stockIdx >= 0 ? cells[stockIdx] : 0)) || 0, parseInt(String(minIdx >= 0 ? cells[minIdx] : 5)) || 5, parseStr(unitIdx >= 0 ? cells[unitIdx] : "pcs") || "pcs"]);
+        if (hasSaleCol) {
+          await pool.query(`INSERT INTO products (name,sku,cost_price,sale_price,current_stock,min_stock,unit) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (sku) DO UPDATE SET name=$1,cost_price=$3,sale_price=$4,current_stock=$5,min_stock=$6`,
+            [name, sku || `IMP${rn}`, parseNumber(costIdx >= 0 ? cells[costIdx] : 0).toFixed(2), parseNumber(cells[saleIdx]).toFixed(2), parseInt(String(stockIdx >= 0 ? cells[stockIdx] : 0)) || 0, parseInt(String(minIdx >= 0 ? cells[minIdx] : 5)) || 5, parseStr(unitIdx >= 0 ? cells[unitIdx] : "pcs") || "pcs"]);
+        } else {
+          await pool.query(`INSERT INTO products (name,sku,cost_price,current_stock,min_stock,unit) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (sku) DO UPDATE SET name=$1,cost_price=$3,current_stock=$4,min_stock=$5`,
+            [name, sku || `IMP${rn}`, parseNumber(costIdx >= 0 ? cells[costIdx] : 0).toFixed(2), parseInt(String(stockIdx >= 0 ? cells[stockIdx] : 0)) || 0, parseInt(String(minIdx >= 0 ? cells[minIdx] : 5)) || 5, parseStr(unitIdx >= 0 ? cells[unitIdx] : "pcs") || "pcs"]);
+        }
         imported.push(name);
       } catch (e: unknown) { errors.push(`Row ${rn}: ${(e as Error).message}`); }
     });

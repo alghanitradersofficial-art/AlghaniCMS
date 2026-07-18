@@ -21,7 +21,8 @@ export interface Product {
   /** @nullable */
   brandName?: string | null;
   costPrice: number;
-  salePrice: number;
+  /** @nullable */
+  salePrice?: number | null;
   currentStock: number;
   minStock: number;
   unit: string;

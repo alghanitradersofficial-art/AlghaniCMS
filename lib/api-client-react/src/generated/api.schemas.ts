@@ -83,7 +83,8 @@ export interface Product {
   /** @nullable */
   brandName?: string | null;
   costPrice: number;
-  salePrice: number;
+  /** @nullable */
+  salePrice?: number | null;
   currentStock: number;
   minStock: number;
   unit: string;
@@ -103,14 +104,15 @@ export interface ProductList {
 
 export interface ProductInput {
   name: string;
-  sku: string;
+  sku?: string;
   description?: string;
   /** @nullable */
   categoryId?: number | null;
   /** @nullable */
   brandId?: number | null;
   costPrice: number;
-  salePrice: number;
+  /** @nullable */
+  salePrice?: number | null;
   currentStock: number;
   minStock: number;
   unit: string;
@@ -127,7 +129,8 @@ export interface ProductUpdate {
   /** @nullable */
   brandId?: number | null;
   costPrice?: number;
-  salePrice?: number;
+  /** @nullable */
+  salePrice?: number | null;
   currentStock?: number;
   minStock?: number;
   unit?: string;

@@ -36,8 +36,10 @@ export default function QuickEntry() {
       return;
     }
 
+    // No fixed product sale price anymore — sale price must be entered manually
+    // per transaction. Purchases still default to the product's cost price.
     const defaultPrice = mode === "sale"
-      ? Number(selectedProduct.salePrice ?? 0)
+      ? 0
       : Number(selectedProduct.costPrice ?? 0);
 
     setPrice((currentPrice) => {
@@ -75,7 +77,7 @@ export default function QuickEntry() {
           saleDate: entryDate || undefined,
           status: status || undefined,
           notes: notes || undefined,
-          items: [{ productId: Number(productId), quantity: Number(quantity), unitPrice: Number(price || selectedProduct?.salePrice || 0) }],
+          items: [{ productId: Number(productId), quantity: Number(quantity), unitPrice: Number(price || 0) }],
         });
       } else {
         await apiPost("/api/purchases", {
@@ -204,7 +206,11 @@ export default function QuickEntry() {
             </div>
 
             <div className="rounded-lg border border-border bg-background/30 p-3 text-sm text-muted-foreground">
-              <p>Suggested {mode === "sale" ? "sale" : "cost"} price: Rs. {Number(price || selectedProduct?.salePrice || selectedProduct?.costPrice || 0).toLocaleString()}</p>
+              <p>
+                {mode === "sale"
+                  ? `Enter the sale price for this customer. ${price && Number(price) > 0 ? `Current: Rs. ${Number(price).toLocaleString()}` : "No fixed sale price — set it per sale."}`
+                  : `Suggested cost price: Rs. ${Number(price || selectedProduct?.costPrice || 0).toLocaleString()}`}
+              </p>
             </div>
 
             {status ? <p className="text-sm text-primary">{status}</p> : null}

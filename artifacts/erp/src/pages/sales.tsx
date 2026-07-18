@@ -68,28 +68,24 @@ export default function Sales() {
       if (field === "productId") {
         const product = products?.data.find(p => p.id === Number(val));
         if (product) {
-          // Set unit price to customer's previous price for this product if available,
-          // otherwise fall back to product.salePrice or 0.
+          // No fixed product sale price — price is set per customer per sale.
+          // Suggest the customer's last price for this product (via price-suggestion
+          // endpoint, which falls back to cost + minimum margin); otherwise leave at 0
+          // for manual entry.
           next[idx] = { ...next[idx], productId: product.id, productName: product.name, unitPrice: 0 };
           (async () => {
             try {
               if (customerId) {
                 const suggestion = await apiGet<any>(`/api/customers/${customerId}/price-suggestion/${product.id}`);
-                const prev = suggestion.previousCustomerPrice ?? null;
+                const suggested = suggestion.previousCustomerPrice ?? suggestion.suggestedSellingPrice ?? 0;
                 setItems(cur => {
                   const n = [...cur];
-                  n[idx] = { ...n[idx], unitPrice: prev ?? product.salePrice ?? 0 };
-                  return n;
-                });
-              } else {
-                setItems(cur => {
-                  const n = [...cur];
-                  n[idx] = { ...n[idx], unitPrice: product.salePrice ?? 0 };
+                  n[idx] = { ...n[idx], unitPrice: suggested };
                   return n;
                 });
               }
             } catch (e) {
-              // ignore and leave unitPrice as-is
+              // ignore and leave unitPrice as-is for manual entry
             }
           })();
         }

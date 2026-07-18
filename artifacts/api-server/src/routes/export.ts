@@ -127,7 +127,7 @@ async function addDashboardSheet(wb: ExcelJS.Workbook, company: Record<string, s
        FROM expenses ${clauses.expenses.length ? `WHERE ${clauses.expenses.join(" AND ")}` : ""}`,
       clauses.expenses.length ? params : []
     ),
-    pool.query(`SELECT COUNT(*) as total, SUM(CASE WHEN current_stock <= min_stock THEN 1 ELSE 0 END) as low_stock, COALESCE(SUM(current_stock::numeric), 0) as total_stock, COALESCE(SUM((sale_price::numeric - cost_price::numeric) * current_stock::numeric), 0) as inventory_value FROM products`),
+    pool.query(`SELECT COUNT(*) as total, SUM(CASE WHEN current_stock <= min_stock THEN 1 ELSE 0 END) as low_stock, COALESCE(SUM(current_stock::numeric), 0) as total_stock, COALESCE(SUM(cost_price::numeric * current_stock::numeric), 0) as inventory_value FROM products`),
     pool.query(`SELECT COUNT(*) as total FROM customers`),
     pool.query(`SELECT COUNT(*) as total FROM suppliers`),
     pool.query(`SELECT COALESCE(SUM(amount::numeric), 0) as total FROM payments WHERE is_voided = false`),
@@ -524,32 +524,32 @@ router.get("/inventory/excel", async (req, res) => {
     `);
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Inventory");
-    const cols = 9;
+    const cols = 8;
     addExcelBranding(ws, company, "Inventory Report", cols);
     ws.columns = [
-      { key: "sku", width: 14 }, { key: "name", width: 30 }, { key: "cat", width: 16 },
-      { key: "brand", width: 14 }, { key: "cost", width: 14 }, { key: "sale", width: 14 },
+      { key: "id", width: 12 }, { key: "name", width: 30 }, { key: "cat", width: 16 },
+      { key: "brand", width: 14 }, { key: "cost", width: 14 },
       { key: "stock", width: 12 }, { key: "min", width: 12 }, { key: "value", width: 16 },
     ];
-    ws.addRow(["SKU", "Product Name", "Category", "Brand", "Cost Price", "Sale Price", "Stock", "Min Stock", "Value"]);
+    ws.addRow(["Product ID", "Product Name", "Category", "Brand", "Cost Price", "Stock", "Min Stock", "Value"]);
     styleExcelHeader(ws, 4, cols);
     let totalValue = 0;
     for (const row of result.rows) {
       const val = parseFloat(row.cost_price) * parseInt(row.current_stock);
       const r = ws.addRow({
-        sku: row.sku, name: row.name, cat: row.cat_name, brand: row.brand_name,
-        cost: parseFloat(row.cost_price), sale: parseFloat(row.sale_price),
+        id: row.id, name: row.name, cat: row.cat_name, brand: row.brand_name,
+        cost: parseFloat(row.cost_price),
         stock: parseInt(row.current_stock), min: parseInt(row.min_stock), value: val,
       });
       if (parseInt(row.current_stock) <= parseInt(row.min_stock)) {
-        r.getCell(7).font = { color: { argb: "FFef4444" }, bold: true };
+        r.getCell(6).font = { color: { argb: "FFef4444" }, bold: true };
       }
-      r.getCell(9).font = { bold: true, color: { argb: "FFD97706" } };
+      r.getCell(8).font = { bold: true, color: { argb: "FFD97706" } };
       totalValue += val;
     }
-    const totalRow = ws.addRow(["", "", "", "", "", "", "", "TOTAL VALUE", totalValue]);
+    const totalRow = ws.addRow(["", "", "", "", "", "", "TOTAL VALUE", totalValue]);
     totalRow.font = { bold: true, color: { argb: "FFDC2626" } };
-    totalRow.getCell(9).font = { bold: true, color: { argb: "FFD97706" } };
+    totalRow.getCell(8).font = { bold: true, color: { argb: "FFD97706" } };
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="inventory-report.xlsx"');
     await wb.xlsx.write(res);

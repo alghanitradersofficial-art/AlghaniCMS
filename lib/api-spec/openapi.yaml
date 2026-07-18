@@ -1033,7 +1033,7 @@ components:
 
     Product:
       type: object
-      required: [id, name, sku, description, categoryId, brandId, costPrice, salePrice, currentStock, minStock, unit, createdAt]
+      required: [id, name, sku, description, categoryId, brandId, costPrice, currentStock, minStock, unit, createdAt]
       properties:
         id:
           type: integer
@@ -1054,7 +1054,7 @@ components:
         costPrice:
           type: number
         salePrice:
-          type: number
+          type: ["number", "null"]
         currentStock:
           type: integer
         minStock:
@@ -1085,7 +1085,7 @@ components:
 
     ProductInput:
       type: object
-      required: [name, sku, costPrice, salePrice, currentStock, minStock, unit]
+      required: [name, costPrice, currentStock, minStock, unit]
       properties:
         name:
           type: string
@@ -1100,7 +1100,7 @@ components:
         costPrice:
           type: number
         salePrice:
-          type: number
+          type: ["number", "null"]
         currentStock:
           type: integer
         minStock:
@@ -1128,7 +1128,7 @@ components:
         costPrice:
           type: number
         salePrice:
-          type: number
+          type: ["number", "null"]
         currentStock:
           type: integer
         minStock:

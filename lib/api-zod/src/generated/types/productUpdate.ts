@@ -15,7 +15,8 @@ export interface ProductUpdate {
   /** @nullable */
   brandId?: number | null;
   costPrice?: number;
-  salePrice?: number;
+  /** @nullable */
+  salePrice?: number | null;
   currentStock?: number;
   minStock?: number;
   unit?: string;

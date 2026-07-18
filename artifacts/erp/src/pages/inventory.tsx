@@ -14,12 +14,12 @@ import Confirm from "@/components/ui/confirm";
 
 type ProductForm = {
   name: string; sku: string; description: string; brandId: string;
-  costPrice: string; salePrice: string; currentStock: string; minStock: string; unit: string; oemNumber: string; createdAt?: string;
+  costPrice: string; currentStock: string; minStock: string; unit: string; oemNumber: string; createdAt?: string;
 };
 
 const emptyForm: ProductForm = {
   name: "", sku: "", description: "", brandId: "",
-  costPrice: "", salePrice: "", currentStock: "0", minStock: "5", unit: "pcs", oemNumber: "", createdAt: new Date().toISOString().split('T')[0],
+  costPrice: "", currentStock: "0", minStock: "5", unit: "pcs", oemNumber: "", createdAt: new Date().toISOString().split('T')[0],
 };
 
 export default function Inventory() {
@@ -51,7 +51,7 @@ export default function Inventory() {
   const openEdit = (p: NonNullable<typeof data>["data"][0]) => {
     setForm({
       name: p.name, sku: p.sku, description: p.description || "",
-      brandId: p.brandId ? String(p.brandId) : "", costPrice: String(p.costPrice), salePrice: String(p.salePrice),
+      brandId: p.brandId ? String(p.brandId) : "", costPrice: String(p.costPrice),
       currentStock: String(p.currentStock), minStock: String(p.minStock), unit: p.unit, oemNumber: p.oemNumber || "", createdAt: new Date().toISOString().split('T')[0],
     });
     setEditing(p.id);
@@ -60,9 +60,9 @@ export default function Inventory() {
 
   const handleSave = async () => {
     const payload = {
-      name: form.name, sku: form.sku, description: form.description || undefined,
+      name: form.name, sku: form.sku.trim() || undefined, description: form.description || undefined,
       brandId: form.brandId ? parseInt(form.brandId) : null,
-      costPrice: parseFloat(form.costPrice), salePrice: parseFloat(form.salePrice),
+      costPrice: parseFloat(form.costPrice),
       currentStock: parseInt(form.currentStock), minStock: parseInt(form.minStock),
       unit: form.unit, oemNumber: form.oemNumber || undefined,
     };
@@ -129,7 +129,7 @@ export default function Inventory() {
                 <thead>
                   <tr className="border-b border-border text-muted-foreground uppercase text-xs tracking-wider">
                     <th className="px-4 py-3 text-left">Product</th>
-                    <th className="px-4 py-3 text-left">SKU</th>
+                    <th className="px-4 py-3 text-left">Product ID</th>
                     <th className="px-4 py-3 text-left">Brand</th>
                     <th className="px-4 py-3 text-right">Cost</th>
                     <th className="px-4 py-3 text-center">Stock</th>
@@ -144,7 +144,7 @@ export default function Inventory() {
                   ) : data?.data.map(p => (
                     <tr key={p.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
                       <td className="px-4 py-3 font-medium">{p.name}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{p.sku}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">#{p.id}</td>
                       <td className="px-4 py-3 text-muted-foreground">{p.brandName || "—"}</td>
                       <td className="px-4 py-3 text-right">Rs. {p.costPrice?.toLocaleString()}</td>
                       <td className="px-4 py-3 text-center">
@@ -191,8 +191,12 @@ export default function Inventory() {
                 <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="bg-background/50 border-border" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">SKU *</Label>
-                <Input value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} className="bg-background/50 border-border" />
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Product ID</Label>
+                <Input
+                  value={editing ? `#${editing}` : "Auto-generated on save"}
+                  disabled
+                  className="bg-background/30 border-border text-muted-foreground"
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -216,12 +220,6 @@ export default function Inventory() {
                 <Input type="number" value={form.costPrice} onChange={e => setForm(f => ({ ...f, costPrice: e.target.value }))} className="bg-background/50 border-border" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Sale Price (Rs.)</Label>
-                <Input type="number" value={form.salePrice} onChange={e => setForm(f => ({ ...f, salePrice: e.target.value }))} className="bg-background/50 border-border" />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Stock</Label>
                 <Input type="number" value={form.currentStock} onChange={e => setForm(f => ({ ...f, currentStock: e.target.value }))} className="bg-background/50 border-border" />
               </div>
@@ -229,9 +227,20 @@ export default function Inventory() {
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Min Stock</Label>
                 <Input type="number" value={form.minStock} onChange={e => setForm(f => ({ ...f, minStock: e.target.value }))} className="bg-background/50 border-border" />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Unit</Label>
                 <Input value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} className="bg-background/50 border-border" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">SKU (auto-suggested, editable)</Label>
+                <Input
+                  value={form.sku}
+                  placeholder="Leave blank to auto-generate"
+                  onChange={e => setForm(f => ({ ...f, sku: e.target.value }))}
+                  className="bg-background/50 border-border"
+                />
               </div>
             </div>
             <div className="space-y-1">

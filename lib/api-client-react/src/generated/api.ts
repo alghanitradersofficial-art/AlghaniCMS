@@ -675,6 +675,7 @@ export const createProduct = async (productInput: ProductInput, options?: Reques
 
 
 
+
 export const getCreateProductMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProduct>>, TError,{data: BodyType<ProductInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createProduct>>, TError,{data: BodyType<ProductInput>}, TContext> => {
@@ -823,6 +824,7 @@ export const updateProduct = async (id: number,
 
 
 
+
 export const getUpdateProductMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProduct>>, TError,{id: number;data: BodyType<ProductUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updateProduct>>, TError,{id: number;data: BodyType<ProductUpdate>}, TContext> => {
@@ -889,6 +891,7 @@ export const deleteProduct = async (id: number, options?: RequestInit): Promise<
 
   }
 );}
+
 
 
 
@@ -1040,6 +1043,7 @@ export const createCategory = async (categoryInput: CategoryInput, options?: Req
 
 
 
+
 export const getCreateCategoryMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCategory>>, TError,{data: BodyType<CategoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createCategory>>, TError,{data: BodyType<CategoryInput>}, TContext> => {
@@ -1111,6 +1115,7 @@ export const updateCategory = async (id: number,
 
 
 
+
 export const getUpdateCategoryMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCategory>>, TError,{id: number;data: BodyType<CategoryUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updateCategory>>, TError,{id: number;data: BodyType<CategoryUpdate>}, TContext> => {
@@ -1177,6 +1182,7 @@ export const deleteCategory = async (id: number, options?: RequestInit): Promise
 
   }
 );}
+
 
 
 
@@ -1328,6 +1334,7 @@ export const createBrand = async (brandInput: BrandInput, options?: RequestInit)
 
 
 
+
 export const getCreateBrandMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBrand>>, TError,{data: BodyType<BrandInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createBrand>>, TError,{data: BodyType<BrandInput>}, TContext> => {
@@ -1399,6 +1406,7 @@ export const updateBrand = async (id: number,
 
 
 
+
 export const getUpdateBrandMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBrand>>, TError,{id: number;data: BodyType<BrandUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updateBrand>>, TError,{id: number;data: BodyType<BrandUpdate>}, TContext> => {
@@ -1465,6 +1473,7 @@ export const deleteBrand = async (id: number, options?: RequestInit): Promise<vo
 
   }
 );}
+
 
 
 
@@ -1623,6 +1632,7 @@ export const createSale = async (saleInput: SaleInput, options?: RequestInit): P
 
 
 
+
 export const getCreateSaleMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSale>>, TError,{data: BodyType<SaleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createSale>>, TError,{data: BodyType<SaleInput>}, TContext> => {
@@ -1771,6 +1781,7 @@ export const updateSale = async (id: number,
 
 
 
+
 export const getUpdateSaleMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSale>>, TError,{id: number;data: BodyType<SaleUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updateSale>>, TError,{id: number;data: BodyType<SaleUpdate>}, TContext> => {
@@ -1837,6 +1848,7 @@ export const deleteSale = async (id: number, options?: RequestInit): Promise<voi
 
   }
 );}
+
 
 
 
@@ -1995,6 +2007,7 @@ export const createPurchase = async (purchaseInput: PurchaseInput, options?: Req
 
 
 
+
 export const getCreatePurchaseMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPurchase>>, TError,{data: BodyType<PurchaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createPurchase>>, TError,{data: BodyType<PurchaseInput>}, TContext> => {
@@ -2139,6 +2152,7 @@ export const updatePurchase = async (id: number,
     body: JSON.stringify(purchaseUpdate)
   }
 );}
+
 
 
 
@@ -2297,6 +2311,7 @@ export const createCustomer = async (customerInput: CustomerInput, options?: Req
 
 
 
+
 export const getCreateCustomerMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCustomer>>, TError,{data: BodyType<CustomerInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createCustomer>>, TError,{data: BodyType<CustomerInput>}, TContext> => {
@@ -2445,6 +2460,7 @@ export const updateCustomer = async (id: number,
 
 
 
+
 export const getUpdateCustomerMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCustomer>>, TError,{id: number;data: BodyType<CustomerUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updateCustomer>>, TError,{id: number;data: BodyType<CustomerUpdate>}, TContext> => {
@@ -2511,6 +2527,7 @@ export const deleteCustomer = async (id: number, options?: RequestInit): Promise
 
   }
 );}
+
 
 
 
@@ -2669,6 +2686,7 @@ export const createSupplier = async (supplierInput: SupplierInput, options?: Req
 
 
 
+
 export const getCreateSupplierMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSupplier>>, TError,{data: BodyType<SupplierInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createSupplier>>, TError,{data: BodyType<SupplierInput>}, TContext> => {
@@ -2740,6 +2758,7 @@ export const updateSupplier = async (id: number,
 
 
 
+
 export const getUpdateSupplierMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSupplier>>, TError,{id: number;data: BodyType<SupplierUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updateSupplier>>, TError,{id: number;data: BodyType<SupplierUpdate>}, TContext> => {
@@ -2806,6 +2825,7 @@ export const deleteSupplier = async (id: number, options?: RequestInit): Promise
 
   }
 );}
+
 
 
 
@@ -2957,6 +2977,7 @@ export const createUser = async (userInput: UserInput, options?: RequestInit): P
 
 
 
+
 export const getCreateUserMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError,{data: BodyType<UserInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError,{data: BodyType<UserInput>}, TContext> => {
@@ -3028,6 +3049,7 @@ export const updateUser = async (id: number,
 
 
 
+
 export const getUpdateUserMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError,{id: number;data: BodyType<UserUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError,{id: number;data: BodyType<UserUpdate>}, TContext> => {
@@ -3094,6 +3116,7 @@ export const deleteUser = async (id: number, options?: RequestInit): Promise<voi
 
   }
 );}
+
 
 
 
@@ -3252,6 +3275,7 @@ export const createExpense = async (expenseInput: ExpenseInput, options?: Reques
 
 
 
+
 export const getCreateExpenseMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createExpense>>, TError,{data: BodyType<ExpenseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createExpense>>, TError,{data: BodyType<ExpenseInput>}, TContext> => {
@@ -3323,6 +3347,7 @@ export const updateExpense = async (id: number,
 
 
 
+
 export const getUpdateExpenseMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateExpense>>, TError,{id: number;data: BodyType<ExpenseUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updateExpense>>, TError,{id: number;data: BodyType<ExpenseUpdate>}, TContext> => {
@@ -3389,6 +3414,7 @@ export const deleteExpense = async (id: number, options?: RequestInit): Promise<
 
   }
 );}
+
 
 
 

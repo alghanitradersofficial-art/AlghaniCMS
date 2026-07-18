@@ -146,7 +146,6 @@ router.get("/:customerId/price-suggestion/:productId", async (req, res) => {
       .limit(1);
 
     const costPrice = parseFloat(product.costPrice as string);
-    const suggestedSellingPrice = parseFloat(product.salePrice as string);
     const previousCustomerPrice = lastPurchase ? parseFloat(lastPurchase.unitPrice as string) : null;
 
     // company_settings is a generic key/value(jsonb) table already bootstrapped
@@ -156,6 +155,10 @@ router.get("/:customerId/price-suggestion/:productId", async (req, res) => {
     );
     const settingResult = (settingRows as unknown as { rows: Array<{ value: unknown }> }).rows ?? [];
     const minimumMarginPercent = settingResult.length ? Number(settingResult[0].value) : 10;
+
+    // No fixed product sale price anymore — price varies per customer per sale.
+    // Suggest the customer's own last price, falling back to cost + minimum margin.
+    const suggestedSellingPrice = previousCustomerPrice ?? round2(costPrice * (1 + minimumMarginPercent / 100));
 
     const evaluatedPrice = proposedPrice ?? suggestedSellingPrice;
     const currentProfit = round2(evaluatedPrice - costPrice);
