@@ -207,6 +207,9 @@ export default function SupplierDetail() {
       <Dialog open={productDialogOpen} onOpenChange={setProductDialogOpen}>
         <LinkProductForm
           products={allProductsQuery.data ?? []}
+          existingSupplierNames={Array.from(
+            new Set((productsQuery.data ?? []).map((p) => p.supplierProductName).filter((n): n is string => !!n)),
+          )}
           onSubmit={async (payload) => {
             try {
               await apiPost(`/api/suppliers/${supplierId}/products`, payload);
@@ -520,7 +523,15 @@ function PaymentForm({ onSubmit }: { onSubmit: (payload: any) => void }) {
   );
 }
 
-function LinkProductForm({ products, onSubmit }: { products: Product[]; onSubmit: (payload: any) => void }) {
+function LinkProductForm({
+  products,
+  existingSupplierNames = [],
+  onSubmit,
+}: {
+  products: Product[];
+  existingSupplierNames?: string[];
+  onSubmit: (payload: any) => void;
+}) {
   const [productId, setProductId] = useState<string>("");
   const [supplierSku, setSupplierSku] = useState("");
   const [supplierProductName, setSupplierProductName] = useState("");
@@ -553,7 +564,20 @@ function LinkProductForm({ products, onSubmit }: { products: Product[]; onSubmit
         </div>
         <div className="space-y-1">
           <Label className="text-xs uppercase tracking-wider text-muted-foreground">Supplier's Name for this Product</Label>
-          <Input value={supplierProductName} onChange={(e) => setSupplierProductName(e.target.value)} placeholder="e.g. how the supplier calls it" className="bg-background/50 border-border" />
+          <Input
+            value={supplierProductName}
+            onChange={(e) => setSupplierProductName(e.target.value)}
+            placeholder="e.g. how the supplier calls it"
+            className="bg-background/50 border-border"
+            list="supplier-product-name-options"
+          />
+          {existingSupplierNames.length > 0 && (
+            <datalist id="supplier-product-name-options">
+              {existingSupplierNames.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+          )}
         </div>
         <div className="space-y-1">
           <Label className="text-xs uppercase tracking-wider text-muted-foreground">Supplier's SKU/Code</Label>

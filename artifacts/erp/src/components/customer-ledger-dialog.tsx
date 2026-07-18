@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCustomerLedger, useLedgerTimeline, useRecordPayment, useDeletePayment, type RecordPaymentInput } from "@/hooks/use-ledger";
 import { useUpdateCustomer, getGetCustomersQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Wallet, Receipt, ArrowDownCircle, ArrowUpCircle, AlertTriangle, ShieldCheck, Trash2 } from "lucide-react";
+import { Wallet, Receipt, ArrowDownCircle, ArrowUpCircle, AlertTriangle, ShieldCheck, Trash2, Plus, Loader2 } from "lucide-react";
 import Confirm from "@/components/ui/confirm";
 
 interface CustomerLedgerDialogProps {
@@ -35,10 +35,16 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
   const updateCustomer = useUpdateCustomer();
   const qc = useQueryClient();
 
-  const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState<RecordPaymentInput["method"]>("cash");
-  const [reference, setReference] = useState("");
-  const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const newRow = () => ({
+    rowId: `row-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    amount: "",
+    method: "cash" as RecordPaymentInput["method"],
+    reference: "",
+    paymentDate: new Date().toISOString().split("T")[0],
+  });
+
+  const [paymentRows, setPaymentRows] = useState<Array<{ rowId: string; amount: string; method: RecordPaymentInput["method"]; reference: string; paymentDate: string }>>([newRow()]);
+  const [isSubmittingPayments, setIsSubmittingPayments] = useState(false);
   const [creditLimitInput, setCreditLimitInput] = useState("");
 
   // Keep the credit limit input in sync with the loaded ledger data,
@@ -59,25 +65,39 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
     }
   };
 
-  const handleReceivePayment = async () => {
-    if (!customerId || !amount) return;
+  const addPaymentRow = () => setPaymentRows((rows) => [...rows, newRow()]);
+  const removePaymentRow = (rowId: string) => setPaymentRows((rows) => (rows.length > 1 ? rows.filter((r) => r.rowId !== rowId) : rows));
+  const updatePaymentRow = (rowId: string, patch: Partial<{ amount: string; method: RecordPaymentInput["method"]; reference: string; paymentDate: string }>) =>
+    setPaymentRows((rows) => rows.map((r) => (r.rowId === rowId ? { ...r, ...patch } : r)));
+
+  const handleReceivePayments = async () => {
+    if (!customerId) return;
+    const validRows = paymentRows.filter((r) => r.amount && parseFloat(r.amount) > 0);
+    if (validRows.length === 0) return;
+    setIsSubmittingPayments(true);
     try {
       // paymentDate comes from an <input type="date"> as "YYYY-MM-DD".
       // Backend requires a full ISO-8601 datetime (z.string().datetime()),
       // so convert it here rather than sending the bare date string.
-      const isoPaymentDate = new Date(`${paymentDate}T00:00:00.000Z`).toISOString();
-      await recordPayment.mutateAsync({
-        customerId,
-        amount: parseFloat(amount),
-        method,
-        reference: reference || undefined,
-        paymentDate: isoPaymentDate,
-      });
-      setAmount("");
-      setReference("");
+      for (const row of validRows) {
+        const isoPaymentDate = new Date(`${row.paymentDate}T00:00:00.000Z`).toISOString();
+        await recordPayment.mutateAsync({
+          customerId,
+          amount: parseFloat(row.amount),
+          method: row.method,
+          reference: row.reference || undefined,
+          paymentDate: isoPaymentDate,
+        });
+      }
+      // All payments recorded — reset the form and close the ledger so the
+      // user isn't left staring at a stale/open dialog after submitting.
+      setPaymentRows([newRow()]);
+      onOpenChange(false);
     } catch (err) {
       console.error("Failed to record payment:", err);
       alert(err instanceof Error ? err.message : "Failed to record payment. Please try again.");
+    } finally {
+      setIsSubmittingPayments(false);
     }
   };
 
@@ -130,17 +150,36 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
 
             <div className="border-t border-border pt-4">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground mb-2 block">Receive Payment</Label>
-              <div className="flex flex-wrap gap-2">
-                <Input type="number" placeholder="Amount" value={amount} onChange={e => setAmount(e.target.value)} className="w-32 bg-background/50 border-border" />
-                <Select value={method} onValueChange={v => setMethod(v as RecordPaymentInput["method"])}>
-                  <SelectTrigger className="w-40 bg-background/50 border-border"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    {METHODS.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Input placeholder="Reference (optional)" value={reference} onChange={e => setReference(e.target.value)} className="flex-1 min-w-[140px] bg-background/50 border-border" />
-                <Input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="bg-background/50 border-border" />
-                <Button onClick={handleReceivePayment} disabled={!amount || recordPayment.isPending} className="bg-primary hover:bg-primary/90">Receive</Button>
+              <div className="space-y-2">
+                {paymentRows.map((row, idx) => (
+                  <div key={row.rowId} className="flex flex-wrap gap-2 items-center">
+                    <Input type="number" placeholder="Amount" value={row.amount} onChange={e => updatePaymentRow(row.rowId, { amount: e.target.value })} className="w-32 bg-background/50 border-border" />
+                    <Select value={row.method} onValueChange={v => updatePaymentRow(row.rowId, { method: v as RecordPaymentInput["method"] })}>
+                      <SelectTrigger className="w-40 bg-background/50 border-border"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        {METHODS.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input placeholder="Reference (optional)" value={row.reference} onChange={e => updatePaymentRow(row.rowId, { reference: e.target.value })} className="flex-1 min-w-[140px] bg-background/50 border-border" />
+                    <Input type="date" value={row.paymentDate} onChange={e => updatePaymentRow(row.rowId, { paymentDate: e.target.value })} className="bg-background/50 border-border" />
+                    {paymentRows.length > 1 && (
+                      <Button size="sm" variant="ghost" onClick={() => removePaymentRow(row.rowId)} className="h-9 w-9 p-0 text-destructive hover:bg-destructive/10" title="Remove this payment">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <div className="flex items-center gap-2 pt-1">
+                  <Button size="sm" variant="outline" onClick={addPaymentRow} className="border-border gap-1.5"><Plus className="w-3.5 h-3.5" /> Add New Payment</Button>
+                  <Button
+                    onClick={handleReceivePayments}
+                    disabled={paymentRows.every(r => !r.amount) || isSubmittingPayments}
+                    className="bg-primary hover:bg-primary/90 gap-1.5"
+                  >
+                    {isSubmittingPayments && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {paymentRows.length > 1 ? "Record Payments" : "Receive"}
+                  </Button>
+                </div>
               </div>
             </div>
 
