@@ -63,6 +63,7 @@ function fmtPayment(p: typeof supplierPaymentsTable.$inferSelect) {
     transactionId: p.transactionId,
     reference: p.reference,
     notes: p.notes,
+    allocations: p.allocations,
     isVoided: p.isVoided,
     voidReason: p.voidReason,
     paymentDate: p.paymentDate.toISOString(),
@@ -323,7 +324,7 @@ router.post("/:id/payments", async (req, res): Promise<any> => {
       const validAllocations = (body.allocations ?? [])
         .filter((a): a is { purchaseId: number; amount: number } => typeof a.purchaseId === "number" && typeof a.amount === "number");
 
-      await allocateSupplierPayment(tx, {
+      const applied = await allocateSupplierPayment(tx, {
         supplierId,
         amount: body.amount,
         explicitAllocations: validAllocations.length > 0 ? validAllocations : undefined,
@@ -339,6 +340,7 @@ router.post("/:id/payments", async (req, res): Promise<any> => {
         reference: body.reference ?? null,
         notes: body.notes ?? null,
         paidByUserId,
+        allocations: applied,
         paymentDate,
       }).returning();
 
@@ -367,6 +369,89 @@ router.post("/:id/payments", async (req, res): Promise<any> => {
     console.error(error);
     if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues });
     return res.status(500).json({ error: "Failed to record supplier payment" });
+  }
+});
+
+// POST /api/suppliers/:id/payments/:paymentId/void — soft-delete a payment
+// (e.g. accidentally saved twice). Never hard-deletes financial records;
+// reverses its ledger + purchase-allocation + cash effect and recomputes
+// running balances so the khata stays correct.
+router.post("/:id/payments/:paymentId/void", async (req, res): Promise<any> => {
+  try {
+    const supplierId = parseInt(req.params.id);
+    const paymentId = parseInt(req.params.paymentId);
+    const reason = z.object({ reason: z.string().min(1) }).parse(req.body).reason;
+    const createdByUserId = getUserIdFromRequest(req);
+
+    const [payment] = await db
+      .select()
+      .from(supplierPaymentsTable)
+      .where(and(eq(supplierPaymentsTable.id, paymentId), eq(supplierPaymentsTable.supplierId, supplierId)));
+    if (!payment) return res.status(404).json({ error: "Payment not found" });
+    if (payment.isVoided) return res.status(400).json({ error: "Payment is already voided" });
+
+    if (payment.paymentDate) {
+      try {
+        const months = await import("../services/months.service.js");
+        if (await months.isDateInClosedPeriod(new Date(payment.paymentDate))) {
+          return res.status(409).json({ error: `Financial period is closed for ${new Date(payment.paymentDate).toISOString().slice(0, 10)}` });
+        }
+      } catch (err) {
+        if (err && (err as Error).name === "MonthClosedError") throw err;
+      }
+    }
+
+    const [supplier] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, supplierId));
+    if (!supplier) return res.status(404).json({ error: "Supplier not found" });
+
+    await db.transaction(async (tx) => {
+      await tx.update(supplierPaymentsTable).set({ isVoided: true, voidReason: reason }).where(eq(supplierPaymentsTable.id, paymentId));
+
+      // Reverse exactly the purchase orders this payment was applied to.
+      const allocations = (payment.allocations as Array<{ purchaseId: number; amount: number }>) || [];
+      for (const alloc of allocations) {
+        await tx.execute(
+          sql`UPDATE purchases SET amount_paid = amount_paid - ${alloc.amount} WHERE id = ${alloc.purchaseId}`,
+        );
+      }
+
+      // Compensating ledger entry: the original payment was recorded as a
+      // negative amount (reduces what we owe); reversing it adds that
+      // amount back so the balance is correct again.
+      await appendSupplierLedgerEntry(tx, {
+        supplierId,
+        type: "adjustment",
+        amount: round2(parseFloat(payment.amount as string)),
+        paymentId: payment.id,
+        description: `Payment voided: ${reason}`,
+        createdByUserId,
+        entryDate: new Date(),
+      });
+
+      await recomputeSupplierLedgerRunningBalances(tx, supplierId);
+
+      // Reverse the cash-in-hand effect of this payment (it never actually
+      // left, or was a duplicate), recorded as a compensating entry rather
+      // than deleting the original row.
+      await appendGeneralLedgerEntry(tx, {
+        date: new Date(),
+        type: "adjustment",
+        referenceId: payment.id,
+        partyType: "supplier",
+        partyId: supplierId,
+        partyName: supplier.name,
+        amount: parseFloat(payment.amount as string),
+        direction: "credit",
+        note: `Payment voided: ${reason}`,
+        createdByUserId,
+      });
+    });
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues });
+    return res.status(500).json({ error: "Failed to void payment" });
   }
 });
 

@@ -5,10 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useCustomerLedger, useLedgerTimeline, useRecordPayment, type RecordPaymentInput } from "@/hooks/use-ledger";
+import { useCustomerLedger, useLedgerTimeline, useRecordPayment, useVoidPayment, type RecordPaymentInput } from "@/hooks/use-ledger";
 import { useUpdateCustomer, getGetCustomersQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Wallet, Receipt, ArrowDownCircle, ArrowUpCircle, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Wallet, Receipt, ArrowDownCircle, ArrowUpCircle, AlertTriangle, ShieldCheck, Trash2 } from "lucide-react";
+import Confirm from "@/components/ui/confirm";
 
 interface CustomerLedgerDialogProps {
   customerId: number | null;
@@ -30,6 +31,7 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
   const { data: ledger, isLoading, isError, error } = useCustomerLedger(customerId ?? undefined);
   const { data: timeline, isError: timelineError } = useLedgerTimeline(customerId ?? undefined);
   const recordPayment = useRecordPayment();
+  const voidPayment = useVoidPayment();
   const updateCustomer = useUpdateCustomer();
   const qc = useQueryClient();
 
@@ -76,6 +78,15 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
     } catch (err) {
       console.error("Failed to record payment:", err);
       alert(err instanceof Error ? err.message : "Failed to record payment. Please try again.");
+    }
+  };
+
+  const handleDeletePayment = async (paymentId: number) => {
+    try {
+      await voidPayment.mutateAsync({ paymentId, reason: "Deleted from ledger (duplicate/incorrect entry)" });
+    } catch (err) {
+      console.error("Failed to delete payment:", err);
+      alert(err instanceof Error ? err.message : "Failed to delete payment. Please try again.");
     }
   };
 
@@ -157,11 +168,25 @@ export function CustomerLedgerDialog({ customerId, customerName, open, onOpenCha
                         <div className="text-muted-foreground">{new Date(entry.date).toLocaleString()}</div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className={entry.amount >= 0 ? "text-red-400 font-semibold" : "text-green-400 font-semibold"}>
-                        {entry.amount >= 0 ? "+" : ""}Rs. {entry.amount.toLocaleString()}
+                    <div className="flex items-center gap-2">
+                      <div className="text-right">
+                        <div className={entry.amount >= 0 ? "text-red-400 font-semibold" : "text-green-400 font-semibold"}>
+                          {entry.amount >= 0 ? "+" : ""}Rs. {entry.amount.toLocaleString()}
+                        </div>
+                        <div className="text-muted-foreground">Bal: Rs. {entry.runningBalance.toLocaleString()}</div>
                       </div>
-                      <div className="text-muted-foreground">Bal: Rs. {entry.runningBalance.toLocaleString()}</div>
+                      {entry.type === "payment" && entry.paymentId && (
+                        <Confirm
+                          title="Delete this payment?"
+                          description="Use this if a payment was accidentally saved twice or entered incorrectly. It will be removed and the customer's balance recalculated automatically."
+                          onConfirm={() => handleDeletePayment(entry.paymentId!)}
+                          trigger={
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10" disabled={voidPayment.isPending}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          }
+                        />
+                      )}
                     </div>
                   </div>
                 )) : <div className="text-xs text-muted-foreground text-center py-6">No transactions yet.</div>}

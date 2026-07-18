@@ -8,6 +8,7 @@ import {
   index,
   unique,
   boolean,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -94,6 +95,10 @@ export const supplierPaymentsTable = pgTable(
     reference: text("reference"),
     notes: text("notes"),
     paidByUserId: integer("paid_by_user_id"),
+    // Which purchase orders this payment was applied against, e.g.
+    // [{"purchaseId":12,"poNumber":"PO-123","amount":"5000.00"}]. Recorded so
+    // a voided payment can precisely reverse only what it actually paid.
+    allocations: jsonb("allocations").notNull().default([]),
     paymentDate: timestamp("payment_date", { withTimezone: true }).defaultNow().notNull(),
     isVoided: boolean("is_voided").notNull().default(false),
     voidReason: text("void_reason"),

@@ -180,6 +180,9 @@ export async function initializeDatabase() {
         created_at timestamp with time zone NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS supplier_payments_supplier_idx ON supplier_payments (supplier_id, payment_date);
+      -- Tracks which purchase orders a supplier payment was applied against,
+      -- so voiding a duplicate/incorrect payment can precisely reverse it.
+      ALTER TABLE supplier_payments ADD COLUMN IF NOT EXISTS allocations jsonb NOT NULL DEFAULT '[]'::jsonb;
 
       -- Purchases: allow backdating + link to supplier ledger
       ALTER TABLE purchases ADD COLUMN IF NOT EXISTS purchase_date timestamp with time zone NOT NULL DEFAULT NOW();

@@ -27,7 +27,7 @@ type SupplierProduct = {
 };
 
 type LedgerEntry = {
-  id: number; type: string; amount: number; runningBalance: number; description: string | null; entryDate: string;
+  id: number; type: string; amount: number; runningBalance: number; description: string | null; entryDate: string; paymentId?: number | null;
 };
 
 type SupplierLedgerResponse = {
@@ -257,6 +257,20 @@ function LedgerTab({ supplierId, data, isLoading, onChanged }: { supplierId: num
     }
   };
 
+  // Payments accidentally saved twice (or entered incorrectly) get voided
+  // here — this reverses the purchase allocation + ledger effect and
+  // recalculates the supplier's balance automatically.
+  const handleDeletePayment = async (entry: LedgerEntry) => {
+    if (!entry.paymentId) return;
+    try {
+      await apiPost(`/api/suppliers/${supplierId}/payments/${entry.paymentId}/void`, { reason: "Deleted from ledger (duplicate/incorrect entry)" });
+      toast({ title: "Payment deleted" });
+      onChanged();
+    } catch (e: any) {
+      toast({ title: "Failed to delete payment", description: e.message, variant: "destructive" });
+    }
+  };
+
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -288,6 +302,7 @@ function LedgerTab({ supplierId, data, isLoading, onChanged }: { supplierId: num
                 <tr><td colSpan={6} className="text-center py-10 text-muted-foreground">No ledger entries yet</td></tr>
               ) : data.entries.map((e) => {
                 const isEditable = e.type === "return" || e.type === "adjustment";
+                const isDeletablePayment = e.type === "payment" && !!e.paymentId;
                 return (
                   <tr key={e.id} className="border-b border-border/50 hover:bg-accent/30">
                     <td className="px-4 py-3 text-muted-foreground">{format(new Date(e.entryDate), "d MMM yyyy")}</td>
@@ -304,6 +319,15 @@ function LedgerTab({ supplierId, data, isLoading, onChanged }: { supplierId: num
                             <Edit className="w-4 h-4" />
                           </Button>
                           <Confirm title="Delete ledger entry?" description="Remove this return/adjustment from ledger." onConfirm={() => handleDelete(e)} trigger={<Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"><Trash2 className="w-4 h-4" /></Button>} />
+                        </div>
+                      ) : isDeletablePayment ? (
+                        <div className="flex justify-end gap-1">
+                          <Confirm
+                            title="Delete this payment?"
+                            description="Use this if a payment was accidentally saved twice or entered incorrectly. It will be removed and the supplier's balance recalculated automatically."
+                            onConfirm={() => handleDeletePayment(e)}
+                            trigger={<Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"><Trash2 className="w-4 h-4" /></Button>}
+                          />
                         </div>
                       ) : "—"}
                     </td>

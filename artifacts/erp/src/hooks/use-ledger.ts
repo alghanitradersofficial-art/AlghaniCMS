@@ -194,6 +194,22 @@ export function usePaymentSummary(customerId: number | undefined) {
   });
 }
 
+export function useVoidPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paymentId, reason }: { paymentId: number; reason: string }) =>
+      customFetch<{ success: boolean }>(`/api/payments/${paymentId}/void`, { method: "POST", body: JSON.stringify({ reason }) }),
+    onSuccess: () => {
+      // We don't know the customerId here without threading it through, so
+      // invalidate broadly — these queries are cheap and infrequent.
+      qc.invalidateQueries({ queryKey: ["customer-ledger"], exact: false });
+      qc.invalidateQueries({ queryKey: ["customer-ledger-timeline"], exact: false });
+      qc.invalidateQueries({ queryKey: ["payment-summary"], exact: false });
+      qc.invalidateQueries({ queryKey: ["outstanding-report"], exact: false });
+    },
+  });
+}
+
 export function useCustomerStatement(customerId: number | undefined, from?: string, to?: string) {
   return useQuery({
     queryKey: ["customer-statement", customerId, from, to],
