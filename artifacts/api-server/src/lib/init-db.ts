@@ -28,6 +28,10 @@ export async function initializeDatabase() {
 
       ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url text;
       ALTER TABLE products ADD COLUMN IF NOT EXISTS image_public_id text;
+      -- Product-level fixed sale price was removed (price now varies per
+      -- customer per sale, set at sale time). Older databases still have
+      -- this column as NOT NULL; relax it so product creation doesn't fail.
+      ALTER TABLE products ALTER COLUMN sale_price DROP NOT NULL;
 
       -- Customer Price History + Khata (Ledger) module
       ALTER TABLE customers ADD COLUMN IF NOT EXISTS opening_balance numeric(14, 2) NOT NULL DEFAULT 0;

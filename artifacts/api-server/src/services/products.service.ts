@@ -12,29 +12,18 @@ async function destroyCloudinaryAsset(publicId: string) {
   await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/destroy`, { method: "POST", body: params });
 }
 
-// Auto-generates a unique SKU (e.g. "SKU-M5F3K2-A7B9") when the user doesn't
-// provide one manually. Product ID is the real identifier now; SKU is kept
-// only as an optional, editable secondary code.
-function generateSku(): string {
-  const timePart = Date.now().toString(36).toUpperCase().slice(-6);
-  const randPart = crypto.randomBytes(3).toString("hex").toUpperCase();
-  return `SKU-${timePart}-${randPart}`;
+// Auto-generates a SKU from the product's own ID once it's known (e.g.
+// product #16 -> "SKU-000016"). This only runs when the user leaves SKU
+// blank; a manually typed SKU is always respected as-is.
+function generateSkuFromId(id: number): string {
+  return `SKU-${String(id).padStart(6, "0")}`;
 }
 
-async function isSkuTaken(sku: string): Promise<boolean> {
-  const result = await pool.query(`SELECT 1 FROM products WHERE sku = $1 LIMIT 1`, [sku]);
+async function isSkuTaken(sku: string, excludeId?: number): Promise<boolean> {
+  const result = excludeId
+    ? await pool.query(`SELECT 1 FROM products WHERE sku = $1 AND id != $2 LIMIT 1`, [sku, excludeId])
+    : await pool.query(`SELECT 1 FROM products WHERE sku = $1 LIMIT 1`, [sku]);
   return (result.rowCount ?? 0) > 0;
-}
-
-async function resolveSku(providedSku: unknown): Promise<string> {
-  const trimmed = typeof providedSku === "string" ? providedSku.trim() : "";
-  if (trimmed) return trimmed;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const candidate = generateSku();
-    if (!(await isSkuTaken(candidate))) return candidate;
-  }
-  // Extremely unlikely fallback if 5 random collisions happen in a row.
-  return `${generateSku()}-${crypto.randomBytes(2).toString("hex").toUpperCase()}`;
 }
 
 export async function listProducts(params: Record<string, any>) {
@@ -84,7 +73,11 @@ export async function listProducts(params: Record<string, any>) {
 }
 
 export async function createProduct(body: any, actorUserId: number | null) {
-  const sku = await resolveSku(body.sku);
+  const providedSku = typeof body.sku === "string" ? body.sku.trim() : "";
+  // Placeholder is only ever stored for the instant between insert and the
+  // follow-up update below — it's never shown to the user.
+  const placeholderSku = providedSku || `TMP-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
+
   const result = await pool.query(
     `INSERT INTO products (name, sku, description, category_id, brand_id,
                            cost_price, sale_price, current_stock, min_stock,
@@ -99,7 +92,7 @@ export async function createProduct(body: any, actorUserId: number | null) {
                created_at AS "createdAt"`,
     [
       body.name,
-      sku,
+      placeholderSku,
       body.description ?? null,
       body.categoryId ?? null,
       body.brandId ?? null,
@@ -114,7 +107,29 @@ export async function createProduct(body: any, actorUserId: number | null) {
       body.imagePublicId ?? null,
     ],
   );
-  const product = result.rows[0];
+  let product = result.rows[0];
+
+  // Only auto-generate a SKU when the user left it blank. The real product
+  // ID is now known, so the SKU can be derived from it (e.g. "SKU-000016")
+  // instead of a random placeholder.
+  if (!providedSku) {
+    const generated = generateSkuFromId(product.id);
+    if (!(await isSkuTaken(generated, product.id))) {
+      const updateResult = await pool.query(
+        `UPDATE products SET sku = $1 WHERE id = $2
+         RETURNING id, name, sku, description,
+                   category_id AS "categoryId", brand_id AS "brandId",
+                   cost_price AS "costPrice", sale_price AS "salePrice",
+                   current_stock AS "currentStock", min_stock AS "minStock",
+                   unit, oem_number AS "oemNumber", barcode,
+                   image_url AS "imageUrl", image_public_id AS "imagePublicId",
+                   created_at AS "createdAt"`,
+        [generated, product.id],
+      );
+      product = updateResult.rows[0];
+    }
+  }
+
   try {
     await pool.query(`INSERT INTO audit_log (entity_type, entity_id, action, new_value, performed_by_user_id) VALUES ($1,$2,$3,$4,$5)`, ["product", product.id, "create", JSON.stringify(product), actorUserId]);
   } catch (err) {
