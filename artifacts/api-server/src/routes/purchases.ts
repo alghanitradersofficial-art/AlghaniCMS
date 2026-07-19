@@ -52,6 +52,10 @@ router.post("/", async (req, res) => {
     const purchase = await purchasesService.createPurchase({
       ...body,
       purchaseDate: (req.body as any).purchaseDate,
+      // Manually-entered PO number (see sales.ts's invoiceNumber for the
+      // same pattern) — not yet part of the generated OpenAPI schema, so
+      // read straight off the raw body.
+      poNumber: (req.body as any).poNumber,
       // Cash paid at the counter right now (khata suppliers only — purchases
       // with no supplier are always treated as paid in full). Not yet part
       // of the generated OpenAPI schema, so read straight off the raw body.
@@ -61,8 +65,14 @@ router.post("/", async (req, res) => {
     return res.status(201).json(formatPurchase(purchase));
   } catch (error) {
     console.error("purchase create failed", error);
+    if (error instanceof Error && error.message === "PO number is required") {
+      return res.status(400).json({ error: error.message });
+    }
     if (error instanceof MonthClosedError) {
       return res.status(409).json({ error: error.message });
+    }
+    if ((error as NodeJS.ErrnoException & { code?: string }).code === "23505") {
+      return res.status(409).json({ error: `PO number "${(req.body as any)?.poNumber}" is already in use — please choose a different one.` });
     }
     return res.status(500).json({ error: "Failed to create purchase" });
   }
@@ -93,6 +103,9 @@ router.patch("/:id", async (req, res) => {
     }
     if (error instanceof Error && error.message.startsWith("Cannot change status")) {
       return res.status(409).json({ error: error.message });
+    }
+    if ((error as NodeJS.ErrnoException & { code?: string }).code === "23505") {
+      return res.status(409).json({ error: `PO number "${(req.body as any)?.poNumber}" is already in use — please choose a different one.` });
     }
     return res.status(500).json({ error: "Failed to update purchase" });
   }

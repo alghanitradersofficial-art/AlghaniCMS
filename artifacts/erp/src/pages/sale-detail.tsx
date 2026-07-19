@@ -27,6 +27,7 @@ export default function SaleDetail() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [editOpen, setEditOpen] = useState(false);
+  const [editInvoiceNumber, setEditInvoiceNumber] = useState("");
   const [editItems, setEditItems] = useState<LineItem[]>([]);
   const [editStatus, setEditStatus] = useState<"pending" | "completed" | "cancelled">("pending");
   const [editDiscount, setEditDiscount] = useState("0");
@@ -57,6 +58,7 @@ export default function SaleDetail() {
   }
 
   const openEdit = () => {
+    setEditInvoiceNumber(sale.invoiceNumber || "");
     setEditItems((sale.items as any[]).map(i => ({ productId: i.productId, productName: i.productName, quantity: i.quantity, unitPrice: i.unitPrice })) || []);
     setEditStatus(sale.status as any);
     setEditDiscount(String(sale.discount || "0"));
@@ -103,6 +105,7 @@ export default function SaleDetail() {
         data: {
           status: editStatus,
           notes: editNotes || undefined,
+          invoiceNumber: editInvoiceNumber || undefined,
           discount: parseFloat(editDiscount || "0"),
           items: editItems.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
           saleDate: new Date(editDate).toISOString(),
@@ -226,6 +229,11 @@ export default function SaleDetail() {
               <p className="font-semibold">{sale?.customerName}</p>
             </div>
 
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Invoice Number *</Label>
+              <Input value={editInvoiceNumber} onChange={e => setEditInvoiceNumber(e.target.value)} className="bg-background/50 border-border" placeholder="INV-001" />
+            </div>
+
             {/* Line Items */}
             <div className="space-y-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -301,7 +309,7 @@ export default function SaleDetail() {
           </div>
           <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" onClick={() => setEditOpen(false)} className="border-border">Cancel</Button>
-            <Button onClick={handleSaveEdit} disabled={updateSale.isPending || editItems.length === 0} className="bg-primary hover:bg-primary/90">Save Changes</Button>
+            <Button onClick={handleSaveEdit} disabled={updateSale.isPending || !editInvoiceNumber.trim() || editItems.length === 0} className="bg-primary hover:bg-primary/90">Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

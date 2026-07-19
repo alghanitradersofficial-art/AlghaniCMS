@@ -156,12 +156,13 @@ export async function createSale(body: any, actorUserId: number | null) {
 
   const subtotal = round2(subtotalRaw);
   const total = round2(subtotal - discount);
-  // Respect the invoice number the user typed on the New Sale form; only
-  // fall back to an auto-generated one when they left it blank. Previously
-  // this always overwrote whatever was typed, so the saved sale would show
-  // a different (timestamp-based) invoice number than what was entered.
-  const trimmedInvoiceNumber = typeof body.invoiceNumber === "string" ? body.invoiceNumber.trim() : "";
-  const invoiceNumber = trimmedInvoiceNumber || `INV-${Date.now()}`;
+  // Invoice numbers are always entered manually — no auto-generated
+  // fallback. (Previously blank invoice numbers were silently replaced with
+  // a timestamp-based one; that behavior has been removed.)
+  const invoiceNumber = typeof body.invoiceNumber === "string" ? body.invoiceNumber.trim() : "";
+  if (!invoiceNumber) {
+    throw new Error("Invoice number is required");
+  }
   const invoiceDate = body.saleDate ? new Date(body.saleDate) : new Date();
 
   if (await isDateInClosedPeriod(invoiceDate)) {

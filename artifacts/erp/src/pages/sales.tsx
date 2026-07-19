@@ -443,7 +443,7 @@ export default function Sales() {
           <DialogHeader><DialogTitle>New Sale Order</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Invoice Number</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Invoice Number *</Label>
               <Input value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)} className="bg-background/50 border-border" placeholder="INV-001" />
             </div>
 
@@ -554,7 +554,7 @@ export default function Sales() {
           </div>
           <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" onClick={() => setOpen(false)} className="border-border">Cancel</Button>
-            <Button onClick={handleSave} disabled={!customerName || items.length === 0 || createSale.isPending} className="bg-primary hover:bg-primary/90">Create Sale</Button>
+            <Button onClick={handleSave} disabled={!customerName || !invoiceNumber.trim() || items.length === 0 || createSale.isPending} className="bg-primary hover:bg-primary/90">Create Sale</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -570,7 +570,7 @@ export default function Sales() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Invoice Number</Label>
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Invoice Number *</Label>
                 <Input value={editSaleInvoiceNumber} onChange={e => setEditSaleInvoiceNumber(e.target.value)} className="bg-background/50 border-border" placeholder="INV-001" />
               </div>
 
@@ -649,7 +649,7 @@ export default function Sales() {
             </div>
             <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => { setEditSaleOpen(false); setEditingSale(null); }} className="border-border">Cancel</Button>
-              <Button onClick={handleSaveFullEdit} disabled={updateSale.isPending || editSaleItems.length === 0} className="bg-primary hover:bg-primary/90">Save Changes</Button>
+              <Button onClick={handleSaveFullEdit} disabled={updateSale.isPending || !editSaleInvoiceNumber.trim() || editSaleItems.length === 0} className="bg-primary hover:bg-primary/90">Save Changes</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

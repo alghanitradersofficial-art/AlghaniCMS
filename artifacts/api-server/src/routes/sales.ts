@@ -66,6 +66,9 @@ router.post("/", async (req, res) => {
     if (error instanceof salesService.InsufficientStockError) {
       return res.status(400).json({ error: error.message });
     }
+    if (error instanceof Error && error.message === "Invoice number is required") {
+      return res.status(400).json({ error: error.message });
+    }
     if (error instanceof MonthClosedError) {
       return res.status(409).json({ error: error.message });
     }

@@ -1,7 +1,7 @@
 import { db } from "@workspace/db";
 import { purchasesTable, productsTable, supplierPaymentsTable, suppliersTable, supplierProductsTable, supplierLedgerEntriesTable } from "@workspace/db";
 import { eq, and, sql, desc } from "drizzle-orm";
-import { appendSupplierLedgerEntry } from "../lib/supplier-ledger.js";
+import { appendSupplierLedgerEntry, recomputeSupplierLedgerRunningBalances } from "../lib/supplier-ledger.js";
 import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
 import { calculateWeightedAverageCost, calculateWeightedAverageCostAfterChange } from "../lib/inventory-accounting.js";
 import { round2 } from "../lib/ledger.js";
@@ -58,7 +58,11 @@ export async function createPurchase(body: any, actorUserId: number | null) {
   }
 
   const subtotal = items.reduce((sum: number, i: any) => sum + i.total, 0);
-  const poNumber = `PO-${Date.now()}`;
+  // PO numbers are always entered manually — no auto-generated fallback.
+  const poNumber = typeof body.poNumber === "string" ? body.poNumber.trim() : "";
+  if (!poNumber) {
+    throw new Error("PO number is required");
+  }
 
   // Cash actually paid out right now, as opposed to the PO total. Purchases
   // with no supplier on record (nobody to owe later) are always treated as
@@ -233,6 +237,14 @@ export async function updatePurchase(id: number, body: any, actorUserId: number 
   const updateData: Record<string, unknown> = {};
   if (body.status !== undefined) updateData.status = body.status;
   if (body.notes !== undefined) updateData.notes = body.notes;
+  // Respect the PO number the user typed on the Edit Purchase form; only
+  // fall back to keeping the existing one when they left it blank (mirrors
+  // sales.service.ts's invoiceNumber handling on updateSale).
+  if (body.poNumber !== undefined) {
+    const trimmed = typeof body.poNumber === "string" ? body.poNumber.trim() : "";
+    if (trimmed) updateData.poNumber = trimmed;
+  }
+  if (body.purchaseDate !== undefined) updateData.purchaseDate = new Date(body.purchaseDate);
 
   if (
     body.status !== undefined &&
@@ -271,6 +283,79 @@ export async function updatePurchase(id: number, body: any, actorUserId: number 
           unitCost: Number(item.unitCost ?? 0),
         });
         await db.update(productsTable).set({ currentStock: sql`${productsTable.currentStock} + ${item.quantity}`, costPrice: String(nextAverageCost) }).where(eq(productsTable.id, item.productId));
+      }
+    }
+  }
+
+  // Handle line-item editing (product/qty/cost changes on an existing PO).
+  // The effective status after this update (either newly set or unchanged)
+  // determines whether stock needs to move at all.
+  const effectiveStatus = body.status !== undefined ? body.status : existingPurchase.status;
+  let newSubtotal: number | undefined;
+  if (body.items !== undefined) {
+    const oldItems = (existingPurchase.items as Array<any>) || [];
+    const newItemsRaw = body.items as Array<any>;
+    const newItems = [] as Array<any>;
+    for (const item of newItemsRaw) {
+      const [product] = await db.select({ name: productsTable.name }).from(productsTable).where(eq(productsTable.id, item.productId));
+      newItems.push({
+        productId: item.productId,
+        productName: product?.name ?? "",
+        quantity: item.quantity,
+        unitCost: item.unitCost,
+        total: item.quantity * item.unitCost,
+      });
+    }
+    newSubtotal = round2(newItems.reduce((sum, i) => sum + i.total, 0));
+    updateData.items = newItems;
+    updateData.subtotal = String(newSubtotal);
+    updateData.total = String(newSubtotal);
+
+    // Only "received" purchases have already moved stock, so only adjust
+    // stock/average-cost when the PO is (or remains) received.
+    if (effectiveStatus === "received" && existingPurchase.status === "received") {
+      for (const item of oldItems) {
+        const [product] = await db.select({ currentStock: productsTable.currentStock, costPrice: productsTable.costPrice }).from(productsTable).where(eq(productsTable.id, item.productId));
+        if (!product) continue;
+        const nextAverageCost = calculateWeightedAverageCostAfterChange({
+          currentStock: Number(product.currentStock ?? 0),
+          averageCost: Number(product.costPrice ?? 0),
+          quantityDelta: -Number(item.quantity ?? 0),
+          unitCost: Number(item.unitCost ?? 0),
+        });
+        await db.update(productsTable).set({ currentStock: sql`${productsTable.currentStock} - ${item.quantity}`, costPrice: String(nextAverageCost) }).where(eq(productsTable.id, item.productId));
+      }
+      for (const item of newItems) {
+        const [product] = await db.select({ currentStock: productsTable.currentStock, costPrice: productsTable.costPrice }).from(productsTable).where(eq(productsTable.id, item.productId));
+        if (!product) continue;
+        const nextAverageCost = calculateWeightedAverageCost({
+          currentStock: Number(product.currentStock ?? 0),
+          averageCost: Number(product.costPrice ?? 0),
+          quantity: Number(item.quantity ?? 0),
+          unitCost: Number(item.unitCost ?? 0),
+        });
+        await db.update(productsTable).set({ currentStock: sql`${productsTable.currentStock} + ${item.quantity}`, costPrice: String(nextAverageCost) }).where(eq(productsTable.id, item.productId));
+      }
+    }
+
+    // If this PO is linked to a real supplier and the total changed, post an
+    // adjustment to their khata so the ledger stays in sync with the edit.
+    if (existingPurchase.supplierId && newSubtotal !== undefined) {
+      const oldTotal = round2(parseFloat(existingPurchase.total as string));
+      const totalDifference = round2(newSubtotal - oldTotal);
+      if (Math.abs(totalDifference) > 0.01) {
+        await db.transaction(async (tx) => {
+          await appendSupplierLedgerEntry(tx, {
+            supplierId: existingPurchase.supplierId as number,
+            type: "adjustment",
+            amount: totalDifference,
+            purchaseId: existingPurchase.id,
+            description: `Purchase ${existingPurchase.poNumber} items edited (total adjustment)`,
+            createdByUserId: actorUserId,
+            entryDate: existingPurchase.purchaseDate ? new Date(existingPurchase.purchaseDate) : undefined,
+          });
+          await recomputeSupplierLedgerRunningBalances(tx, existingPurchase.supplierId as number);
+        });
       }
     }
   }

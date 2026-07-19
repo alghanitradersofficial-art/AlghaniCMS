@@ -566,6 +566,7 @@ export const GetPurchasesResponse = zod.object({
 export const CreatePurchaseBody = zod.object({
   "supplierId": zod.number().nullish(),
   "supplierName": zod.string(),
+  "poNumber": zod.string().optional(),
   "status": zod.enum(['pending', 'received', 'cancelled']).optional(),
   "notes": zod.string().optional(),
   "items": zod.array(zod.object({
@@ -631,7 +632,14 @@ export const UpdatePurchaseParams = zod.object({
 
 export const UpdatePurchaseBody = zod.object({
   "status": zod.enum(['pending', 'received', 'cancelled']).optional(),
-  "notes": zod.string().optional()
+  "poNumber": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "items": zod.array(zod.object({
+    "productId": zod.number().int().positive(),
+    "quantity": zod.number().int().positive(),
+    "unitCost": zod.number()
+  })).optional(),
+  "purchaseDate": zod.string().datetime().or(zod.string().regex(/^\d{4}-\d{2}-\d{2}T/)).optional()
 })
 
 export const UpdatePurchaseResponse = zod.object({

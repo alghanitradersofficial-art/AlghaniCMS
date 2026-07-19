@@ -1393,6 +1393,8 @@ components:
           type: ["integer", "null"]
         supplierName:
           type: string
+        poNumber:
+          type: string
         status:
           type: string
           enum: [pending, received, cancelled]
@@ -1409,8 +1411,17 @@ components:
         status:
           type: string
           enum: [pending, received, cancelled]
+        poNumber:
+          type: string
         notes:
           type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseItemInput"
+        purchaseDate:
+          type: string
+          format: date-time
 
     Customer:
       type: object
