@@ -73,6 +73,16 @@ router.post("/", async (req, res) => {
   }
 });
 
+router.get("/summary", async (req, res) => {
+  try {
+    const summary = await salesService.getSalesSummary(req.query as any);
+    return res.json(summary);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to fetch sales summary" });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);

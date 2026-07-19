@@ -7,19 +7,47 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useGetSales, useCreateSale, useUpdateSale, useDeleteSale, useGetProducts, useGetCustomers, getGetSalesQueryKey, getGetCustomersQueryKey } from "@workspace/api-client-react";
 import { apiGet } from "@/lib/api";
-import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, ShoppingCart, X, Info } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus, Search, Edit, Trash2, ShoppingCart, X, Info, RotateCcw, Clock, CalendarDays, CalendarRange, SlidersHorizontal } from "lucide-react";
 import Confirm from "@/components/ui/confirm";
-import DataTable, { Column } from "@/components/ui/data-table";
+import DataTable from "@/components/ui/data-table";
 import { PriceHistoryPanel } from "@/components/price-history-panel";
 import { ReturnsClaimsPanel } from "@/components/returns-claims-panel";
 
 type LineItem = { productId: number; productName: string; quantity: number; unitPrice: number; };
+type Period = "daily" | "weekly" | "monthly" | "custom";
+
+function toDateStr(d: Date) { return d.toISOString().slice(0, 10); }
+
+// Resolves each period tab to a concrete [from, to] invoice-date range.
+// Daily = today. Weekly = rolling last 7 days. Monthly = 1st of this month
+// through today. Custom = whatever the user picked (falls back to today).
+function periodRange(period: Period, customFrom: string, customTo: string): { from: string; to: string; label: string } {
+  const now = new Date();
+  const todayStr = toDateStr(now);
+  if (period === "weekly") {
+    const start = new Date(now); start.setDate(start.getDate() - 6);
+    return { from: toDateStr(start), to: todayStr, label: "Last 7 days" };
+  }
+  if (period === "monthly") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: toDateStr(start), to: todayStr, label: now.toLocaleDateString(undefined, { month: "long", year: "numeric" }) };
+  }
+  if (period === "custom") {
+    return { from: customFrom || todayStr, to: customTo || todayStr, label: "Custom range" };
+  }
+  return { from: todayStr, to: todayStr, label: "Today" };
+}
 
 export default function Sales() {
   const qc = useQueryClient();
+  const [topTab, setTopTab] = useState<"sales" | "returns">("sales");
+  const [periodTab, setPeriodTab] = useState<Period>("daily");
+  const [customFrom, setCustomFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [customTo, setCustomTo] = useState(new Date().toISOString().slice(0, 10));
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
@@ -38,7 +66,32 @@ export default function Sales() {
   const [editSaleStatus, setEditSaleStatus] = useState<"pending" | "completed" | "cancelled">("pending");
   const [editSaleNotes, setEditSaleNotes] = useState("");
 
-  const { data, isLoading } = useGetSales({ search: search || undefined, status: statusFilter as "pending" | "completed" | "cancelled" | undefined, page, limit: 20 });
+  const range = periodRange(periodTab, customFrom, customTo);
+  const salesQueryParams = {
+    search: search || undefined,
+    status: statusFilter as "pending" | "completed" | "cancelled" | undefined,
+    dateFrom: range.from,
+    dateTo: range.to,
+    page,
+    limit: 20,
+  } as any;
+
+  const { data, isLoading } = useGetSales(salesQueryParams);
+  const { data: summary } = useQuery({
+    queryKey: ["sales-summary", salesQueryParams.search, salesQueryParams.status, range.from, range.to],
+    queryFn: () => apiGet<{ count: number; totalAmount: number; totalReceived: number }>(
+      `/api/sales/summary?${new URLSearchParams({
+        ...(search ? { search } : {}),
+        ...(statusFilter ? { status: statusFilter } : {}),
+        dateFrom: range.from,
+        dateTo: range.to,
+      }).toString()}`
+    ),
+  });
+  // Returns & Claims needs the full invoice list to pick from (not just
+  // whatever the Daily/Weekly/Monthly/Custom filters currently show), so it
+  // gets its own unfiltered query.
+  const { data: allSalesForPicker } = useGetSales({ limit: 200 });
   const { data: products } = useGetProducts({ limit: 100 });
   const { data: customers } = useGetCustomers({ limit: 100 });
   const createSale = useCreateSale();
@@ -47,6 +100,7 @@ export default function Sales() {
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: getGetSalesQueryKey(), exact: false });
+    qc.invalidateQueries({ queryKey: ["sales-summary"], exact: false });
     // Customer totalSpent/totalOrders are computed from sales, so the
     // customers list must also refresh whenever a sale is created/edited/deleted.
     qc.invalidateQueries({ queryKey: getGetCustomersQueryKey(), exact: false });
@@ -154,109 +208,171 @@ export default function Sales() {
       <div className="space-y-4 sm:space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight sm:text-2xl"><ShoppingCart className="h-5 w-5 text-primary sm:h-6 sm:w-6" /> Sales Orders</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{data?.total || 0} orders total</p>
+            <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight sm:text-2xl"><ShoppingCart className="h-5 w-5 text-primary sm:h-6 sm:w-6" /> Sales</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{topTab === "sales" ? `${range.label} · ${summary?.count ?? 0} order${(summary?.count ?? 0) === 1 ? "" : "s"}` : "Sale returns and damaged-item claims"}</p>
           </div>
           <Button onClick={openNew} className="w-full gap-2 bg-primary hover:bg-primary/90 sm:w-auto"><Plus className="h-4 w-4" /> New Sale</Button>
         </div>
 
-        <ReturnsClaimsPanel
-          sales={(data?.data || []).map(s => ({
-            id: s.id,
-            invoiceNumber: s.invoiceNumber,
-            customerId: s.customerId ?? undefined,
-            customerName: s.customerName,
-            items: ((s.items as any[]) || []).map((i: any) => ({ productId: i.productId, productName: i.productName, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice) })),
-          }))}
-          products={(products?.data || []).map(p => ({ id: p.id, name: p.name, sku: p.sku, salePrice: p.salePrice ?? undefined }))}
-          customers={(customers?.data || []).map(c => ({ id: c.id, name: c.name, phone: c.phone }))}
-          onChanged={invalidate}
-        />
+        <Tabs value={topTab} onValueChange={(v) => setTopTab(v as "sales" | "returns")}>
+          <TabsList className="grid w-full grid-cols-2 sm:w-auto sm:inline-flex">
+            <TabsTrigger value="sales" className="gap-1.5"><ShoppingCart className="h-3.5 w-3.5" /> Sales Orders</TabsTrigger>
+            <TabsTrigger value="returns" className="gap-1.5"><RotateCcw className="h-3.5 w-3.5" /> Returns &amp; Claims</TabsTrigger>
+          </TabsList>
 
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search customer..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="border-border bg-card pl-9" />
-          </div>
-          <Select value={statusFilter} onValueChange={v => { setStatusFilter(v === "all" ? "" : v); setPage(1); }}>
-            <SelectTrigger className="w-full bg-card border-border sm:w-44"><SelectValue placeholder="All Status" /></SelectTrigger>
-            <SelectContent className="bg-card border-border">
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="cancelled">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <Card className="border-border bg-card">
-          <CardContent className="p-0">
-            <div className="hidden md:block">
-              <DataTable
-                loading={isLoading}
-                data={data?.data || []}
-                columns={[
-                  { key: 'invoiceNumber', title: 'Invoice', render: (r) => <span className="font-mono text-xs text-primary">{r.invoiceNumber}</span> },
-                  { key: 'customerName', title: 'Customer', render: (r) => <span className="font-medium">{r.customerName}</span> },
-                  { key: 'total', title: 'Total', align: 'right', render: (r) => <span className="font-semibold text-secondary">Rs. {Number(r.total).toLocaleString()}</span> },
-                  { key: 'status', title: 'Status', align: 'center', render: (r) => (
-                      <Select value={r.status} onValueChange={(v) => handleStatusUpdate(r.id, v as "pending" | "completed" | "cancelled") }>
-                        <SelectTrigger className="h-7 w-32 border-0 bg-transparent p-0 text-xs">
-                          <Badge className={statusColor(r.status)}>{r.status}</Badge>
-                        </SelectTrigger>
-                        <SelectContent className="bg-card border-border">
-                          <SelectItem value="pending">Pending</SelectItem>
-                          <SelectItem value="completed">Completed</SelectItem>
-                          <SelectItem value="cancelled">Cancelled</SelectItem>
-                        </SelectContent>
-                      </Select>
-                  ) },
-                  { key: 'saleDate', title: 'Date', render: (r) => new Date(((r as any).saleDate ?? r.createdAt)).toLocaleDateString() },
-                  { key: 'actions', title: 'Actions', align: 'center', render: (r) => (
-                    <div className="flex justify-center gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => openEditSale(r)} className="h-8 w-8 p-0 hover:bg-accent"><Edit className="h-4 w-4" /></Button>
-                      <Confirm title="Delete this sale?" description="This will remove the sale record." onConfirm={() => handleDelete(r.id)} trigger={<Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>} />
-                    </div>
-                  ) },
-                ]}
-              />
-            </div>
-
-            <div className="space-y-3 p-3 md:hidden">
-              {isLoading ? (
-                <div className="rounded-2xl border border-border/60 bg-background/70 p-6 text-center text-sm text-muted-foreground">Loading sales...</div>
-              ) : (data?.data || []).length === 0 ? (
-                <div className="rounded-2xl border border-border/60 bg-background/70 p-6 text-center text-sm text-muted-foreground">No sales yet.</div>
-              ) : (data?.data || []).map((sale) => (
-                <div key={sale.id} className="rounded-2xl border border-border/60 bg-background/70 p-3 shadow-sm">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">{sale.invoiceNumber}</div>
-                      <div className="mt-1 truncate text-sm font-semibold">{sale.customerName}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">{new Date(((sale as any).saleDate ?? sale.createdAt)).toLocaleDateString()}</div>
-                    </div>
-                    <Badge className={statusColor(sale.status)}>{sale.status}</Badge>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between gap-2">
-                    <div className="text-sm font-semibold text-secondary">Rs. {Number(sale.total).toLocaleString()}</div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => openEditSale(sale)} className="h-8 w-8 p-0 hover:bg-accent"><Edit className="h-4 w-4" /></Button>
-                      <Button size="sm" variant="ghost" onClick={() => handleDelete(sale.id)} className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
-                    </div>
-                  </div>
-                </div>
+          <TabsContent value="sales" className="mt-4 space-y-4">
+            {/* Daily / Weekly / Monthly / Custom */}
+            <div className="flex flex-wrap gap-1.5 rounded-xl border border-border bg-card p-1.5">
+              {([
+                { key: "daily" as const, label: "Daily", icon: Clock },
+                { key: "weekly" as const, label: "Weekly", icon: CalendarDays },
+                { key: "monthly" as const, label: "Monthly", icon: CalendarRange },
+                { key: "custom" as const, label: "Custom", icon: SlidersHorizontal },
+              ]).map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => { setPeriodTab(key); setPage(1); }}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors sm:flex-none sm:px-4 ${
+                    periodTab === key ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" /> {label}
+                </button>
               ))}
             </div>
 
-            {data && data.total > 20 && (
-              <div className="flex flex-wrap justify-center gap-2 border-t border-border p-4">
-                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="border-border">Prev</Button>
-                <span className="flex items-center px-3 text-sm text-muted-foreground">Page {page} of {Math.ceil(data.total / 20)}</span>
-                <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= Math.ceil(data.total / 20)} className="border-border">Next</Button>
+            {periodTab === "custom" && (
+              <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-end">
+                <div className="flex-1 space-y-1">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">From</Label>
+                  <Input type="date" value={customFrom} onChange={e => { setCustomFrom(e.target.value); setPage(1); }} className="bg-background/50 border-border" />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">To</Label>
+                  <Input type="date" value={customTo} onChange={e => { setCustomTo(e.target.value); setPage(1); }} className="bg-background/50 border-border" />
+                </div>
               </div>
             )}
-          </CardContent>
-        </Card>
+
+            {/* Stat strip for the selected period */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className="rounded-xl border border-border bg-card p-2.5 sm:p-3">
+                <p className="truncate text-[10px] uppercase tracking-wider text-muted-foreground sm:text-[11px]">Orders</p>
+                <p className="mt-1 text-base font-bold sm:text-xl">{summary?.count ?? 0}</p>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-2.5 sm:p-3">
+                <p className="truncate text-[10px] uppercase tracking-wider text-muted-foreground sm:text-[11px]">Total Sales</p>
+                <p className="mt-1 truncate text-base font-bold text-secondary sm:text-xl">Rs. {Number(summary?.totalAmount ?? 0).toLocaleString()}</p>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-2.5 sm:p-3">
+                <p className="truncate text-[10px] uppercase tracking-wider text-muted-foreground sm:text-[11px]">Received</p>
+                <p className="mt-1 truncate text-base font-bold text-emerald-500 sm:text-xl">Rs. {Number(summary?.totalReceived ?? 0).toLocaleString()}</p>
+              </div>
+            </div>
+
+            {/* Universal search — invoice #, customer, or product — plus status filter */}
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input placeholder="Search invoice #, customer, or product..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="border-border bg-card pl-9" />
+              </div>
+              <Select value={statusFilter} onValueChange={v => { setStatusFilter(v === "all" ? "" : v); setPage(1); }}>
+                <SelectTrigger className="w-full bg-card border-border sm:w-44"><SelectValue placeholder="All Status" /></SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Card className="border-border bg-card">
+              <CardContent className="p-0">
+                <div className="hidden md:block">
+                  <DataTable
+                    loading={isLoading}
+                    data={data?.data || []}
+                    columns={[
+                      { key: 'invoiceNumber', title: 'Invoice', render: (r) => <span className="font-mono text-xs text-primary">{r.invoiceNumber}</span> },
+                      { key: 'customerName', title: 'Customer', render: (r) => <span className="font-medium">{r.customerName}</span> },
+                      { key: 'total', title: 'Total', align: 'right', render: (r) => <span className="font-semibold text-secondary">Rs. {Number(r.total).toLocaleString()}</span> },
+                      { key: 'status', title: 'Status', align: 'center', render: (r) => (
+                          <Select value={r.status} onValueChange={(v) => handleStatusUpdate(r.id, v as "pending" | "completed" | "cancelled") }>
+                            <SelectTrigger className="h-7 w-32 border-0 bg-transparent p-0 text-xs">
+                              <Badge className={statusColor(r.status)}>{r.status}</Badge>
+                            </SelectTrigger>
+                            <SelectContent className="bg-card border-border">
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="completed">Completed</SelectItem>
+                              <SelectItem value="cancelled">Cancelled</SelectItem>
+                            </SelectContent>
+                          </Select>
+                      ) },
+                      { key: 'saleDate', title: 'Date', render: (r) => new Date(((r as any).saleDate ?? r.createdAt)).toLocaleDateString() },
+                      { key: 'actions', title: 'Actions', align: 'center', render: (r) => (
+                        <div className="flex justify-center gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => openEditSale(r)} className="h-8 w-8 p-0 hover:bg-accent"><Edit className="h-4 w-4" /></Button>
+                          <Confirm title="Delete this sale?" description="This will remove the sale record." onConfirm={() => handleDelete(r.id)} trigger={<Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>} />
+                        </div>
+                      ) },
+                    ]}
+                  />
+                </div>
+
+                <div className="space-y-3 p-3 md:hidden">
+                  {isLoading ? (
+                    <div className="rounded-2xl border border-border/60 bg-background/70 p-6 text-center text-sm text-muted-foreground">Loading sales...</div>
+                  ) : (data?.data || []).length === 0 ? (
+                    <div className="rounded-2xl border border-border/60 bg-background/70 p-6 text-center text-sm text-muted-foreground">No sales in {range.label.toLowerCase()}.</div>
+                  ) : (data?.data || []).map((sale) => (
+                    <div key={sale.id} className="rounded-2xl border border-border/60 bg-background/70 p-3 shadow-sm">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">{sale.invoiceNumber}</div>
+                          <div className="mt-1 truncate text-sm font-semibold">{sale.customerName}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">{new Date(((sale as any).saleDate ?? sale.createdAt)).toLocaleDateString()}</div>
+                        </div>
+                        <Badge className={statusColor(sale.status)}>{sale.status}</Badge>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <div className="text-sm font-semibold text-secondary">Rs. {Number(sale.total).toLocaleString()}</div>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => openEditSale(sale)} className="h-8 w-8 p-0 hover:bg-accent"><Edit className="h-4 w-4" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => handleDelete(sale.id)} className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {data && data.total > 20 && (
+                  <div className="flex flex-wrap justify-center gap-2 border-t border-border p-4">
+                    <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="border-border">Prev</Button>
+                    <span className="flex items-center px-3 text-sm text-muted-foreground">Page {page} of {Math.ceil(data.total / 20)}</span>
+                    <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= Math.ceil(data.total / 20)} className="border-border">Next</Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="returns" className="mt-4">
+            <ReturnsClaimsPanel
+              sales={(allSalesForPicker?.data || []).map(s => ({
+                id: s.id,
+                invoiceNumber: s.invoiceNumber,
+                customerId: s.customerId ?? undefined,
+                customerName: s.customerName,
+                items: ((s.items as any[]) || []).map((i: any) => ({ productId: i.productId, productName: i.productName, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice) })),
+              }))}
+              products={(products?.data || []).map(p => ({ id: p.id, name: p.name, sku: p.sku, salePrice: p.salePrice ?? undefined }))}
+              customers={(customers?.data || []).map(c => ({ id: c.id, name: c.name, phone: c.phone }))}
+              onChanged={invalidate}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>

@@ -49,17 +49,77 @@ function ensureStockAvailability(
 export async function listSales(params: Record<string, any>) {
   const search = params.search as string | undefined;
   const status = params.status as string | undefined;
+  // Optional invoice date range (inclusive), used by the Sales page's
+  // Daily / Weekly / Monthly / Custom views. dateTo is treated as
+  // end-of-day so a same-day range (dateFrom === dateTo) still matches.
+  const dateFrom = params.dateFrom as string | undefined;
+  const dateTo = params.dateTo as string | undefined;
   const page = Number(params.page) || 1;
   const limit = Number(params.limit) || 20;
   const offset = (page - 1) * limit;
 
   const conditions: any[] = [];
-  if (search) conditions.push(sql`customer_name ILIKE ${`%${search}%`}`);
+  if (search) {
+    // Universal search — matches customer name, invoice number, or any
+    // product name inside the sale's line items.
+    conditions.push(sql`(
+      customer_name ILIKE ${`%${search}%`}
+      OR invoice_number ILIKE ${`%${search}%`}
+      OR items::text ILIKE ${`%${search}%`}
+    )`);
+  }
   if (status) conditions.push(sql`status = ${status}`);
+  if (dateFrom) conditions.push(sql`COALESCE(sale_date, created_at) >= ${new Date(dateFrom)}`);
+  if (dateTo) {
+    const endOfDay = new Date(dateTo);
+    endOfDay.setHours(23, 59, 59, 999);
+    conditions.push(sql`COALESCE(sale_date, created_at) <= ${endOfDay}`);
+  }
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(salesTable).where(conditions.length ? sql`${sql.join(conditions, ' AND ')}` : undefined as any);
   const rows = await db.select().from(salesTable).where(conditions.length ? sql`${sql.join(conditions, ' AND ')}` : undefined as any).orderBy(sql`${salesTable.createdAt} DESC`).limit(limit).offset(offset);
   return { data: rows.map((r) => r), total: Number(count), page, limit };
+}
+
+// Lightweight aggregate for the Sales page's Daily/Weekly/Monthly/Custom stat
+// strip — total orders + total sale amount + total cash received for the
+// filtered set, computed in SQL so it isn't limited to just the current page.
+export async function getSalesSummary(params: Record<string, any>) {
+  const search = params.search as string | undefined;
+  const status = params.status as string | undefined;
+  const dateFrom = params.dateFrom as string | undefined;
+  const dateTo = params.dateTo as string | undefined;
+
+  const conditions: any[] = [];
+  if (search) {
+    conditions.push(sql`(
+      customer_name ILIKE ${`%${search}%`}
+      OR invoice_number ILIKE ${`%${search}%`}
+      OR items::text ILIKE ${`%${search}%`}
+    )`);
+  }
+  if (status) conditions.push(sql`status = ${status}`);
+  if (dateFrom) conditions.push(sql`COALESCE(sale_date, created_at) >= ${new Date(dateFrom)}`);
+  if (dateTo) {
+    const endOfDay = new Date(dateTo);
+    endOfDay.setHours(23, 59, 59, 999);
+    conditions.push(sql`COALESCE(sale_date, created_at) <= ${endOfDay}`);
+  }
+
+  const [row] = await db
+    .select({
+      count: sql<number>`count(*)`,
+      totalAmount: sql<string>`COALESCE(SUM(${salesTable.total}), 0)`,
+      totalReceived: sql<string>`COALESCE(SUM(${salesTable.amountPaid}), 0)`,
+    })
+    .from(salesTable)
+    .where(conditions.length ? sql`${sql.join(conditions, ' AND ')}` : undefined as any);
+
+  return {
+    count: Number(row?.count ?? 0),
+    totalAmount: round2(parseFloat(row?.totalAmount ?? "0")),
+    totalReceived: round2(parseFloat(row?.totalReceived ?? "0")),
+  };
 }
 
 export async function createSale(body: any, actorUserId: number | null) {
@@ -361,4 +421,4 @@ export async function deleteSale(id: number, actorUserId: number | null) {
   });
 }
 
-export default { listSales, createSale, updateSale, deleteSale, InsufficientStockError };
+export default { listSales, getSalesSummary, createSale, updateSale, deleteSale, InsufficientStockError };

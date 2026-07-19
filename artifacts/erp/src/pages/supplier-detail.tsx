@@ -275,6 +275,27 @@ function LedgerTab({ supplierId, data, isLoading, onChanged }: { supplierId: num
     }
   };
 
+  // Outstanding (sum of total - amountPaid across POs) can drift ahead of
+  // the real ledger balance ("We Owe") when a credit — a sale return, a
+  // resolved claim, a manual adjustment — was posted before a PO existed to
+  // apply it against. This doesn't mean any real money is owed; it's just a
+  // labeling gap. One click re-syncs Outstanding to match, oldest PO first,
+  // with no new ledger entries created.
+  const outstandingMismatch = Math.round((data.outstandingAmount - Math.max(0, data.currentBalance)) * 100) / 100 > 0;
+  const [reconciling, setReconciling] = useState(false);
+  const handleReconcileOutstanding = async () => {
+    setReconciling(true);
+    try {
+      const result = await apiPost<{ gap: number }>(`/api/suppliers/${supplierId}/reconcile-outstanding`, {});
+      toast({ title: result.gap > 0 ? `Outstanding fixed (Rs ${result.gap.toLocaleString()})` : "Outstanding already correct" });
+      onChanged();
+    } catch (e: any) {
+      toast({ title: "Failed to fix Outstanding", description: e.message, variant: "destructive" });
+    } finally {
+      setReconciling(false);
+    }
+  };
+
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -284,7 +305,12 @@ function LedgerTab({ supplierId, data, isLoading, onChanged }: { supplierId: num
         <StatCard label="Outstanding" value={data.outstandingAmount} accent="amber" />
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        {outstandingMismatch && (
+          <Button size="sm" variant="outline" onClick={handleReconcileOutstanding} disabled={reconciling} className="gap-1.5 border-amber-500/40 text-amber-500 hover:bg-amber-500/10">
+            {reconciling ? "Fixing…" : "Fix Outstanding mismatch"}
+          </Button>
+        )}
         <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} className="gap-1.5"><Plus className="w-4 h-4" /> Add Return/Adjustment</Button>
       </div>
 

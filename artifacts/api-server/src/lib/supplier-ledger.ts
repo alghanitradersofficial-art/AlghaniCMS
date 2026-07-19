@@ -164,6 +164,31 @@ export async function allocateSupplierPayment(
   return applied;
 }
 
+/**
+ * Fixes an already-existing mismatch between a supplier's true ledger
+ * balance ("We Owe") and the sum of (total - amountPaid) across their
+ * "received" POs ("Outstanding") — e.g. a claim/return credit that was
+ * posted to the ledger before a later PO existed to apply it against.
+ * Distributes the gap across open POs, oldest first, purely as an
+ * amountPaid correction. Creates NO new ledger entries, since the ledger
+ * balance is already correct — this only re-syncs the per-PO figure.
+ * Safe to call repeatedly; it's a no-op once the two numbers agree.
+ */
+export async function reconcileSupplierOutstanding(supplierId: number) {
+  const summary = await getSupplierLedgerSummary(supplierId);
+  if (!summary) throw new Error(`Supplier ${supplierId} not found`);
+
+  // Never owe less than Rs 0 — if we're net in credit, nothing is due.
+  const trueOwed = Math.max(0, summary.currentBalance);
+  const gap = round2(summary.outstandingAmount - trueOwed);
+  if (gap <= 0) return { adjusted: [] as Array<{ purchaseId: number; poNumber: string; amount: number }>, gap: 0 };
+
+  return db.transaction(async (tx) => {
+    const applied = await allocateSupplierPayment(tx, { supplierId, amount: gap });
+    return { adjusted: applied, gap };
+  });
+}
+
 export async function recomputeSupplierLedgerRunningBalances(tx: DbTx, supplierId: number) {
   const [supplier] = await tx
     .select({ openingBalance: suppliersTable.openingBalance })

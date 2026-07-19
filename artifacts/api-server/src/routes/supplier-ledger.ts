@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db, suppliersTable, supplierLedgerEntriesTable, supplierPaymentsTable, purchasesTable, generalLedgerEntriesTable } from "@workspace/db";
 import { eq, and, gte, lte, desc, asc, sql } from "drizzle-orm";
-import { appendSupplierLedgerEntry, allocateSupplierPayment, getSupplierLedgerSummary, recomputeSupplierLedgerRunningBalances } from "../lib/supplier-ledger.js";
+import { appendSupplierLedgerEntry, allocateSupplierPayment, getSupplierLedgerSummary, recomputeSupplierLedgerRunningBalances, reconcileSupplierOutstanding } from "../lib/supplier-ledger.js";
 import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
 import { getUserIdFromRequest } from "../lib/auth-context.js";
 import { round2 } from "../lib/ledger.js";
@@ -458,6 +458,25 @@ router.get("/:id/payments", async (req, res): Promise<any> => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to fetch supplier payments" });
+  }
+});
+
+// POST /api/suppliers/:id/reconcile-outstanding — one-off fix for a PO whose
+// amountPaid never picked up existing credit (e.g. a claim/return credit
+// posted before this PO existed). Applies the gap FIFO across open POs.
+// Creates no new ledger entries — the ledger balance is already correct.
+router.post("/:id/reconcile-outstanding", async (req, res): Promise<any> => {
+  try {
+    const supplierId = parseInt(req.params.id);
+    const [supplier] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, supplierId));
+    if (!supplier) return res.status(404).json({ error: "Supplier not found" });
+
+    const result = await reconcileSupplierOutstanding(supplierId);
+    const summary = await getSupplierLedgerSummary(supplierId);
+    return res.json({ ...result, summary });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to reconcile outstanding" });
   }
 });
 

@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
-import { purchasesTable, productsTable, supplierPaymentsTable, suppliersTable, supplierProductsTable } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { purchasesTable, productsTable, supplierPaymentsTable, suppliersTable, supplierProductsTable, supplierLedgerEntriesTable } from "@workspace/db";
+import { eq, and, sql, desc } from "drizzle-orm";
 import { appendSupplierLedgerEntry } from "../lib/supplier-ledger.js";
 import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
 import { calculateWeightedAverageCost, calculateWeightedAverageCostAfterChange } from "../lib/inventory-accounting.js";
@@ -87,6 +87,31 @@ export async function createPurchase(body: any, actorUserId: number | null) {
     }).returning();
 
     if (body.supplierId) {
+      // Before recording this purchase, check whether the supplier already
+      // carries credit in our favor (e.g. from an earlier sale-return/claim
+      // credit, or a manual adjustment) sitting unapplied on their ledger.
+      // If so, recognize it against this new PO's amountPaid right away.
+      // Without this, the overall ledger balance ("We Owe") is correct the
+      // moment the new purchase + existing credit net out, but this
+      // specific PO's own amountPaid stays 0 — so the Outstanding card
+      // (which sums total - amountPaid per PO) still shows it as unpaid
+      // even though nothing is actually owed anymore.
+      const [lastEntry] = await tx
+        .select({ runningBalance: supplierLedgerEntriesTable.runningBalance })
+        .from(supplierLedgerEntriesTable)
+        .where(eq(supplierLedgerEntriesTable.supplierId, body.supplierId))
+        .orderBy(desc(supplierLedgerEntriesTable.id))
+        .limit(1);
+      const [supplierRow] = await tx
+        .select({ openingBalance: suppliersTable.openingBalance })
+        .from(suppliersTable)
+        .where(eq(suppliersTable.id, body.supplierId));
+      const preBalance = lastEntry
+        ? parseFloat(lastEntry.runningBalance as string)
+        : parseFloat((supplierRow?.openingBalance as string) ?? "0");
+      // Negative balance = supplier owes us (credit available).
+      const availableCredit = Math.max(0, round2(-preBalance));
+
       // Full PO amount always goes on the supplier's khata (accounts
       // payable) regardless of how much cash went out right now.
       const ledgerEntry = await appendSupplierLedgerEntry(tx, {
@@ -99,6 +124,19 @@ export async function createPurchase(body: any, actorUserId: number | null) {
         entryDate: purchaseDate,
       });
       void ledgerEntry;
+
+      const remainingDueAfterCash = round2(subtotal - paidNow);
+      const creditApplied = round2(Math.min(availableCredit, remainingDueAfterCash));
+      if (creditApplied > 0) {
+        // Not a new cash payment — just recognizing pre-existing credit
+        // against this specific PO. No new ledger entry is created here:
+        // the credit's original entry (the return/adjustment) plus this
+        // purchase's entry above already net to the correct running
+        // balance. This only syncs the PO's own amountPaid to match.
+        await tx.update(purchasesTable)
+          .set({ amountPaid: sql`${purchasesTable.amountPaid} + ${creditApplied}` })
+          .where(eq(purchasesTable.id, inserted.id));
+      }
 
       // Keep the supplier's per-product "Cost Price" (shown on the Supplier
       // detail page) in sync with what we actually just paid them for each

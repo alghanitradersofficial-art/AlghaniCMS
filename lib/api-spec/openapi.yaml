@@ -392,6 +392,16 @@ paths:
           schema:
             type: string
             enum: [pending, completed, cancelled]
+        - name: dateFrom
+          in: query
+          description: Inclusive start of invoice date range (ISO date), for Daily/Weekly/Monthly/Custom views
+          schema:
+            type: string
+        - name: dateTo
+          in: query
+          description: Inclusive end of invoice date range (ISO date, treated as end-of-day)
+          schema:
+            type: string
         - name: page
           in: query
           schema:

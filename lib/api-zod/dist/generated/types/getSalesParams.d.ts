@@ -9,6 +9,8 @@ import type { GetSalesStatus } from './getSalesStatus';
 export type GetSalesParams = {
     search?: string;
     status?: GetSalesStatus;
+    dateFrom?: string;
+    dateTo?: string;
     page?: number;
     limit?: number;
 };
