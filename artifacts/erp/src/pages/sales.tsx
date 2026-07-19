@@ -14,6 +14,7 @@ import { Plus, Search, Edit, Trash2, ShoppingCart, X, Info } from "lucide-react"
 import Confirm from "@/components/ui/confirm";
 import DataTable, { Column } from "@/components/ui/data-table";
 import { PriceHistoryPanel } from "@/components/price-history-panel";
+import { ReturnsClaimsPanel } from "@/components/returns-claims-panel";
 
 type LineItem = { productId: number; productName: string; quantity: number; unitPrice: number; };
 
@@ -158,6 +159,19 @@ export default function Sales() {
           </div>
           <Button onClick={openNew} className="w-full gap-2 bg-primary hover:bg-primary/90 sm:w-auto"><Plus className="h-4 w-4" /> New Sale</Button>
         </div>
+
+        <ReturnsClaimsPanel
+          sales={(data?.data || []).map(s => ({
+            id: s.id,
+            invoiceNumber: s.invoiceNumber,
+            customerId: s.customerId ?? undefined,
+            customerName: s.customerName,
+            items: ((s.items as any[]) || []).map((i: any) => ({ productId: i.productId, productName: i.productName, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice) })),
+          }))}
+          products={(products?.data || []).map(p => ({ id: p.id, name: p.name, sku: p.sku, salePrice: p.salePrice ?? undefined }))}
+          customers={(customers?.data || []).map(c => ({ id: c.id, name: c.name, phone: c.phone }))}
+          onChanged={invalidate}
+        />
 
         <div className="flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1 min-w-0">

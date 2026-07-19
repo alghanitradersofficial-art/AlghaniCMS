@@ -19,3 +19,5 @@ export * from "./financial-period-snapshots.js";
 export * from "./financial-period-balances.js";
 export * from "./financial-period-audit.js";
 export * from "./cash-entries.js";
+export * from "./sales-returns.js";
+export * from "./claims.js";

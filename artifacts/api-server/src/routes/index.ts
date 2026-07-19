@@ -33,6 +33,8 @@ import stockAdjustmentsRouter from "./stock-adjustments.js";
 import remindersRouter from "./reminders.js";
 import monthsRouter from "./months.js";
 import repairLedgerRouter from "./repair-ledger.js";
+import salesReturnsRouter from "./sales-returns.js";
+import claimsRouter from "./claims.js";
 import { authenticate, requirePermission } from "../lib/auth-middleware.js";
 
 const router: IRouter = Router();
@@ -67,6 +69,8 @@ router.use("/products", productsRouter);
 router.use("/categories", categoriesRouter);
 router.use("/brands", brandsRouter);
 router.use("/sales", salesRouter);
+router.use("/sales-returns", salesReturnsRouter);
+router.use("/claims", claimsRouter);
 router.use("/purchases", purchasesRouter);
 router.use("/customers", customersRouter);
 router.use("/customers", requirePermission("customers"), priceHistoryRouter);

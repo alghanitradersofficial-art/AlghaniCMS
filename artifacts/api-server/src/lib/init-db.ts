@@ -327,6 +327,54 @@ export async function initializeDatabase() {
       );
       CREATE INDEX IF NOT EXISTS financial_period_balances_period_idx ON financial_period_balances (period_id, balance_type);
 
+      -- Sale Returns: customer gives back a product they didn't like (not damaged)
+      CREATE TABLE IF NOT EXISTS sales_returns (
+        id serial PRIMARY KEY,
+        sale_id integer,
+        invoice_number text,
+        customer_id integer,
+        customer_name text NOT NULL,
+        items jsonb NOT NULL DEFAULT '[]'::jsonb,
+        subtotal numeric(12, 2) NOT NULL,
+        total numeric(12, 2) NOT NULL,
+        reason text,
+        notes text,
+        return_date timestamp with time zone NOT NULL DEFAULT NOW(),
+        created_by_user_id integer,
+        created_at timestamp with time zone NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS sales_returns_sale_idx ON sales_returns (sale_id);
+      CREATE INDEX IF NOT EXISTS sales_returns_customer_idx ON sales_returns (customer_id, return_date);
+
+      -- Claims: full damaged-product lifecycle (customer -> us -> supplier -> back)
+      CREATE TABLE IF NOT EXISTS claims (
+        id serial PRIMARY KEY,
+        sale_id integer,
+        invoice_number text,
+        customer_id integer,
+        customer_name text NOT NULL,
+        product_id integer NOT NULL,
+        product_name text NOT NULL,
+        quantity integer NOT NULL DEFAULT 1,
+        unit_price numeric(12, 2) NOT NULL DEFAULT 0,
+        total_value numeric(12, 2) NOT NULL DEFAULT 0,
+        supplier_id integer,
+        supplier_name text,
+        status text NOT NULL DEFAULT 'with_us',
+        resolution_type text,
+        reason text,
+        notes text,
+        received_at timestamp with time zone NOT NULL DEFAULT NOW(),
+        sent_to_supplier_at timestamp with time zone,
+        resolved_at timestamp with time zone,
+        returned_to_customer_at timestamp with time zone,
+        created_by_user_id integer,
+        created_at timestamp with time zone NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS claims_customer_idx ON claims (customer_id, received_at);
+      CREATE INDEX IF NOT EXISTS claims_supplier_idx ON claims (supplier_id, received_at);
+      CREATE INDEX IF NOT EXISTS claims_status_idx ON claims (status);
+
       CREATE TABLE IF NOT EXISTS financial_period_audit_logs (
         id serial PRIMARY KEY,
         period_id integer NOT NULL,
