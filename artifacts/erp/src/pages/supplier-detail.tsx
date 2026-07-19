@@ -63,16 +63,19 @@ export default function SupplierDetail() {
   const productsQuery = useQuery({
     queryKey: ["supplier-products", supplierId],
     queryFn: () => apiGet<SupplierProduct[]>(`/api/suppliers/${supplierId}/products`),
+    enabled: !!supplier && supplierId > 0,
   });
 
   const ledgerQuery = useQuery({
     queryKey: ["supplier-ledger", supplierId],
     queryFn: () => apiGet<SupplierLedgerResponse>(`/api/suppliers/${supplierId}/ledger`),
+    enabled: !!supplier && supplierId > 0,
   });
 
   const purchasesQuery = useQuery({
     queryKey: ["supplier-purchases", supplierId],
     queryFn: () => apiGet<PurchaseRow[]>(`/api/suppliers/${supplierId}/purchases`),
+    enabled: !!supplier && supplierId > 0,
   });
 
   const allProductsQuery = useQuery({
@@ -169,7 +172,7 @@ export default function SupplierDetail() {
 
           {/* Ledger tab */}
           <TabsContent value="ledger" className="space-y-4 mt-4">
-            <LedgerTab supplierId={supplierId} data={ledgerQuery.data} isLoading={ledgerQuery.isLoading} onChanged={invalidateAll} />
+            <LedgerTab supplierId={supplierId} data={ledgerQuery.data} isLoading={ledgerQuery.isLoading} error={ledgerQuery.error} onChanged={invalidateAll} />
           </TabsContent>
 
           {/* Purchase history tab */}
@@ -249,13 +252,27 @@ export default function SupplierDetail() {
   );
 }
 
-function LedgerTab({ supplierId, data, isLoading, onChanged }: { supplierId: number; data?: SupplierLedgerResponse; isLoading: boolean; onChanged: () => void }) {
+function LedgerTab({ supplierId, data, isLoading, error, onChanged }: { supplierId: number; data?: SupplierLedgerResponse; isLoading: boolean; error?: Error | null; onChanged: () => void }) {
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<LedgerEntry | null>(null);
 
   if (isLoading) return <SectionLoading label="Loading ledger" />;
-  if (!data) return null;
+  
+  if (error) {
+    return (
+      <Card className="border-destructive/50 bg-destructive/5">
+        <CardContent className="p-6 text-center">
+          <p className="text-sm text-destructive font-medium">Failed to load ledger: {error.message}</p>
+          <Button size="sm" variant="outline" onClick={onChanged} className="mt-3 gap-1.5">
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  if (!data) return <SectionLoading label="Loading ledger" />;
 
   const handleDelete = async (entry: LedgerEntry) => {
     try {
