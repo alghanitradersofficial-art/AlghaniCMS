@@ -398,27 +398,27 @@ export declare const claimsTable: import("drizzle-orm/pg-core").PgTableWithColum
     dialect: "pg";
 }>;
 export declare const insertClaimSchema: z.ZodObject<{
-    saleId: z.ZodOptional<z.ZodNullable<z.ZodInt>>;
+    costPrice: z.ZodOptional<z.ZodString>;
+    notes: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     invoiceNumber: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     customerId: z.ZodOptional<z.ZodNullable<z.ZodInt>>;
     customerName: z.ZodString;
-    productId: z.ZodInt;
-    productName: z.ZodString;
-    quantity: z.ZodOptional<z.ZodInt>;
-    unitPrice: z.ZodOptional<z.ZodString>;
-    totalValue: z.ZodOptional<z.ZodString>;
-    costPrice: z.ZodOptional<z.ZodString>;
+    status: z.ZodOptional<z.ZodString>;
     supplierId: z.ZodOptional<z.ZodNullable<z.ZodInt>>;
     supplierName: z.ZodOptional<z.ZodNullable<z.ZodString>>;
-    status: z.ZodOptional<z.ZodString>;
-    resolutionType: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    createdByUserId: z.ZodOptional<z.ZodNullable<z.ZodInt>>;
+    productId: z.ZodInt;
+    productName: z.ZodString;
+    saleId: z.ZodOptional<z.ZodNullable<z.ZodInt>>;
+    quantity: z.ZodOptional<z.ZodInt>;
+    unitPrice: z.ZodOptional<z.ZodString>;
     reason: z.ZodOptional<z.ZodNullable<z.ZodString>>;
-    notes: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    totalValue: z.ZodOptional<z.ZodString>;
+    resolutionType: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     receivedAt: z.ZodOptional<z.ZodDate>;
     sentToSupplierAt: z.ZodOptional<z.ZodNullable<z.ZodDate>>;
     resolvedAt: z.ZodOptional<z.ZodNullable<z.ZodDate>>;
     returnedToCustomerAt: z.ZodOptional<z.ZodNullable<z.ZodDate>>;
-    createdByUserId: z.ZodOptional<z.ZodNullable<z.ZodInt>>;
 }, {
     out: {};
     in: {};

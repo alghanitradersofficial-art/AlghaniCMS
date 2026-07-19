@@ -1190,14 +1190,40 @@ export declare const UpdateSaleBody: zod.ZodObject<{
     status: zod.ZodOptional<zod.ZodEnum<["pending", "completed", "cancelled"]>>;
     discount: zod.ZodOptional<zod.ZodNumber>;
     notes: zod.ZodOptional<zod.ZodString>;
+    items: zod.ZodOptional<zod.ZodArray<zod.ZodObject<{
+        productId: zod.ZodNumber;
+        quantity: zod.ZodNumber;
+        unitPrice: zod.ZodNumber;
+    }, "strip", zod.ZodTypeAny, {
+        productId: number;
+        quantity: number;
+        unitPrice: number;
+    }, {
+        productId: number;
+        quantity: number;
+        unitPrice: number;
+    }>, "many">>;
+    saleDate: zod.ZodOptional<zod.ZodUnion<[zod.ZodString, zod.ZodString]>>;
 }, "strip", zod.ZodTypeAny, {
     status?: "pending" | "completed" | "cancelled" | undefined;
     discount?: number | undefined;
     notes?: string | undefined;
+    items?: {
+        productId: number;
+        quantity: number;
+        unitPrice: number;
+    }[] | undefined;
+    saleDate?: string | undefined;
 }, {
     status?: "pending" | "completed" | "cancelled" | undefined;
     discount?: number | undefined;
     notes?: string | undefined;
+    items?: {
+        productId: number;
+        quantity: number;
+        unitPrice: number;
+    }[] | undefined;
+    saleDate?: string | undefined;
 }>;
 export declare const UpdateSaleResponse: zod.ZodObject<{
     id: zod.ZodNumber;

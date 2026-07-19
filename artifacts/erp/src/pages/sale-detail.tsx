@@ -142,6 +142,10 @@ export default function SaleDetail() {
                 <div className="mt-2 font-medium">{sale.invoiceNumber}</div>
               </div>
               <div>
+                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Invoice Number</div>
+                <div className="mt-2 font-medium">{sale.invoiceNumber}</div>
+              </div>
+              <div>
                 <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Date</div>
                 <div className="mt-2 font-medium">{new Date(((sale as any).saleDate || sale.createdAt)).toLocaleDateString()}</div>
               </div>
@@ -247,7 +251,7 @@ export default function SaleDetail() {
                     </div>
                   </div>
                   {editExpandedRow === idx && (
-                    <PriceHistoryPanel customerId={sale?.customerId ?? undefined} productId={item.productId} proposedPrice={item.unitPrice} />
+                    <PriceHistoryPanel customerId={sale?.customerId == null ? undefined : sale.customerId} productId={item.productId} proposedPrice={item.unitPrice} />
                   )}
                 </div>
               ))}

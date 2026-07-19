@@ -54,6 +54,7 @@ export default function Sales() {
   const [open, setOpen] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerId, setCustomerId] = useState<number | undefined>(undefined);
+  const [invoiceNumber, setInvoiceNumber] = useState("");
   const [discount, setDiscount] = useState("0");
   const [notes, setNotes] = useState("");
   const [saleDate, setSaleDate] = useState(new Date().toISOString().slice(0, 10));
@@ -66,6 +67,7 @@ export default function Sales() {
   const [editSaleStatus, setEditSaleStatus] = useState<"pending" | "completed" | "cancelled">("pending");
   const [editSaleNotes, setEditSaleNotes] = useState("");
   const [editSaleItems, setEditSaleItems] = useState<LineItem[]>([]);
+  const [editSaleInvoiceNumber, setEditSaleInvoiceNumber] = useState("");
   const [editSaleDiscount, setEditSaleDiscount] = useState("0");
   const [editSaleDate, setEditSaleDate] = useState("");
   const [editExpandedRow, setEditExpandedRow] = useState<number | null>(null);
@@ -111,7 +113,7 @@ export default function Sales() {
   };
 
   const openNew = () => {
-    setCustomerName(""); setCustomerId(undefined); setDiscount("0"); setNotes(""); setSaleDate(new Date().toISOString().slice(0, 10)); setAmountReceived("0"); setPaymentMethod("cash"); setItems([]); setEditingSale(null); setExpandedRow(null); setOpen(true);
+    setCustomerName(""); setCustomerId(undefined); setInvoiceNumber(""); setDiscount("0"); setNotes(""); setSaleDate(new Date().toISOString().slice(0, 10)); setAmountReceived("0"); setPaymentMethod("cash"); setItems([]); setEditingSale(null); setExpandedRow(null); setOpen(true);
   };
 
   const addItem = () => {
@@ -163,6 +165,7 @@ export default function Sales() {
       data: {
         customerId,
         customerName,
+        invoiceNumber: invoiceNumber || undefined,
         discount: parseFloat(discount || "0"),
         notes: notes || undefined,
         items: items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
@@ -189,6 +192,7 @@ export default function Sales() {
     setEditingSale(sale);
     setEditSaleStatus(sale.status);
     setEditSaleNotes(sale.notes || "");
+    setEditSaleInvoiceNumber(sale.invoiceNumber || "");
     setEditSaleItems((sale.items as any[]).map(i => ({ productId: i.productId, productName: i.productName, quantity: i.quantity, unitPrice: i.unitPrice })) || []);
     setEditSaleDiscount(String(sale.discount || "0"));
     setEditSaleDate(((sale as any).saleDate || sale.createdAt).toISOString().slice(0, 10));
@@ -234,6 +238,7 @@ export default function Sales() {
         data: { 
           status: editSaleStatus, 
           notes: editSaleNotes || undefined,
+          invoiceNumber: editSaleInvoiceNumber || undefined,
           discount: parseFloat(editSaleDiscount || "0"),
           items: editSaleItems.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
           saleDate: new Date(editSaleDate).toISOString(),
@@ -431,6 +436,11 @@ export default function Sales() {
           <DialogHeader><DialogTitle>New Sale Order</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Invoice Number</Label>
+              <Input value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)} className="bg-background/50 border-border" placeholder="INV-001" />
+            </div>
+
+            <div className="space-y-1">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">Customer *</Label>
               <Select
                 value={customerId ? String(customerId) : customerName ? "__walkin__" : ""}
@@ -552,6 +562,11 @@ export default function Sales() {
                 <p className="font-semibold">{editingSale?.customerName}</p>
               </div>
 
+              <div className="space-y-1">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Invoice Number</Label>
+                <Input value={editSaleInvoiceNumber} onChange={e => setEditSaleInvoiceNumber(e.target.value)} className="bg-background/50 border-border" placeholder="INV-001" />
+              </div>
+
               {/* Line Items */}
               <div className="space-y-2">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -583,7 +598,7 @@ export default function Sales() {
                       </div>
                     </div>
                     {editExpandedRow === idx && (
-                      <PriceHistoryPanel customerId={editingSale?.customerId ?? undefined} productId={item.productId} proposedPrice={item.unitPrice} />
+                      <PriceHistoryPanel customerId={editingSale?.customerId == null ? undefined : editingSale.customerId} productId={item.productId} proposedPrice={item.unitPrice} />
                     )}
                   </div>
                 ))}
