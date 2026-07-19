@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useGetSuppliers, useCreateSupplier, useUpdateSupplier, useDeleteSupplier, getGetSuppliersQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, UserSquare, ChevronRight } from "lucide-react";
+import { Plus, Search, Edit, Trash2, UserSquare, ChevronRight, Wallet } from "lucide-react";
 import Confirm from "@/components/ui/confirm";
 import { Link } from "wouter";
 
@@ -85,6 +85,9 @@ export default function Suppliers() {
                         <td className="px-4 py-3 text-muted-foreground">{s.city || "—"}</td>
                         <td className="px-4 py-3 text-center">
                           <div className="flex gap-2 justify-center">
+                            <Link href={`/suppliers/${s.id}?tab=ledger`}>
+                              <Button size="sm" variant="ghost" className="hover:bg-primary/10 hover:text-primary w-full sm:w-8 h-8 p-0" title="Khata (Ledger)"><Wallet className="w-4 h-4" /></Button>
+                            </Link>
                             <Link href={`/suppliers/${s.id}`}>
                               <Button size="sm" variant="ghost" className="hover:bg-accent w-full sm:w-8 h-8 p-0"><ChevronRight className="w-4 h-4" /></Button>
                             </Link>

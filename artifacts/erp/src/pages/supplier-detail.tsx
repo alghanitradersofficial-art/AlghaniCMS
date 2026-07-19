@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useSearch } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,6 +49,13 @@ export default function SupplierDetail() {
 
   const { data: suppliers } = useGetSuppliers({});
   const supplier = suppliers?.find((s) => s.id === supplierId);
+
+  // Deep-linkable tabs — e.g. a "?tab=ledger" quick-link from the suppliers
+  // list can land directly on the Ledger tab instead of always Products.
+  const searchString = useSearch();
+  const requestedTab = new URLSearchParams(searchString).get("tab");
+  const initialTab = requestedTab === "ledger" || requestedTab === "purchases" ? requestedTab : "products";
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -118,7 +125,7 @@ export default function SupplierDetail() {
           )}
         </div>
 
-        <Tabs defaultValue="products" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList>
             <TabsTrigger value="products" className="gap-1.5"><Package className="w-3.5 h-3.5" /> Products</TabsTrigger>
             <TabsTrigger value="ledger" className="gap-1.5"><Receipt className="w-3.5 h-3.5" /> Ledger</TabsTrigger>
