@@ -18,8 +18,8 @@ export async function listPurchases(params: Record<string, any>) {
   if (search) conditions.push(sql`supplier_name ILIKE ${`%${search}%`}`);
   if (status) conditions.push(sql`status = ${status}`);
 
-  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(purchasesTable).where(conditions.length ? sql`${sql.join(conditions, ' AND ')}` : undefined as any);
-  const rows = await db.select().from(purchasesTable).where(conditions.length ? sql`${sql.join(conditions, ' AND ')}` : undefined as any).orderBy(sql`${purchasesTable.createdAt} DESC`).limit(limit).offset(offset);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(purchasesTable).where(conditions.length ? sql`${sql.join(conditions, sql` AND `)}` : undefined as any);
+  const rows = await db.select().from(purchasesTable).where(conditions.length ? sql`${sql.join(conditions, sql` AND `)}` : undefined as any).orderBy(sql`${purchasesTable.createdAt} DESC`).limit(limit).offset(offset);
   return { data: rows.map((r) => r), total: Number(count), page, limit };
 }
 

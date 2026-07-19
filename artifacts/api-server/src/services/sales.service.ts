@@ -76,8 +76,8 @@ export async function listSales(params: Record<string, any>) {
     conditions.push(sql`COALESCE(sale_date, created_at) <= ${endOfDay}`);
   }
 
-  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(salesTable).where(conditions.length ? sql`${sql.join(conditions, ' AND ')}` : undefined as any);
-  const rows = await db.select().from(salesTable).where(conditions.length ? sql`${sql.join(conditions, ' AND ')}` : undefined as any).orderBy(sql`${salesTable.createdAt} DESC`).limit(limit).offset(offset);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(salesTable).where(conditions.length ? sql`${sql.join(conditions, sql` AND `)}` : undefined as any);
+  const rows = await db.select().from(salesTable).where(conditions.length ? sql`${sql.join(conditions, sql` AND `)}` : undefined as any).orderBy(sql`${salesTable.createdAt} DESC`).limit(limit).offset(offset);
   return { data: rows.map((r) => r), total: Number(count), page, limit };
 }
 
@@ -113,7 +113,7 @@ export async function getSalesSummary(params: Record<string, any>) {
       totalReceived: sql<string>`COALESCE(SUM(${salesTable.amountPaid}), 0)`,
     })
     .from(salesTable)
-    .where(conditions.length ? sql`${sql.join(conditions, ' AND ')}` : undefined as any);
+    .where(conditions.length ? sql`${sql.join(conditions, sql` AND `)}` : undefined as any);
 
   return {
     count: Number(row?.count ?? 0),
