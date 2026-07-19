@@ -173,6 +173,23 @@ export declare const claimsTable: import("drizzle-orm/pg-core").PgTableWithColum
             identity: undefined;
             generated: undefined;
         }, {}, {}>;
+        costPrice: import("drizzle-orm/pg-core").PgColumn<{
+            name: "cost_price";
+            tableName: "claims";
+            dataType: "string";
+            columnType: "PgNumeric";
+            data: string;
+            driverParam: string;
+            notNull: true;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
         supplierId: import("drizzle-orm/pg-core").PgColumn<{
             name: "supplier_id";
             tableName: "claims";
@@ -381,26 +398,27 @@ export declare const claimsTable: import("drizzle-orm/pg-core").PgTableWithColum
     dialect: "pg";
 }>;
 export declare const insertClaimSchema: z.ZodObject<{
-    notes: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    saleId: z.ZodOptional<z.ZodNullable<z.ZodInt>>;
     invoiceNumber: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     customerId: z.ZodOptional<z.ZodNullable<z.ZodInt>>;
     customerName: z.ZodString;
-    status: z.ZodOptional<z.ZodString>;
-    supplierId: z.ZodOptional<z.ZodNullable<z.ZodInt>>;
-    supplierName: z.ZodOptional<z.ZodNullable<z.ZodString>>;
-    createdByUserId: z.ZodOptional<z.ZodNullable<z.ZodInt>>;
     productId: z.ZodInt;
     productName: z.ZodString;
-    saleId: z.ZodOptional<z.ZodNullable<z.ZodInt>>;
     quantity: z.ZodOptional<z.ZodInt>;
     unitPrice: z.ZodOptional<z.ZodString>;
-    reason: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     totalValue: z.ZodOptional<z.ZodString>;
+    costPrice: z.ZodOptional<z.ZodString>;
+    supplierId: z.ZodOptional<z.ZodNullable<z.ZodInt>>;
+    supplierName: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    status: z.ZodOptional<z.ZodString>;
     resolutionType: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    reason: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    notes: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     receivedAt: z.ZodOptional<z.ZodDate>;
     sentToSupplierAt: z.ZodOptional<z.ZodNullable<z.ZodDate>>;
     resolvedAt: z.ZodOptional<z.ZodNullable<z.ZodDate>>;
     returnedToCustomerAt: z.ZodOptional<z.ZodNullable<z.ZodDate>>;
+    createdByUserId: z.ZodOptional<z.ZodNullable<z.ZodInt>>;
 }, {
     out: {};
     in: {};

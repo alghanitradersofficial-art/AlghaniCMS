@@ -13,6 +13,7 @@ function formatClaim(row: any) {
     ...row,
     unitPrice: parseFloat(row.unitPrice),
     totalValue: parseFloat(row.totalValue),
+    costPrice: parseFloat(row.costPrice ?? "0"),
     receivedAt: iso(row.receivedAt),
     sentToSupplierAt: iso(row.sentToSupplierAt),
     resolvedAt: iso(row.resolvedAt),

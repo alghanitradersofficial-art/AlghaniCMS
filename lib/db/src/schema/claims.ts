@@ -35,6 +35,12 @@ export const claimsTable = pgTable("claims", {
   quantity: integer("quantity").notNull().default(1),
   unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull().default("0"),
   totalValue: numeric("total_value", { precision: 12, scale: 2 }).notNull().default("0"),
+  // What we ourselves paid the supplier per unit (product's cost price at
+  // claim time) — this, NOT the customer's unitPrice/totalValue, is what
+  // gets deducted from the supplier's ledger on a "credit" resolution.
+  // The customer was charged/credited at sale price; the supplier owes us
+  // only what we paid them.
+  costPrice: numeric("cost_price", { precision: 12, scale: 2 }).notNull().default("0"),
   supplierId: integer("supplier_id"),
   supplierName: text("supplier_name"),
   status: text("status").notNull().default("with_us"),

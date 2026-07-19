@@ -358,6 +358,7 @@ export async function initializeDatabase() {
         quantity integer NOT NULL DEFAULT 1,
         unit_price numeric(12, 2) NOT NULL DEFAULT 0,
         total_value numeric(12, 2) NOT NULL DEFAULT 0,
+        cost_price numeric(12, 2) NOT NULL DEFAULT 0,
         supplier_id integer,
         supplier_name text,
         status text NOT NULL DEFAULT 'with_us',
@@ -374,6 +375,7 @@ export async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS claims_customer_idx ON claims (customer_id, received_at);
       CREATE INDEX IF NOT EXISTS claims_supplier_idx ON claims (supplier_id, received_at);
       CREATE INDEX IF NOT EXISTS claims_status_idx ON claims (status);
+      ALTER TABLE claims ADD COLUMN IF NOT EXISTS cost_price numeric(12, 2) NOT NULL DEFAULT 0;
 
       CREATE TABLE IF NOT EXISTS financial_period_audit_logs (
         id serial PRIMARY KEY,

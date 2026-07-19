@@ -52,7 +52,7 @@ export async function createClaim(body: any, actorUserId: number | null) {
     sale = existing;
   }
 
-  const [product] = await db.select({ id: productsTable.id, name: productsTable.name, currentStock: productsTable.currentStock }).from(productsTable).where(eq(productsTable.id, body.productId));
+  const [product] = await db.select({ id: productsTable.id, name: productsTable.name, currentStock: productsTable.currentStock, costPrice: productsTable.costPrice }).from(productsTable).where(eq(productsTable.id, body.productId));
   if (!product) throw new ClaimValidationError("Product not found");
 
   const customerId = body.customerId ?? sale?.customerId ?? null;
@@ -98,6 +98,7 @@ export async function createClaim(body: any, actorUserId: number | null) {
       quantity,
       unitPrice: String(body.unitPrice),
       totalValue: String(totalValue),
+      costPrice: String(parseFloat(product.costPrice as string) || 0),
       status: "with_us",
       reason: body.reason ?? null,
       notes: body.notes ?? null,
@@ -156,7 +157,11 @@ export async function resolveClaim(id: number, body: any, actorUserId: number | 
   }
 
   const nextStatus = body.resolutionType === "replacement" ? "resolved_replacement" : "resolved_credit";
-  const totalValue = round2(parseFloat(claim.totalValue as string));
+  // The customer was credited at sale price (claim.totalValue). What we
+  // claim back from the supplier is what we ourselves paid them — the
+  // product's cost price at the time this claim was made — not the sale
+  // price. These two are usually different amounts.
+  const supplierCreditValue = round2(parseFloat(claim.costPrice as string) * claim.quantity);
 
   const updated = await db.transaction(async (tx) => {
     if (body.resolutionType === "replacement") {
@@ -167,7 +172,7 @@ export async function resolveClaim(id: number, body: any, actorUserId: number | 
       await appendSupplierLedgerEntry(tx, {
         supplierId: claim.supplierId!,
         type: "return",
-        amount: -totalValue,
+        amount: -supplierCreditValue,
         description: `Claim credit: ${claim.quantity} x ${claim.productName}${claim.invoiceNumber ? ` (Invoice ${claim.invoiceNumber})` : ""}`,
         createdByUserId: actorUserId,
         entryDate: resolveDate,
@@ -180,7 +185,7 @@ export async function resolveClaim(id: number, body: any, actorUserId: number | 
         partyType: "supplier",
         partyId: claim.supplierId,
         partyName: claim.supplierName,
-        amount: totalValue,
+        amount: supplierCreditValue,
         direction: "credit",
         note: `Claim credit: ${claim.quantity} x ${claim.productName}`,
         createdByUserId: actorUserId,

@@ -41,6 +41,7 @@ type ClaimRow = {
   productName: string;
   quantity: number;
   totalValue: number;
+  costPrice: number;
   supplierId?: number | null;
   supplierName?: string | null;
   status: "with_us" | "sent_to_supplier" | "resolved_replacement" | "resolved_credit" | "returned_to_customer";
@@ -566,7 +567,7 @@ function ResolveClaimDialog({ claim, onClose, onSaved }: {
           <p className="text-xs text-muted-foreground">
             {resolutionType === "replacement"
               ? "A fresh unit comes back into stock. No effect on the supplier's ledger."
-              : `The supplier's ledger is reduced by Rs. ${Number(claim.totalValue).toLocaleString()} (credit in our favor).`}
+              : `The supplier's ledger is reduced by Rs. ${Number((claim.costPrice || 0) * claim.quantity).toLocaleString()} (what we paid them — not the customer sale price of Rs. ${Number(claim.totalValue).toLocaleString()}).`}
           </p>
           <div className="space-y-1">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
