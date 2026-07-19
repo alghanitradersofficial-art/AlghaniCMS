@@ -411,6 +411,7 @@ export const GetSalesResponse = zod.object({
 export const CreateSaleBody = zod.object({
   "customerId": zod.number().nullish(),
   "customerName": zod.string(),
+  "invoiceNumber": zod.string().optional(),
   "status": zod.enum(['pending', 'completed', 'cancelled']).optional(),
   "discount": zod.number().optional(),
   "notes": zod.string().optional(),
@@ -479,6 +480,7 @@ export const UpdateSaleParams = zod.object({
 
 export const UpdateSaleBody = zod.object({
   "status": zod.enum(['pending', 'completed', 'cancelled']).optional(),
+  "invoiceNumber": zod.string().optional(),
   "discount": zod.number().optional(),
   "notes": zod.string().optional(),
   "items": zod.array(zod.object({

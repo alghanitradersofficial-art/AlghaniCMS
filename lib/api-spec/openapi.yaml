@@ -1289,6 +1289,8 @@ components:
           type: ["integer", "null"]
         customerName:
           type: string
+        invoiceNumber:
+          type: string
         status:
           type: string
           enum: [pending, completed, cancelled]
@@ -1307,6 +1309,8 @@ components:
         status:
           type: string
           enum: [pending, completed, cancelled]
+        invoiceNumber:
+          type: string
         discount:
           type: number
         notes:

@@ -156,7 +156,12 @@ export async function createSale(body: any, actorUserId: number | null) {
 
   const subtotal = round2(subtotalRaw);
   const total = round2(subtotal - discount);
-  const invoiceNumber = `INV-${Date.now()}`;
+  // Respect the invoice number the user typed on the New Sale form; only
+  // fall back to an auto-generated one when they left it blank. Previously
+  // this always overwrote whatever was typed, so the saved sale would show
+  // a different (timestamp-based) invoice number than what was entered.
+  const trimmedInvoiceNumber = typeof body.invoiceNumber === "string" ? body.invoiceNumber.trim() : "";
+  const invoiceNumber = trimmedInvoiceNumber || `INV-${Date.now()}`;
   const invoiceDate = body.saleDate ? new Date(body.saleDate) : new Date();
 
   if (await isDateInClosedPeriod(invoiceDate)) {
@@ -316,6 +321,10 @@ export async function updateSale(id: number, body: any, actorUserId: number | nu
 
   const updateData: Record<string, unknown> = {};
   if (body.status !== undefined) updateData.status = body.status;
+  if (body.invoiceNumber !== undefined) {
+    const trimmed = typeof body.invoiceNumber === "string" ? body.invoiceNumber.trim() : "";
+    if (trimmed) updateData.invoiceNumber = trimmed;
+  }
   if (body.discount !== undefined) updateData.discount = String(body.discount);
   if (body.notes !== undefined) updateData.notes = body.notes;
   if (body.saleDate !== undefined) updateData.saleDate = new Date(body.saleDate);

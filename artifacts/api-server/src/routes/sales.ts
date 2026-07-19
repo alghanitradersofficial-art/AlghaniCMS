@@ -69,6 +69,9 @@ router.post("/", async (req, res) => {
     if (error instanceof MonthClosedError) {
       return res.status(409).json({ error: error.message });
     }
+    if ((error as NodeJS.ErrnoException & { code?: string }).code === "23505") {
+      return res.status(409).json({ error: `Invoice number "${(req.body as any)?.invoiceNumber}" is already in use — please choose a different one.` });
+    }
     return res.status(500).json({ error: "Failed to create sale" });
   }
 });
@@ -112,6 +115,9 @@ router.patch("/:id", async (req, res) => {
     }
     if (error instanceof Error && error.message.startsWith("Cannot void")) {
       return res.status(409).json({ error: error.message });
+    }
+    if ((error as NodeJS.ErrnoException & { code?: string }).code === "23505") {
+      return res.status(409).json({ error: `Invoice number "${(req.body as any)?.invoiceNumber}" is already in use — please choose a different one.` });
     }
     return res.status(500).json({ error: "Failed to update sale" });
   }

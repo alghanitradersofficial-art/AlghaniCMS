@@ -9,6 +9,7 @@ import type { SaleUpdateStatus } from './saleUpdateStatus';
 
 export interface SaleUpdate {
   status?: SaleUpdateStatus;
+  invoiceNumber?: string;
   discount?: number;
   notes?: string;
 }

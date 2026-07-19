@@ -12,6 +12,7 @@ export interface SaleInput {
   /** @nullable */
   customerId?: number | null;
   customerName: string;
+  invoiceNumber?: string;
   status?: SaleInputStatus;
   discount?: number;
   notes?: string;
