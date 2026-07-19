@@ -65,6 +65,10 @@ export default function Sales() {
   const [editingSale, setEditingSale] = useState<NonNullable<typeof data>['data'][0] | null>(null);
   const [editSaleStatus, setEditSaleStatus] = useState<"pending" | "completed" | "cancelled">("pending");
   const [editSaleNotes, setEditSaleNotes] = useState("");
+  const [editSaleItems, setEditSaleItems] = useState<LineItem[]>([]);
+  const [editSaleDiscount, setEditSaleDiscount] = useState("0");
+  const [editSaleDate, setEditSaleDate] = useState("");
+  const [editExpandedRow, setEditExpandedRow] = useState<number | null>(null);
 
   const range = periodRange(periodTab, customFrom, customTo);
   const salesQueryParams = {
@@ -185,15 +189,62 @@ export default function Sales() {
     setEditingSale(sale);
     setEditSaleStatus(sale.status);
     setEditSaleNotes(sale.notes || "");
+    setEditSaleItems((sale.items as any[]).map(i => ({ productId: i.productId, productName: i.productName, quantity: i.quantity, unitPrice: i.unitPrice })) || []);
+    setEditSaleDiscount(String(sale.discount || "0"));
+    setEditSaleDate(((sale as any).saleDate || sale.createdAt).toISOString().slice(0, 10));
+    setEditExpandedRow(null);
     setEditSaleOpen(true);
   };
 
-  const handleSaveSaleEdit = async () => {
+  const updateEditItem = (idx: number, field: keyof LineItem, val: string | number) => {
+    setEditSaleItems(prev => {
+      const next = [...prev];
+      if (field === "productId") {
+        const product = products?.data.find(p => p.id === Number(val));
+        if (product) {
+          next[idx] = { ...next[idx], productId: product.id, productName: product.name, unitPrice: 0 };
+          (async () => {
+            try {
+              if (editingSale?.customerId) {
+                const suggestion = await apiGet<any>(`/api/customers/${editingSale.customerId}/price-suggestion/${product.id}`);
+                const suggested = suggestion.previousCustomerPrice ?? suggestion.suggestedSellingPrice ?? 0;
+                setEditSaleItems(cur => {
+                  const n = [...cur];
+                  n[idx] = { ...n[idx], unitPrice: suggested };
+                  return n;
+                });
+              }
+            } catch (e) {
+              // ignore
+            }
+          })();
+        }
+      } else {
+        next[idx] = { ...next[idx], [field]: Number(val) };
+      }
+      return next;
+    });
+  };
+
+  const handleSaveFullEdit = async () => {
     if (!editingSale) return;
-    await updateSale.mutateAsync({ id: editingSale.id, data: { status: editSaleStatus, notes: editSaleNotes || undefined } });
-    invalidate();
-    setEditSaleOpen(false);
-    setEditingSale(null);
+    try {
+      await updateSale.mutateAsync({ 
+        id: editingSale.id, 
+        data: { 
+          status: editSaleStatus, 
+          notes: editSaleNotes || undefined,
+          discount: parseFloat(editSaleDiscount || "0"),
+          items: editSaleItems.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
+          saleDate: new Date(editSaleDate).toISOString(),
+        } as any
+      });
+      invalidate();
+      setEditSaleOpen(false);
+      setEditingSale(null);
+    } catch (e: any) {
+      console.error("Save failed", e);
+    }
   };
 
   const handleDelete = async (id: number) => {
@@ -492,28 +543,91 @@ export default function Sales() {
       </Dialog>
 
         <Dialog open={editSaleOpen} onOpenChange={(open) => { setEditSaleOpen(open); if (!open) setEditingSale(null); }}>
-          <DialogContent className="bg-card border-border max-w-md">
-            <DialogHeader><DialogTitle>Edit Sale</DialogTitle></DialogHeader>
-            <div className="grid gap-3 py-2">
-              <div className="space-y-1">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Status</Label>
-                <Select value={editSaleStatus} onValueChange={v => setEditSaleStatus(v as "pending" | "completed" | "cancelled") }>
-                  <SelectTrigger className="bg-background/50 border-border"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
+          <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border">
+            <DialogHeader><DialogTitle>Edit Invoice - {editingSale?.invoiceNumber}</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-2">
+              {/* Customer info - read-only in edit mode */}
+              <div className="rounded-2xl border border-border/60 bg-background/60 p-3">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Customer</p>
+                <p className="font-semibold">{editingSale?.customerName}</p>
               </div>
+
+              {/* Line Items */}
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Line Items</Label>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    if (products?.data[0]) {
+                      const p = products.data[0];
+                      setEditSaleItems(prev => [...prev, { productId: p.id, productName: p.name, quantity: 1, unitPrice: 0 }]);
+                    }
+                  }} className="h-7 gap-1 border-border text-xs"><Plus className="h-3 w-3" /> Add Item</Button>
+                </div>
+                {editSaleItems.map((item, idx) => (
+                  <div key={idx} className="space-y-2 rounded-2xl border border-border/60 bg-background/60 p-2 sm:p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Select value={String(item.productId)} onValueChange={v => updateEditItem(idx, "productId", v)}>
+                        <SelectTrigger className="h-9 flex-1 border-border bg-background/50 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-card border-border">
+                          {products?.data.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+                        <Input type="number" value={item.quantity} onChange={e => updateEditItem(idx, "quantity", e.target.value)} className="h-9 w-full border-border bg-background/50 text-xs sm:w-20" placeholder="Qty" min={1} />
+                        <Input type="number" value={item.unitPrice} onChange={e => updateEditItem(idx, "unitPrice", e.target.value)} className="h-9 w-full border-border bg-background/50 text-xs sm:w-28" placeholder="Price" />
+                      </div>
+                      <div className="flex items-center justify-between gap-2 sm:ml-auto">
+                        <span className="w-20 text-right text-xs text-muted-foreground">Rs. {(item.quantity * item.unitPrice).toLocaleString()}</span>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setEditExpandedRow(prev => prev === idx ? null : idx)} className={`h-8 w-8 p-0 ${editExpandedRow === idx ? "bg-primary/10 text-primary" : "hover:bg-accent"}`} title="Price history & suggestion"><Info className="h-4 w-4" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => { setEditSaleItems(prev => prev.filter((_, i) => i !== idx)); if (editExpandedRow === idx) setEditExpandedRow(null); }} className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><X className="h-4 w-4" /></Button>
+                      </div>
+                    </div>
+                    {editExpandedRow === idx && (
+                      <PriceHistoryPanel customerId={editingSale?.customerId} productId={item.productId} proposedPrice={item.unitPrice} />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Discount, Date, Status */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Discount (Rs.)</Label>
+                  <Input type="number" value={editSaleDiscount} onChange={e => setEditSaleDiscount(e.target.value)} className="bg-background/50 border-border" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Invoice Date</Label>
+                  <Input type="date" value={editSaleDate} onChange={e => setEditSaleDate(e.target.value)} className="bg-background/50 border-border" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Status</Label>
+                  <Select value={editSaleStatus} onValueChange={v => setEditSaleStatus(v as "pending" | "completed" | "cancelled") }>
+                    <SelectTrigger className="bg-background/50 border-border"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-border">
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Notes */}
               <div className="space-y-1">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
                 <Input value={editSaleNotes} onChange={e => setEditSaleNotes(e.target.value)} className="bg-background/50 border-border" />
               </div>
+
+              {/* Totals */}
+              <div className="border-t border-border pt-3 text-right space-y-1">
+                <p className="text-sm text-muted-foreground">Subtotal: Rs. {editSaleItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0).toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground">Discount: Rs. {parseFloat(editSaleDiscount || "0").toLocaleString()}</p>
+                <p className="text-lg font-bold text-secondary">Total: Rs. {(editSaleItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0) - parseFloat(editSaleDiscount || "0")).toLocaleString()}</p>
+              </div>
             </div>
             <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => { setEditSaleOpen(false); setEditingSale(null); }} className="border-border">Cancel</Button>
-              <Button onClick={handleSaveSaleEdit} disabled={updateSale.isPending} className="bg-primary hover:bg-primary/90">Save</Button>
+              <Button onClick={handleSaveFullEdit} disabled={updateSale.isPending || editSaleItems.length === 0} className="bg-primary hover:bg-primary/90">Save Changes</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

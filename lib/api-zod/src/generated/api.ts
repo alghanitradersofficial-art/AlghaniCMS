@@ -480,7 +480,13 @@ export const UpdateSaleParams = zod.object({
 export const UpdateSaleBody = zod.object({
   "status": zod.enum(['pending', 'completed', 'cancelled']).optional(),
   "discount": zod.number().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "items": zod.array(zod.object({
+    "productId": zod.number().int().positive(),
+    "quantity": zod.number().int().positive(),
+    "unitPrice": zod.number()
+  })).optional(),
+  "saleDate": zod.string().datetime().or(zod.string().regex(/^\d{4}-\d{2}-\d{2}T/)).optional()
 })
 
 export const UpdateSaleResponse = zod.object({

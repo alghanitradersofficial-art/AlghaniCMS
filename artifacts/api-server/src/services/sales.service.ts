@@ -318,6 +318,55 @@ export async function updateSale(id: number, body: any, actorUserId: number | nu
   if (body.status !== undefined) updateData.status = body.status;
   if (body.discount !== undefined) updateData.discount = String(body.discount);
   if (body.notes !== undefined) updateData.notes = body.notes;
+  if (body.saleDate !== undefined) updateData.saleDate = new Date(body.saleDate);
+
+  // Handle items editing - recalculate stock if items change
+  if (body.items !== undefined) {
+    const oldItems = (existingSale.items as Array<any>) || [];
+    const newItems = body.items || [];
+    
+    // Check stock availability for new/updated items (comparing quantities)
+    const oldQuantityByProduct = new Map<number, number>();
+    for (const item of oldItems) {
+      oldQuantityByProduct.set(Number(item.productId), (oldQuantityByProduct.get(Number(item.productId)) ?? 0) + Number(item.quantity));
+    }
+    
+    const newQuantityByProduct = new Map<number, number>();
+    for (const item of newItems) {
+      newQuantityByProduct.set(Number(item.productId), (newQuantityByProduct.get(Number(item.productId)) ?? 0) + Number(item.quantity));
+    }
+
+    // Only check stock if the sale is already completed (pending sales don't affect stock)
+    if (existingSale.status === "completed") {
+      const productIds = Array.from(new Set([...oldQuantityByProduct.keys(), ...newQuantityByProduct.keys()]));
+      const products = productIds.length
+        ? await db.select({ id: productsTable.id, currentStock: productsTable.currentStock, name: productsTable.name, sku: productsTable.sku }).from(productsTable).where(inArray(productsTable.id, productIds))
+        : [];
+      
+      const productById = new Map(products.map((p) => ({ ...p, currentStock: Number(p.currentStock), id: Number(p.id) })));
+      
+      // Check if we have enough stock for items being added
+      for (const [productId, newQty] of newQuantityByProduct.entries()) {
+        const oldQty = oldQuantityByProduct.get(productId) || 0;
+        const additionalQty = newQty - oldQty;
+        
+        if (additionalQty > 0) {
+          const product = productById.get(productId);
+          if (product && product.currentStock < additionalQty) {
+            throw new InsufficientStockError(`Insufficient stock for ${product.name || `product #${productId}`}`);
+          }
+        }
+      }
+    }
+
+    // Calculate subtotal and total
+    const subtotal = newItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) * Number(item.unitPrice)), 0);
+    const discount = body.discount !== undefined ? Number(body.discount) : parseFloat(existingSale.discount as string);
+    
+    updateData.items = newItems;
+    updateData.subtotal = String(round2(subtotal));
+    updateData.total = String(round2(subtotal - discount));
+  }
 
   if (
     body.status !== undefined &&
@@ -368,6 +417,41 @@ export async function updateSale(id: number, body: any, actorUserId: number | nu
             amount: parseFloat(existingSale.total as string),
             saleId: existingSale.id,
             description: `Invoice ${existingSale.invoiceNumber} status changed to completed`,
+            createdByUserId: actorUserId,
+          });
+          await recomputeCustomerLedgerRunningBalances(tx, existingSale.customerId);
+        }
+      }
+    }
+
+    // Handle stock adjustments if items were edited while completed
+    if (body.items !== undefined && existingSale.status === "completed") {
+      const oldItems = (existingSale.items as Array<any>) || [];
+      const newItems = body.items || [];
+      
+      // Restore old stock
+      for (const item of oldItems) {
+        await tx.update(productsTable).set({ currentStock: sql`${productsTable.currentStock} + ${item.quantity}` }).where(eq(productsTable.id, item.productId));
+      }
+      
+      // Deduct new stock
+      for (const item of newItems) {
+        await tx.update(productsTable).set({ currentStock: sql`${productsTable.currentStock} - ${item.quantity}` }).where(eq(productsTable.id, item.productId));
+      }
+
+      // Update ledger if customer exists and total changed
+      if (existingSale.customerId) {
+        const oldTotal = parseFloat(existingSale.total as string);
+        const newTotal = parseFloat(updateData.total as string) || oldTotal;
+        const totalDifference = newTotal - oldTotal;
+        
+        if (Math.abs(totalDifference) > 0.01) {
+          await appendLedgerEntry(tx, {
+            customerId: existingSale.customerId,
+            type: "adjustment",
+            amount: totalDifference,
+            saleId: existingSale.id,
+            description: `Invoice ${existingSale.invoiceNumber} items edited (total adjustment)`,
             createdByUserId: actorUserId,
           });
           await recomputeCustomerLedgerRunningBalances(tx, existingSale.customerId);
