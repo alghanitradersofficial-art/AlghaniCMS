@@ -14,8 +14,13 @@ export function getGroqClient(): OpenAI | null {
   return groqClient;
 }
 
-export const GROQ_TEXT_MODEL = "llama-3.1-70b-versatile";
-export const GROQ_VISION_MODEL = "llama-3.2-11b-vision-preview";
+// Groq deprecated llama-3.1-70b-versatile / llama-3.3-70b-versatile and the
+// llama-3.2/llama-4-scout vision-preview models (see
+// https://console.groq.com/docs/deprecations). Using their currently
+// recommended replacements: openai/gpt-oss-120b for text, and the
+// multimodal qwen/qwen3.6-27b for vision.
+export const GROQ_TEXT_MODEL = "openai/gpt-oss-120b";
+export const GROQ_VISION_MODEL = "qwen/qwen3.6-27b";
 
 export async function groqChat(
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,

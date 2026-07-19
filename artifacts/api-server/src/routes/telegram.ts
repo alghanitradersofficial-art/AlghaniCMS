@@ -10,12 +10,19 @@ const router = Router();
 let bot: any = null;
 let botInitialized = false;
 let telegramInitError = "";
+// Tracks the in-flight (or completed) getMe() verification so callers can
+// await readiness instead of racing a boolean flag that only flips after an
+// async round-trip. Without this, the very first request on a fresh
+// serverless cold start could 400 with "Bot not initialized" even though
+// the bot would have worked fine a few hundred ms later.
+let readyPromise: Promise<void> | null = null;
 
 export function initTelegramBot() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     console.log("[Telegram] TELEGRAM_BOT_TOKEN not set — bot disabled");
     telegramInitError = "TELEGRAM_BOT_TOKEN not set";
+    readyPromise = Promise.resolve();
     return;
   }
 
@@ -23,10 +30,11 @@ export function initTelegramBot() {
     bot = new TelegramBot(token, { polling: false });
     botInitialized = false;
 
-    const initializeAsync = async () => {
+    readyPromise = (async () => {
       try {
         const me = await bot.getMe();
         botInitialized = true;
+        telegramInitError = "";
         console.log("[Telegram] Bot initialized as", me.username || me.id);
 
         let pollingErrorCount = 0;
@@ -47,6 +55,9 @@ export function initTelegramBot() {
           }
         });
 
+        // Long-polling only makes sense on a long-running process — skip it
+        // on Vercel's serverless functions. sendMessage() (used by /send and
+        // /test) doesn't need polling at all, so it still works there.
         if (!process.env["VERCEL"]) {
           try {
             bot.startPolling();
@@ -60,24 +71,37 @@ export function initTelegramBot() {
         botInitialized = false;
         console.error("[Telegram] Bot initialization failed:", telegramInitError);
       }
-    };
-
-    initializeAsync();
+    })();
   } catch (e) {
     telegramInitError = (e as any)?.message || String(e);
     bot = null;
     botInitialized = false;
+    readyPromise = Promise.resolve();
     console.error("[Telegram] Failed to initialize bot instance:", telegramInitError);
   }
 }
 
+// Ensures the bot has finished its getMe() verification (or failed trying)
+// before a route proceeds. Re-runs init if it was never started — this
+// covers serverless cold starts where the module-level initTelegramBot()
+// call in app.ts and the actual incoming request can end up in different
+// execution contexts.
+async function ensureBotReady() {
+  if (!readyPromise) {
+    initTelegramBot();
+  }
+  await readyPromise;
+}
+
 // ─── REST ROUTES FOR TELEGRAM ─────────────────────────────────────────────────
-router.get("/status", (req, res) => {
+router.get("/status", async (req, res) => {
+  await ensureBotReady();
   return res.json({ enabled: botInitialized, hasToken: !!process.env.TELEGRAM_BOT_TOKEN, hasChatId: !!process.env.TELEGRAM_CHAT_ID, initError: telegramInitError });
 });
 
 router.post("/send", async (req, res) => {
   try {
+    await ensureBotReady();
     if (!botInitialized) return res.status(400).json({ error: "Telegram bot not initialized. Set TELEGRAM_BOT_TOKEN and ensure the bot token is valid.", detail: telegramInitError });
     const { chatId, message, reportType } = req.body;
     const targetId = chatId || process.env.TELEGRAM_CHAT_ID;
@@ -105,6 +129,7 @@ router.post("/send", async (req, res) => {
 
 router.post("/test", async (req, res) => {
   try {
+    await ensureBotReady();
     if (!botInitialized) return res.status(400).json({ error: "Bot not initialized", detail: telegramInitError });
     const chatId = req.body.chatId || process.env.TELEGRAM_CHAT_ID;
     if (!chatId) return res.status(400).json({ error: "Provide chatId in body or set TELEGRAM_CHAT_ID" });

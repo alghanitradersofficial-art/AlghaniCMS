@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
-import { purchasesTable, productsTable, supplierPaymentsTable, suppliersTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { purchasesTable, productsTable, supplierPaymentsTable, suppliersTable, supplierProductsTable } from "@workspace/db";
+import { eq, and, sql } from "drizzle-orm";
 import { appendSupplierLedgerEntry } from "../lib/supplier-ledger.js";
 import { appendGeneralLedgerEntry } from "../lib/general-ledger.js";
 import { calculateWeightedAverageCost, calculateWeightedAverageCostAfterChange } from "../lib/inventory-accounting.js";
@@ -99,6 +99,31 @@ export async function createPurchase(body: any, actorUserId: number | null) {
         entryDate: purchaseDate,
       });
       void ledgerEntry;
+
+      // Keep the supplier's per-product "Cost Price" (shown on the Supplier
+      // detail page) in sync with what we actually just paid them for each
+      // item on this PO. If a supplier<->product link already exists,
+      // update its cost price; otherwise create one so the link/price shows
+      // up automatically without the user having to add it by hand.
+      for (const item of items) {
+        const [existingLink] = await tx
+          .select({ id: supplierProductsTable.id })
+          .from(supplierProductsTable)
+          .where(and(eq(supplierProductsTable.supplierId, body.supplierId), eq(supplierProductsTable.productId, item.productId)));
+
+        if (existingLink) {
+          await tx.update(supplierProductsTable)
+            .set({ costPrice: String(item.unitCost) })
+            .where(eq(supplierProductsTable.id, existingLink.id));
+        } else {
+          await tx.insert(supplierProductsTable).values({
+            supplierId: body.supplierId,
+            productId: item.productId,
+            costPrice: String(item.unitCost),
+            isPreferred: false,
+          });
+        }
+      }
 
       if (paidNow > 0) {
         const [supplier] = await tx.select().from(suppliersTable).where(eq(suppliersTable.id, body.supplierId));

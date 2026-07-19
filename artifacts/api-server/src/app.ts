@@ -163,15 +163,15 @@ app.use("/api", router);
 // Handle Errors Globally
 app.use(errorHandler);
 
-// Only initialize the Telegram bot loop if we are NOT on Vercel
-if (!process.env["VERCEL"]) {
-  try { 
-    initTelegramBot(); 
-  } catch (e) { 
-    logger.warn("Telegram bot init failed"); 
-  }
-} else {
-  logger.info("Skipping Telegram long-polling on Vercel environment.");
+// Always initialize the bot so REST-triggered sendMessage calls (used by
+// /api/telegram/send and /api/telegram/test) work on Vercel too — only the
+// long-polling loop needs to be skipped there, and initTelegramBot() already
+// does that internally (it only calls bot.startPolling() when
+// process.env["VERCEL"] is not set).
+try {
+  initTelegramBot();
+} catch (e) {
+  logger.warn("Telegram bot init failed");
 }
 
 export default app;

@@ -17,6 +17,31 @@ function getTransporter() {
   return nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
 }
 
+// GET /api/email/status — safe to call in production; never returns actual
+// secret values, only whether each env var is present and, for SMTP_USER,
+// a masked preview so a misconfigured/misspelled account is easy to spot.
+// Useful for confirming env vars actually reached this Vercel project
+// (a common gotcha when a repo has multiple linked Vercel projects, e.g.
+// separate frontend/backend projects, and the vars were added to the
+// wrong one).
+router.get("/status", (req, res) => {
+  const host = process.env.SMTP_HOST || "smtp.gmail.com (default)";
+  const port = process.env.SMTP_PORT || "587 (default)";
+  const user = process.env.SMTP_USER;
+  const maskedUser = user ? `${user.slice(0, 2)}***${user.includes("@") ? user.slice(user.indexOf("@")) : ""}` : null;
+  return res.json({
+    smtpConfigured: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
+    hasSmtpHost: !!process.env.SMTP_HOST,
+    hasSmtpPort: !!process.env.SMTP_PORT,
+    hasSmtpUser: !!process.env.SMTP_USER,
+    hasSmtpPass: !!process.env.SMTP_PASS,
+    hasCeoEmail: !!process.env.CEO_EMAIL,
+    host,
+    port,
+    maskedUser,
+  });
+});
+
 router.post("/send-report", async (req, res) => {
   try {
     const { reportType = "daily-summary", recipients, subject: customSubject } = req.body;
