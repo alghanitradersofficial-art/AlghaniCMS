@@ -89,7 +89,7 @@ export default function Sales() {
     limit: 20,
   } as any;
 
-  const { data, isLoading } = useGetSales(salesQueryParams);
+  const { data, isLoading, refetch: refetchSales } = useGetSales(salesQueryParams);
   const { data: summary } = useQuery({
     queryKey: ["sales-summary", salesQueryParams.search, salesQueryParams.status, range.from, range.to],
     queryFn: () => apiGet<{ count: number; totalAmount: number; totalReceived: number }>(
@@ -117,6 +117,11 @@ export default function Sales() {
     // Customer totalSpent/totalOrders are computed from sales, so the
     // customers list must also refresh whenever a sale is created/edited/deleted.
     qc.invalidateQueries({ queryKey: getGetCustomersQueryKey(), exact: false });
+    // invalidateQueries should already refetch the active query, but some
+    // status-dropdown updates were only showing up after a full page
+    // reload — force it explicitly so the list always reflects the latest
+    // state right away.
+    refetchSales();
   };
 
   const openNew = () => {

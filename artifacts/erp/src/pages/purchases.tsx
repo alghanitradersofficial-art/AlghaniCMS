@@ -45,13 +45,16 @@ export default function Purchases() {
   const [editPurchaseDate, setEditPurchaseDate] = useState("");
   const [editExpandedRow, setEditExpandedRow] = useState<number | null>(null);
 
-  const { data, isLoading } = useGetPurchases({ search: search || undefined, status: statusFilter as "pending" | "received" | "cancelled" | undefined, page, limit: 20 });
+  const { data, isLoading, refetch: refetchPurchases } = useGetPurchases({ search: search || undefined, status: statusFilter as "pending" | "received" | "cancelled" | undefined, page, limit: 20 });
   const { data: products } = useGetProducts({ limit: 100 });
   const { data: suppliers } = useGetSuppliers();
   const createPurchase = useCreatePurchase();
   const updatePurchase = useUpdatePurchase();
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getGetPurchasesQueryKey(), exact: false });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: getGetPurchasesQueryKey(), exact: false });
+    refetchPurchases();
+  };
 
   const openNew = () => {
     setSupplierName(""); setSupplierId(undefined); setPoNumber(""); setNotes(""); setPurchaseDate(new Date().toISOString().slice(0, 10)); setAmountPaidNow("0"); setPaymentMethod("cash"); setItems([]); setExpandedRow(null); setOpen(true);
