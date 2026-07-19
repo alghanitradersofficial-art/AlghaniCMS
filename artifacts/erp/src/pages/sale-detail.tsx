@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, Link } from "wouter";
-import { useGetSale, useUpdateSale, useGetProducts } from "@workspace/api-client-react";
+import { useGetSale, useUpdateSale, useGetProducts, getGetSalesQueryKey, getGetCustomersQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { PageLoading } from "@/components/loading-state";
 import { PriceHistoryPanel } from "@/components/price-history-panel";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 type LineItem = { productId: number; productName: string; quantity: number; unitPrice: number; };
 
@@ -24,6 +25,7 @@ export default function SaleDetail() {
   const { data: products } = useGetProducts({ limit: 100 });
   const updateSale = useUpdateSale();
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [editOpen, setEditOpen] = useState(false);
   const [editItems, setEditItems] = useState<LineItem[]>([]);
   const [editStatus, setEditStatus] = useState<"pending" | "completed" | "cancelled">("pending");
@@ -106,11 +108,15 @@ export default function SaleDetail() {
           saleDate: new Date(editDate).toISOString(),
         } as any
       });
-      qc.invalidateQueries({ queryKey: ["GetSale", saleId] });
+      qc.invalidateQueries({ queryKey: getGetSalesQueryKey(), exact: false });
+      qc.invalidateQueries({ queryKey: [`/api/sales/${saleId}`] });
+      qc.invalidateQueries({ queryKey: ["sales-summary"], exact: false });
+      qc.invalidateQueries({ queryKey: getGetCustomersQueryKey(), exact: false });
       refetch();
       setEditOpen(false);
+      toast({ title: "Sale updated", description: "Changes have been saved." });
     } catch (e: any) {
-      console.error("Save failed", e);
+      toast({ title: "Could not save changes", description: e?.message || "Something went wrong.", variant: "destructive" });
     }
   };
 

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,22 +12,27 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useGetSales, useCreateSale, useUpdateSale, useDeleteSale, useGetProducts, useGetCustomers, getGetSalesQueryKey, getGetCustomersQueryKey } from "@workspace/api-client-react";
 import { apiGet } from "@/lib/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit, Trash2, ShoppingCart, X, Info, RotateCcw, Clock, CalendarDays, CalendarRange, SlidersHorizontal } from "lucide-react";
+import { Plus, Search, Edit, Trash2, ShoppingCart, X, Info, RotateCcw, Clock, CalendarDays, CalendarRange, SlidersHorizontal, ListChecks } from "lucide-react";
 import Confirm from "@/components/ui/confirm";
 import { PriceHistoryPanel } from "@/components/price-history-panel";
 import { ReturnsClaimsPanel } from "@/components/returns-claims-panel";
+import { useToast } from "@/hooks/use-toast";
 
 type LineItem = { productId: number; productName: string; quantity: number; unitPrice: number; };
-type Period = "daily" | "weekly" | "monthly" | "custom";
+type Period = "all" | "daily" | "weekly" | "monthly" | "custom";
 
 function toDateStr(d: Date) { return d.toISOString().slice(0, 10); }
 
 // Resolves each period tab to a concrete [from, to] invoice-date range.
-// Daily = today. Weekly = rolling last 7 days. Monthly = 1st of this month
-// through today. Custom = whatever the user picked (falls back to today).
+// All = no date filter (every order ever placed). Daily = today. Weekly =
+// rolling last 7 days. Monthly = 1st of this month through today.
+// Custom = whatever the user picked (falls back to today).
 function periodRange(period: Period, customFrom: string, customTo: string): { from: string; to: string; label: string } {
   const now = new Date();
   const todayStr = toDateStr(now);
+  if (period === "all") {
+    return { from: "", to: "", label: "All orders" };
+  }
   if (period === "weekly") {
     const start = new Date(now); start.setDate(start.getDate() - 6);
     return { from: toDateStr(start), to: todayStr, label: "Last 7 days" };
@@ -43,8 +49,10 @@ function periodRange(period: Period, customFrom: string, customTo: string): { fr
 
 export default function Sales() {
   const qc = useQueryClient();
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [topTab, setTopTab] = useState<"sales" | "returns">("sales");
-  const [periodTab, setPeriodTab] = useState<Period>("daily");
+  const [periodTab, setPeriodTab] = useState<Period>("all");
   const [customFrom, setCustomFrom] = useState(new Date().toISOString().slice(0, 10));
   const [customTo, setCustomTo] = useState(new Date().toISOString().slice(0, 10));
   const [search, setSearch] = useState("");
@@ -75,8 +83,8 @@ export default function Sales() {
   const salesQueryParams = {
     search: search || undefined,
     status: statusFilter as "pending" | "completed" | "cancelled" | undefined,
-    dateFrom: range.from,
-    dateTo: range.to,
+    dateFrom: range.from || undefined,
+    dateTo: range.to || undefined,
     page,
     limit: 20,
   } as any;
@@ -88,8 +96,8 @@ export default function Sales() {
       `/api/sales/summary?${new URLSearchParams({
         ...(search ? { search } : {}),
         ...(statusFilter ? { status: statusFilter } : {}),
-        dateFrom: range.from,
-        dateTo: range.to,
+        ...(range.from ? { dateFrom: range.from } : {}),
+        ...(range.to ? { dateTo: range.to } : {}),
       }).toString()}`
     ),
   });
@@ -160,31 +168,40 @@ export default function Sales() {
   const total = subtotal - parseFloat(discount || "0");
 
   const handleSave = async () => {
-    await createSale.mutateAsync({
-      data: {
-        customerId,
-        customerName,
-        invoiceNumber: invoiceNumber || undefined,
-        discount: parseFloat(discount || "0"),
-        notes: notes || undefined,
-        items: items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
-        // saleDate/amountReceived/paymentMethod are accepted by the backend
-        // but not yet part of the generated CreateSaleBody type. Cash
-        // received now only applies to khata (registered) customers —
-        // walk-in sales are always treated as fully paid.
-        ...({
-          saleDate: new Date(saleDate).toISOString(),
-          ...(customerId ? { amountReceived: parseFloat(amountReceived || "0"), paymentMethod } : {}),
-        } as {}),
-      } as any
-    });
-    invalidate();
-    setOpen(false);
+    try {
+      await createSale.mutateAsync({
+        data: {
+          customerId,
+          customerName,
+          invoiceNumber: invoiceNumber || undefined,
+          discount: parseFloat(discount || "0"),
+          notes: notes || undefined,
+          items: items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
+          // saleDate/amountReceived/paymentMethod are accepted by the backend
+          // but not yet part of the generated CreateSaleBody type. Cash
+          // received now only applies to khata (registered) customers —
+          // walk-in sales are always treated as fully paid.
+          ...({
+            saleDate: new Date(saleDate).toISOString(),
+            ...(customerId ? { amountReceived: parseFloat(amountReceived || "0"), paymentMethod } : {}),
+          } as {}),
+        } as any
+      });
+      invalidate();
+      setOpen(false);
+      toast({ title: "Sale created", description: "The new sale order has been added." });
+    } catch (e: any) {
+      toast({ title: "Could not create sale", description: e?.message || "Something went wrong.", variant: "destructive" });
+    }
   };
 
   const handleStatusUpdate = async (id: number, status: "pending" | "completed" | "cancelled") => {
-    await updateSale.mutateAsync({ id, data: { status } });
-    invalidate();
+    try {
+      await updateSale.mutateAsync({ id, data: { status } });
+      invalidate();
+    } catch (e: any) {
+      toast({ title: "Could not change status", description: e?.message || "Something went wrong.", variant: "destructive" });
+    }
   };
 
   const openEditSale = (sale: NonNullable<typeof data>['data'][0]) => {
@@ -246,14 +263,19 @@ export default function Sales() {
       invalidate();
       setEditSaleOpen(false);
       setEditingSale(null);
+      toast({ title: "Sale updated", description: "Changes have been saved." });
     } catch (e: any) {
-      console.error("Save failed", e);
+      toast({ title: "Could not save changes", description: e?.message || "Something went wrong.", variant: "destructive" });
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Delete this sale?")) return;
-    await deleteSale.mutateAsync({ id }); invalidate();
+    try {
+      await deleteSale.mutateAsync({ id });
+      invalidate();
+    } catch (e: any) {
+      toast({ title: "Could not delete sale", description: e?.message || "Something went wrong.", variant: "destructive" });
+    }
   };
 
   const statusColor = (s: string) => s === "completed" ? "bg-green-500/10 text-green-400 border-0" : s === "pending" ? "bg-yellow-500/10 text-yellow-400 border-0" : "bg-red-500/10 text-red-400 border-0";
@@ -279,6 +301,7 @@ export default function Sales() {
             {/* Daily / Weekly / Monthly / Custom */}
             <div className="flex flex-wrap gap-1.5 rounded-xl border border-border bg-card p-1.5">
               {([
+                { key: "all" as const, label: "All", icon: ListChecks },
                 { key: "daily" as const, label: "Daily", icon: Clock },
                 { key: "weekly" as const, label: "Weekly", icon: CalendarDays },
                 { key: "monthly" as const, label: "Monthly", icon: CalendarRange },
@@ -351,7 +374,11 @@ export default function Sales() {
                   ) : (data?.data || []).length === 0 ? (
                     <div className="rounded-2xl border border-border/60 bg-background/70 p-6 text-center text-sm text-muted-foreground">No sales in {range.label.toLowerCase()}.</div>
                   ) : (data?.data || []).map((sale) => (
-                    <div key={sale.id} className="rounded-2xl border border-border/60 bg-background/70 p-4 shadow-sm">
+                    <div
+                      key={sale.id}
+                      onClick={() => setLocation(`/sales/${sale.id}`)}
+                      className="cursor-pointer rounded-2xl border border-border/60 bg-background/70 p-4 shadow-sm transition-colors hover:border-primary/40 hover:bg-background"
+                    >
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
@@ -364,7 +391,7 @@ export default function Sales() {
                             <span className="font-semibold text-secondary">Rs. {Number(sale.total).toLocaleString()}</span>
                           </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                        <div className="flex flex-wrap items-center gap-2 lg:justify-end" onClick={(e) => e.stopPropagation()}>
                           <Select value={sale.status} onValueChange={(v) => handleStatusUpdate(sale.id, v as "pending" | "completed" | "cancelled") }>
                             <SelectTrigger className="h-8 w-28 border-border bg-background/50 text-xs">
                               <SelectValue />
