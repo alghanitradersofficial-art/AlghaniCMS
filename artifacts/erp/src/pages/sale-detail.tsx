@@ -251,7 +251,7 @@ export default function SaleDetail() {
                     </div>
                   </div>
                   {editExpandedRow === idx && (
-                    <PriceHistoryPanel customerId={sale?.customerId == null ? undefined : sale.customerId} productId={item.productId} proposedPrice={item.unitPrice} />
+                    <PriceHistoryPanel customerId={sale?.customerId == null ? undefined : Number(sale.customerId)} productId={item.productId} proposedPrice={item.unitPrice} />
                   )}
                 </div>
               ))}

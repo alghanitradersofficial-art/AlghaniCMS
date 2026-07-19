@@ -13,7 +13,6 @@ import { apiGet } from "@/lib/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit, Trash2, ShoppingCart, X, Info, RotateCcw, Clock, CalendarDays, CalendarRange, SlidersHorizontal } from "lucide-react";
 import Confirm from "@/components/ui/confirm";
-import DataTable from "@/components/ui/data-table";
 import { PriceHistoryPanel } from "@/components/price-history-panel";
 import { ReturnsClaimsPanel } from "@/components/returns-claims-panel";
 
@@ -177,7 +176,7 @@ export default function Sales() {
           saleDate: new Date(saleDate).toISOString(),
           ...(customerId ? { amountReceived: parseFloat(amountReceived || "0"), paymentMethod } : {}),
         } as {}),
-      }
+      } as any
     });
     invalidate();
     setOpen(false);
@@ -346,18 +345,29 @@ export default function Sales() {
 
             <Card className="border-border bg-card">
               <CardContent className="p-0">
-                <div className="hidden md:block">
-                  <DataTable
-                    loading={isLoading}
-                    data={data?.data || []}
-                    columns={[
-                      { key: 'invoiceNumber', title: 'Invoice', render: (r) => <span className="font-mono text-xs text-primary">{r.invoiceNumber}</span> },
-                      { key: 'customerName', title: 'Customer', render: (r) => <span className="font-medium">{r.customerName}</span> },
-                      { key: 'total', title: 'Total', align: 'right', render: (r) => <span className="font-semibold text-secondary">Rs. {Number(r.total).toLocaleString()}</span> },
-                      { key: 'status', title: 'Status', align: 'center', render: (r) => (
-                          <Select value={r.status} onValueChange={(v) => handleStatusUpdate(r.id, v as "pending" | "completed" | "cancelled") }>
-                            <SelectTrigger className="h-7 w-32 border-0 bg-transparent p-0 text-xs">
-                              <Badge className={statusColor(r.status)}>{r.status}</Badge>
+                <div className="space-y-3 p-3">
+                  {isLoading ? (
+                    <div className="rounded-2xl border border-border/60 bg-background/70 p-6 text-center text-sm text-muted-foreground">Loading sales...</div>
+                  ) : (data?.data || []).length === 0 ? (
+                    <div className="rounded-2xl border border-border/60 bg-background/70 p-6 text-center text-sm text-muted-foreground">No sales in {range.label.toLowerCase()}.</div>
+                  ) : (data?.data || []).map((sale) => (
+                    <div key={sale.id} className="rounded-2xl border border-border/60 bg-background/70 p-4 shadow-sm">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">{sale.invoiceNumber}</div>
+                            <Badge className={statusColor(sale.status)}>{sale.status}</Badge>
+                          </div>
+                          <div className="mt-2 truncate text-sm font-semibold">{sale.customerName}</div>
+                          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                            <span>{new Date(((sale as any).saleDate ?? sale.createdAt)).toLocaleDateString()}</span>
+                            <span className="font-semibold text-secondary">Rs. {Number(sale.total).toLocaleString()}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                          <Select value={sale.status} onValueChange={(v) => handleStatusUpdate(sale.id, v as "pending" | "completed" | "cancelled") }>
+                            <SelectTrigger className="h-8 w-28 border-border bg-background/50 text-xs">
+                              <SelectValue />
                             </SelectTrigger>
                             <SelectContent className="bg-card border-border">
                               <SelectItem value="pending">Pending</SelectItem>
@@ -365,38 +375,8 @@ export default function Sales() {
                               <SelectItem value="cancelled">Cancelled</SelectItem>
                             </SelectContent>
                           </Select>
-                      ) },
-                      { key: 'saleDate', title: 'Date', render: (r) => new Date(((r as any).saleDate ?? r.createdAt)).toLocaleDateString() },
-                      { key: 'actions', title: 'Actions', align: 'center', render: (r) => (
-                        <div className="flex justify-center gap-2">
-                          <Button size="sm" variant="ghost" onClick={() => openEditSale(r)} className="h-8 w-8 p-0 hover:bg-accent"><Edit className="h-4 w-4" /></Button>
-                          <Confirm title="Delete this sale?" description="This will remove the sale record." onConfirm={() => handleDelete(r.id)} trigger={<Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>} />
-                        </div>
-                      ) },
-                    ]}
-                  />
-                </div>
-
-                <div className="space-y-3 p-3 md:hidden">
-                  {isLoading ? (
-                    <div className="rounded-2xl border border-border/60 bg-background/70 p-6 text-center text-sm text-muted-foreground">Loading sales...</div>
-                  ) : (data?.data || []).length === 0 ? (
-                    <div className="rounded-2xl border border-border/60 bg-background/70 p-6 text-center text-sm text-muted-foreground">No sales in {range.label.toLowerCase()}.</div>
-                  ) : (data?.data || []).map((sale) => (
-                    <div key={sale.id} className="rounded-2xl border border-border/60 bg-background/70 p-3 shadow-sm">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">{sale.invoiceNumber}</div>
-                          <div className="mt-1 truncate text-sm font-semibold">{sale.customerName}</div>
-                          <div className="mt-1 text-xs text-muted-foreground">{new Date(((sale as any).saleDate ?? sale.createdAt)).toLocaleDateString()}</div>
-                        </div>
-                        <Badge className={statusColor(sale.status)}>{sale.status}</Badge>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-2">
-                        <div className="text-sm font-semibold text-secondary">Rs. {Number(sale.total).toLocaleString()}</div>
-                        <div className="flex gap-2">
                           <Button size="sm" variant="ghost" onClick={() => openEditSale(sale)} className="h-8 w-8 p-0 hover:bg-accent"><Edit className="h-4 w-4" /></Button>
-                          <Button size="sm" variant="ghost" onClick={() => handleDelete(sale.id)} className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                          <Confirm title="Delete this sale?" description="This will remove the sale record." onConfirm={() => handleDelete(sale.id)} trigger={<Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>} />
                         </div>
                       </div>
                     </div>
@@ -598,7 +578,7 @@ export default function Sales() {
                       </div>
                     </div>
                     {editExpandedRow === idx && (
-                      <PriceHistoryPanel customerId={editingSale?.customerId == null ? undefined : editingSale.customerId} productId={item.productId} proposedPrice={item.unitPrice} />
+                      <PriceHistoryPanel customerId={editingSale?.customerId == null ? undefined : Number(editingSale.customerId)} productId={item.productId} proposedPrice={item.unitPrice} />
                     )}
                   </div>
                 ))}
