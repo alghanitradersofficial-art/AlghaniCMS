@@ -339,17 +339,24 @@ export async function updateSale(id: number, body: any, actorUserId: number | nu
     // Only check stock if the sale is already completed (pending sales don't affect stock)
     if (existingSale.status === "completed") {
       const productIds = Array.from(new Set([...oldQuantityByProduct.keys(), ...newQuantityByProduct.keys()]));
-      const products = productIds.length
-        ? await db.select({ id: productsTable.id, currentStock: productsTable.currentStock, name: productsTable.name, sku: productsTable.sku }).from(productsTable).where(inArray(productsTable.id, productIds))
-        : [];
-      
-      const productById = new Map(products.map((p) => ({ ...p, currentStock: Number(p.currentStock), id: Number(p.id) })));
-      
+      const products = (productIds.length
+        ? await db.select({
+            id: productsTable.id,
+            currentStock: productsTable.currentStock,
+            name: productsTable.name,
+            sku: productsTable.sku,
+          }).from(productsTable).where(inArray(productsTable.id, productIds))
+        : []) as Array<{ id: number; currentStock: number; name: string | null; sku: string | null }>;
+
+      const productById = new Map<number, { id: number; currentStock: number; name: string | null; sku: string | null }>(
+        products.map((p) => [Number(p.id), { ...p, currentStock: Number(p.currentStock) }]),
+      );
+
       // Check if we have enough stock for items being added
       for (const [productId, newQty] of newQuantityByProduct.entries()) {
         const oldQty = oldQuantityByProduct.get(productId) || 0;
         const additionalQty = newQty - oldQty;
-        
+
         if (additionalQty > 0) {
           const product = productById.get(productId);
           if (product && product.currentStock < additionalQty) {

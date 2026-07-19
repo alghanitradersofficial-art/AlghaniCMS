@@ -583,7 +583,7 @@ export default function Sales() {
                       </div>
                     </div>
                     {editExpandedRow === idx && (
-                      <PriceHistoryPanel customerId={editingSale?.customerId} productId={item.productId} proposedPrice={item.unitPrice} />
+                      <PriceHistoryPanel customerId={editingSale?.customerId ?? undefined} productId={item.productId} proposedPrice={item.unitPrice} />
                     )}
                   </div>
                 ))}
