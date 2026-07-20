@@ -11,6 +11,7 @@ import { useGetProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, u
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit, Trash2, AlertTriangle, Package } from "lucide-react";
 import Confirm from "@/components/ui/confirm";
+import { AiExcelImportButton } from "@/components/ai-excel-import-button";
 
 type ProductForm = {
   name: string; sku: string; description: string; brandId: string;
@@ -88,7 +89,10 @@ export default function Inventory() {
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Package className="w-6 h-6 text-primary" /> Inventory</h1>
             <p className="text-muted-foreground text-sm mt-1">{data?.total || 0} products total</p>
           </div>
-          <Button onClick={openNew} className="bg-primary hover:bg-primary/90 gap-2 w-full sm:w-auto"><Plus className="w-4 h-4" /> Add Product</Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <AiExcelImportButton importType="products" onComplete={invalidate} />
+            <Button onClick={openNew} className="bg-primary hover:bg-primary/90 gap-2 w-full sm:w-auto"><Plus className="w-4 h-4" /> Add Product</Button>
+          </div>
         </div>
 
         <div className="flex gap-3 flex-wrap">

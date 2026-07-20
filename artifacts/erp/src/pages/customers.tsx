@@ -12,6 +12,7 @@ import Confirm from "@/components/ui/confirm";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit, Trash2, Users, Wallet } from "lucide-react";
 import { CustomerLedgerDialog } from "@/components/customer-ledger-dialog";
+import { AiExcelImportButton } from "@/components/ai-excel-import-button";
 import DataTable from "@/components/ui/data-table";
 
 type CustForm = { name: string; phone: string; email: string; address: string; city: string; type: string; creditLimit: string; };
@@ -72,7 +73,10 @@ export default function Customers() {
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Users className="w-6 h-6 text-primary" /> Customers</h1>
             <p className="text-muted-foreground text-sm mt-1">{data?.total || 0} customers</p>
           </div>
-          <Button onClick={openNew} className="bg-primary hover:bg-primary/90 gap-2 w-full sm:w-auto"><Plus className="w-4 h-4" /> Add Customer</Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <AiExcelImportButton importType="customers" onComplete={invalidate} />
+            <Button onClick={openNew} className="bg-primary hover:bg-primary/90 gap-2 w-full sm:w-auto"><Plus className="w-4 h-4" /> Add Customer</Button>
+          </div>
         </div>
 
         <div className="relative max-w-sm">
