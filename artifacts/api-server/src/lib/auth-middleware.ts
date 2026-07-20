@@ -70,6 +70,20 @@ export function requirePermission(permission: string) {
   };
 }
 
+// Like requirePermission, but passes if the user has ANY of the listed
+// permissions. Useful for shared/cross-module features (e.g. the smart
+// importer) that should work from whichever tab the user already has access
+// to, instead of being gated behind a single module permission.
+export function requireAnyPermission(permissions: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.auth) return res.status(401).json({ error: "Unauthorized" });
+    const role = req.auth.role?.toLowerCase() ?? "";
+    if (role === "ceo" || role === "developer" || role === "admin") return next();
+    if (permissions.some((p) => req.auth!.permissions?.includes(p))) return next();
+    return res.status(403).json({ error: "Forbidden", debug: { path: req.path, permissions, role: req.auth.role, userPermissions: req.auth.permissions } });
+  };
+}
+
 export function requireRole(roles: string[]) {
   const normalized = roles.map((role) => role.toLowerCase());
   return (req: Request, res: Response, next: NextFunction) => {

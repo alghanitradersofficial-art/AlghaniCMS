@@ -12,9 +12,9 @@ import { useGetPurchases, useCreatePurchase, useUpdatePurchase, useGetProducts, 
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Truck, X, Edit, Trash2, Info } from "lucide-react";
 import Confirm from "@/components/ui/confirm";
+import { SmartImportButton } from "@/components/smart-import-button";
 import { SupplierPriceHistoryPanel } from "@/components/supplier-price-history-panel";
 import { apiDelete } from "@/lib/api";
-import { AiExcelImportButton } from "@/components/ai-excel-import-button";
 import { useToast } from "@/hooks/use-toast";
 
 type LineItem = { productId: number; productName: string; quantity: number; unitCost: number; };
@@ -188,8 +188,8 @@ export default function Purchases() {
             <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight sm:text-2xl"><Truck className="h-5 w-5 text-primary sm:h-6 sm:w-6" /> Purchase Orders</h1>
             <p className="mt-1 text-sm text-muted-foreground">{data?.total || 0} orders total</p>
           </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <AiExcelImportButton importType="purchases" onComplete={invalidate} />
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <SmartImportButton />
             <Button onClick={openNew} className="w-full gap-2 bg-primary hover:bg-primary/90 sm:w-auto"><Plus className="h-4 w-4" /> New Purchase</Button>
           </div>
         </div>

@@ -14,9 +14,9 @@ import { apiGet } from "@/lib/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit, Trash2, ShoppingCart, X, Info, RotateCcw, Clock, CalendarDays, CalendarRange, SlidersHorizontal, ListChecks } from "lucide-react";
 import Confirm from "@/components/ui/confirm";
+import { SmartImportButton } from "@/components/smart-import-button";
 import { PriceHistoryPanel } from "@/components/price-history-panel";
 import { ReturnsClaimsPanel } from "@/components/returns-claims-panel";
-import { AiExcelImportButton } from "@/components/ai-excel-import-button";
 import { useToast } from "@/hooks/use-toast";
 
 type LineItem = { productId: number; productName: string; quantity: number; unitPrice: number; };
@@ -294,8 +294,8 @@ export default function Sales() {
             <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight sm:text-2xl"><ShoppingCart className="h-5 w-5 text-primary sm:h-6 sm:w-6" /> Sales</h1>
             <p className="mt-1 text-sm text-muted-foreground">{topTab === "sales" ? `${range.label} · ${summary?.count ?? 0} order${(summary?.count ?? 0) === 1 ? "" : "s"}` : "Sale returns and damaged-item claims"}</p>
           </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <AiExcelImportButton importType="sales" onComplete={invalidate} />
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <SmartImportButton />
             <Button onClick={openNew} className="w-full gap-2 bg-primary hover:bg-primary/90 sm:w-auto"><Plus className="h-4 w-4" /> New Sale</Button>
           </div>
         </div>

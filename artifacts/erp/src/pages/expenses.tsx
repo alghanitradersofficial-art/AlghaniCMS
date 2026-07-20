@@ -9,6 +9,7 @@ import { useGetExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense, g
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Edit, Trash2, Receipt } from "lucide-react";
 import Confirm from "@/components/ui/confirm";
+import { SmartImportButton } from "@/components/smart-import-button";
 
 type ExpForm = { title: string; category: string; amount: string; date: string; notes: string; };
 const emptyForm: ExpForm = { title: "", category: "", amount: "", date: new Date().toISOString().split("T")[0], notes: "" };
@@ -54,7 +55,10 @@ export default function Expenses() {
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Receipt className="w-6 h-6 text-primary" /> Expenses</h1>
             <p className="text-muted-foreground text-sm mt-1">Total on page: Rs. {totalExpenses.toLocaleString()}</p>
           </div>
-          <Button onClick={openNew} className="bg-primary hover:bg-primary/90 gap-2 w-full sm:w-auto"><Plus className="w-4 h-4" /> Add Expense</Button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <SmartImportButton />
+            <Button onClick={openNew} className="bg-primary hover:bg-primary/90 gap-2 w-full sm:w-auto"><Plus className="w-4 h-4" /> Add Expense</Button>
+          </div>
         </div>
 
         <Card className="border-border bg-card">

@@ -15,7 +15,7 @@ import reportsRouter from "./reports.js";
 import settingsRouter from "./settings.js";
 import notificationsRouter from "./notifications.js";
 import exportRouter, { buildFullReportWorkbook } from "./export.js";
-import importRouter from "./import.js";
+import importRouter, { smartImportRouter } from "./import.js";
 import uploadRouter from "./upload.js";
 import telegramRouter from "./telegram.js";
 import emailRouter from "./email.js";
@@ -35,7 +35,7 @@ import monthsRouter from "./months.js";
 import repairLedgerRouter from "./repair-ledger.js";
 import salesReturnsRouter from "./sales-returns.js";
 import claimsRouter from "./claims.js";
-import { authenticate, requirePermission } from "../lib/auth-middleware.js";
+import { authenticate, requirePermission, requireAnyPermission } from "../lib/auth-middleware.js";
 
 const router: IRouter = Router();
 
@@ -92,6 +92,7 @@ router.use("/reports", requirePermission("reports"), reportsRouter);
 router.use("/settings", requirePermission("settings"), settingsRouter);
 router.use("/notifications", requirePermission("notifications"), notificationsRouter);
 router.use("/export", requirePermission("settings"), exportRouter);
+router.use("/import/ai/smart", requireAnyPermission(["sales", "purchases", "customers", "suppliers", "expenses", "inventory", "settings"]), smartImportRouter);
 router.use("/import", requirePermission("settings"), importRouter);
 router.use("/upload", requirePermission("inventory"), uploadRouter);
 router.use("/telegram", requirePermission("settings"), telegramRouter);

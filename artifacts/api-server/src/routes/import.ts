@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { pool, db, productsTable, customersTable, suppliersTable, purchasesTable, salesTable } from "@workspace/db";
+import { pool, db, productsTable, customersTable, suppliersTable, purchasesTable, salesTable, expensesTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import multer from "multer";
 import ExcelJS from "exceljs";
@@ -123,6 +123,242 @@ async function ensureSupplier(supplierData: Record<string, unknown>) {
   return { id: inserted.id, created: true };
 }
 
+async function ensureExpense(expenseData: Record<string, unknown>, createdByUserId?: number | null) {
+  const title = parseStr(expenseData.title);
+  const amount = parseNumber(expenseData.amount);
+  if (!title || !amount) return null;
+  const expenseDate = parseDate(expenseData.date);
+
+  try {
+    const months = await import("../services/months.service.js");
+    if (await months.isDateInClosedPeriod(expenseDate)) {
+      throw new months.MonthClosedError(expenseDate);
+    }
+  } catch (err) {
+    if (err && (err as Error).name === "MonthClosedError") throw err;
+  }
+
+  const [inserted] = await db.insert(expensesTable).values({
+    title,
+    category: parseStr(expenseData.category) || "General",
+    amount: String(round2(amount)),
+    date: expenseDate.toISOString().slice(0, 10),
+    notes: parseStr(expenseData.notes) || null,
+    createdByUserId: createdByUserId ?? null,
+  }).returning();
+
+  await appendGeneralLedgerEntry(db as any, {
+    date: expenseDate,
+    type: "expense",
+    referenceId: inserted.id,
+    partyType: "none",
+    amount: round2(amount),
+    direction: "debit",
+    note: `${parseStr(expenseData.category) || "General"}: ${title}`,
+    createdByUserId: createdByUserId ?? null,
+  });
+
+  return { id: inserted.id, created: true };
+}
+
+async function insertPurchaseRecord(rawPurchase: Record<string, unknown>, createdByUserId?: number | null): Promise<{ id: number } | null> {
+  const supplierName = parseStr(rawPurchase.supplierName);
+  const supplierId = rawPurchase.supplierId ? Number(rawPurchase.supplierId) : undefined;
+  const supplierRow = supplierId
+    ? (await db.select({ id: suppliersTable.id }).from(suppliersTable).where(eq(suppliersTable.id, supplierId)).limit(1))[0] ?? null
+    : supplierName
+      ? (await db.select({ id: suppliersTable.id }).from(suppliersTable).where(eq(suppliersTable.name, supplierName)).limit(1))[0] ?? null
+      : null;
+  const items = Array.isArray(rawPurchase.items) ? rawPurchase.items : [];
+  if (!items.length) return null;
+
+  const purchaseItems = await Promise.all(items.map(async (item: Record<string, unknown>) => {
+    const productIdentifier = parseStr(item.sku) || parseStr(item.productName);
+    let productId = item.productId ? Number(item.productId) : undefined;
+    if (!productId && productIdentifier) {
+      const [product] = await db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.sku, productIdentifier));
+      productId = product?.id;
+    }
+    if (!productId && parseStr(item.productName)) {
+      const [product] = await db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.name, parseStr(item.productName)));
+      productId = product?.id;
+    }
+    if (!productId) {
+      const created = await ensureProduct({ name: parseStr(item.productName) || `Imported item ${Date.now()}`, sku: parseStr(item.sku) || `ITEM-${Math.random().toString(36).slice(2, 8)}`, costPrice: item.unitCost });
+      productId = created?.id;
+    }
+    return {
+      productId: productId ?? 0,
+      productName: parseStr(item.productName) || "Imported item",
+      quantity: parseNumber(item.quantity),
+      unitCost: parseNumber(item.unitCost),
+      total: parseNumber(item.quantity) * parseNumber(item.unitCost),
+    };
+  }));
+
+  const subtotal = purchaseItems.reduce((sum, item) => sum + item.total, 0);
+  const poNumber = parseStr(rawPurchase.poNumber) || `PO-IMP-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const purchaseDate = parseDate(rawPurchase.purchaseDate);
+  const status = parseStr(rawPurchase.status) || "received";
+
+  try {
+    const months = await import("../services/months.service.js");
+    if (await months.isDateInClosedPeriod(purchaseDate)) {
+      throw new months.MonthClosedError(purchaseDate);
+    }
+  } catch (err) {
+    if (err && (err as Error).name === "MonthClosedError") throw err;
+  }
+
+  const insertedPurchase = await db.transaction(async (tx) => {
+    const [inserted] = await tx.insert(purchasesTable).values({
+      poNumber,
+      supplierId: supplierRow?.id ?? null,
+      supplierName: supplierName || "Imported Supplier",
+      status,
+      subtotal: String(round2(subtotal)),
+      total: String(round2(subtotal)),
+      notes: parseStr(rawPurchase.notes) || null,
+      items: purchaseItems,
+      purchaseDate,
+    }).returning();
+
+    if (supplierRow?.id) {
+      await appendSupplierLedgerEntry(tx, {
+        supplierId: supplierRow.id,
+        type: "purchase",
+        amount: round2(subtotal),
+        purchaseId: inserted.id,
+        description: `Imported purchase — ${poNumber}`,
+        createdByUserId,
+        entryDate: purchaseDate,
+      });
+      await appendGeneralLedgerEntry(tx, {
+        date: purchaseDate,
+        type: "purchase",
+        referenceId: inserted.id,
+        partyType: "supplier",
+        partyId: supplierRow.id,
+        partyName: supplierName || "Imported Supplier",
+        amount: round2(subtotal),
+        direction: "debit",
+        note: `Imported PO ${poNumber}`,
+        createdByUserId,
+      });
+    }
+
+    if (status === "received") {
+      for (const line of purchaseItems) {
+        await tx.update(productsTable).set({ currentStock: sql`${productsTable.currentStock} + ${line.quantity}` }).where(eq(productsTable.id, line.productId));
+      }
+    }
+
+    return inserted;
+  });
+
+  return insertedPurchase ? { id: insertedPurchase.id } : null;
+}
+
+async function insertSaleRecord(rawSale: Record<string, unknown>, createdByUserId?: number | null): Promise<{ id: number } | null> {
+  const customerName = parseStr(rawSale.customerName);
+  const customerId = rawSale.customerId ? Number(rawSale.customerId) : undefined;
+  const customerRow = customerId
+    ? (await db.select({ id: customersTable.id }).from(customersTable).where(eq(customersTable.id, customerId)).limit(1))[0] ?? null
+    : customerName
+      ? (await db.select({ id: customersTable.id }).from(customersTable).where(eq(customersTable.name, customerName)).limit(1))[0] ?? null
+      : null;
+  const items = Array.isArray(rawSale.items) ? rawSale.items : [];
+  if (!items.length) return null;
+
+  const saleItems = await Promise.all(items.map(async (item: Record<string, unknown>) => {
+    const productIdentifier = parseStr(item.sku) || parseStr(item.productName);
+    let productId = item.productId ? Number(item.productId) : undefined;
+    if (!productId && productIdentifier) {
+      const [product] = await db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.sku, productIdentifier));
+      productId = product?.id;
+    }
+    if (!productId && parseStr(item.productName)) {
+      const [product] = await db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.name, parseStr(item.productName)));
+      productId = product?.id;
+    }
+    if (!productId) {
+      const created = await ensureProduct({ name: parseStr(item.productName) || `Imported item ${Date.now()}`, sku: parseStr(item.sku) || `ITEM-${Math.random().toString(36).slice(2, 8)}`, costPrice: item.unitPrice });
+      productId = created?.id;
+    }
+    return {
+      productId: productId ?? 0,
+      productName: parseStr(item.productName) || "Imported item",
+      quantity: parseNumber(item.quantity),
+      unitPrice: parseNumber(item.unitPrice),
+      total: parseNumber(item.quantity) * parseNumber(item.unitPrice),
+    };
+  }));
+
+  const subtotal = saleItems.reduce((sum, item) => sum + item.total, 0);
+  const discount = parseNumber(rawSale.discount);
+  const total = round2(subtotal - discount);
+  const invoiceNumber = parseStr(rawSale.invoiceNumber) || `INV-IMP-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const status = parseStr(rawSale.status) || "completed";
+  const saleDate = parseDate(rawSale.saleDate);
+
+  try {
+    const months = await import("../services/months.service.js");
+    if (await months.isDateInClosedPeriod(saleDate)) {
+      throw new months.MonthClosedError(saleDate);
+    }
+  } catch (err) {
+    if (err && (err as Error).name === "MonthClosedError") throw err;
+  }
+
+  const insertedSale = await db.transaction(async (tx) => {
+    const [inserted] = await tx.insert(salesTable).values({
+      invoiceNumber,
+      customerId: customerRow?.id ?? null,
+      customerName: customerName || "Imported Customer",
+      status,
+      subtotal: String(round2(subtotal)),
+      discount: String(round2(discount)),
+      total: String(total),
+      notes: parseStr(rawSale.notes) || null,
+      items: saleItems,
+      saleDate,
+    }).returning();
+
+    if (customerRow?.id && status === "completed") {
+      for (const line of saleItems) {
+        await tx.update(productsTable).set({ currentStock: sql`${productsTable.currentStock} - ${line.quantity}` }).where(eq(productsTable.id, line.productId));
+        await appendLedgerEntry(tx, {
+          customerId: customerRow.id,
+          type: "sale",
+          amount: round2(line.total),
+          saleId: inserted.id,
+          description: `Imported sale — ${invoiceNumber}`,
+          createdByUserId,
+          entryDate: saleDate,
+        });
+      }
+      await appendGeneralLedgerEntry(tx, {
+        date: saleDate,
+        type: "sale",
+        referenceId: inserted.id,
+        partyType: "customer",
+        partyId: customerRow.id,
+        partyName: customerName || "Imported Customer",
+        amount: total,
+        direction: "credit",
+        note: `Imported invoice ${invoiceNumber}`,
+        createdByUserId,
+      });
+
+      await recomputeCustomerLedgerRunningBalances(tx, customerRow.id);
+    }
+
+    return inserted;
+  });
+
+  return insertedSale ? { id: insertedSale.id } : null;
+}
+
 router.post("/legacy", upload.single("file"), async (req, res) => {
   try {
     let payload: Record<string, unknown> = {};
@@ -159,198 +395,13 @@ router.post("/legacy", upload.single("file"), async (req, res) => {
     }
 
     for (const rawPurchase of purchases as Array<Record<string, unknown>>) {
-      const supplierName = parseStr(rawPurchase.supplierName);
-      const supplierId = rawPurchase.supplierId ? Number(rawPurchase.supplierId) : undefined;
-      const supplierRow = supplierId
-        ? (await db.select({ id: suppliersTable.id }).from(suppliersTable).where(eq(suppliersTable.id, supplierId)).limit(1))[0] ?? null
-        : supplierName
-          ? (await db.select({ id: suppliersTable.id }).from(suppliersTable).where(eq(suppliersTable.name, supplierName)).limit(1))[0] ?? null
-          : null;
-      const items = Array.isArray(rawPurchase.items) ? rawPurchase.items : [];
-      if (!items.length) continue;
-
-      const purchaseItems = await Promise.all(items.map(async (item: Record<string, unknown>) => {
-        const productIdentifier = parseStr(item.sku) || parseStr(item.productName);
-        let productId = item.productId ? Number(item.productId) : undefined;
-        if (!productId && productIdentifier) {
-          const [product] = await db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.sku, productIdentifier));
-          productId = product?.id;
-        }
-        if (!productId) {
-          const created = await ensureProduct({ name: parseStr(item.productName) || `Imported item ${Date.now()}`, sku: parseStr(item.sku) || `ITEM-${Math.random().toString(36).slice(2, 8)}`, costPrice: item.unitCost });
-          productId = created?.id;
-        }
-        return {
-          productId: productId ?? 0,
-          productName: parseStr(item.productName) || "Imported item",
-          quantity: parseNumber(item.quantity),
-          unitCost: parseNumber(item.unitCost),
-          total: parseNumber(item.quantity) * parseNumber(item.unitCost),
-        };
-      }));
-
-      const subtotal = purchaseItems.reduce((sum, item) => sum + item.total, 0);
-      const poNumber = parseStr(rawPurchase.poNumber) || `PO-LEGACY-${Date.now()}-${summary.importedPurchases + 1}`;
-      const purchaseDate = parseDate(rawPurchase.purchaseDate);
-      const status = parseStr(rawPurchase.status) || "received";
-
-      // prevent importing purchases into closed financial periods
-      try {
-        const months = await import("../services/months.service.js");
-        if (await months.isDateInClosedPeriod(purchaseDate)) {
-          throw new months.MonthClosedError(purchaseDate);
-        }
-      } catch (err) {
-        if (err && (err as Error).name === "MonthClosedError") throw err;
-      }
-
-      const insertedPurchase = await db.transaction(async (tx) => {
-        const [inserted] = await tx.insert(purchasesTable).values({
-          poNumber,
-          supplierId: supplierRow?.id ?? null,
-          supplierName: supplierName || "Imported Supplier",
-          status,
-          subtotal: String(round2(subtotal)),
-          total: String(round2(subtotal)),
-          notes: parseStr(rawPurchase.notes) || null,
-          items: purchaseItems,
-          purchaseDate,
-        }).returning();
-
-        if (supplierRow?.id) {
-          await appendSupplierLedgerEntry(tx, {
-            supplierId: supplierRow.id,
-            type: "purchase",
-            amount: round2(subtotal),
-            purchaseId: inserted.id,
-            description: `Imported purchase — ${poNumber}`,
-            createdByUserId,
-            entryDate: purchaseDate,
-          });
-          await appendGeneralLedgerEntry(tx, {
-            date: purchaseDate,
-            type: "purchase",
-            referenceId: inserted.id,
-            partyType: "supplier",
-            partyId: supplierRow.id,
-            partyName: supplierName || "Imported Supplier",
-            amount: round2(subtotal),
-            direction: "debit",
-            note: `Imported PO ${poNumber}`,
-            createdByUserId,
-          });
-        }
-
-        if (status === "received") {
-          for (const line of purchaseItems) {
-            await tx.update(productsTable).set({ currentStock: sql`${productsTable.currentStock} + ${line.quantity}` }).where(eq(productsTable.id, line.productId));
-          }
-        }
-
-        return inserted;
-      });
-
-      if (insertedPurchase) summary.importedPurchases += 1;
+      const inserted = await insertPurchaseRecord(rawPurchase, createdByUserId);
+      if (inserted) summary.importedPurchases += 1;
     }
 
     for (const rawSale of sales as Array<Record<string, unknown>>) {
-      const customerName = parseStr(rawSale.customerName);
-      const customerId = rawSale.customerId ? Number(rawSale.customerId) : undefined;
-      const customerRow = customerId
-        ? (await db.select({ id: customersTable.id }).from(customersTable).where(eq(customersTable.id, customerId)).limit(1))[0] ?? null
-        : customerName
-          ? (await db.select({ id: customersTable.id }).from(customersTable).where(eq(customersTable.name, customerName)).limit(1))[0] ?? null
-          : null;
-      const items = Array.isArray(rawSale.items) ? rawSale.items : [];
-      if (!items.length) continue;
-
-      const saleItems = await Promise.all(items.map(async (item: Record<string, unknown>) => {
-        const productIdentifier = parseStr(item.sku) || parseStr(item.productName);
-        let productId = item.productId ? Number(item.productId) : undefined;
-        if (!productId && productIdentifier) {
-          const [product] = await db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.sku, productIdentifier));
-          productId = product?.id;
-        }
-        if (!productId) {
-          const created = await ensureProduct({ name: parseStr(item.productName) || `Imported item ${Date.now()}`, sku: parseStr(item.sku) || `ITEM-${Math.random().toString(36).slice(2, 8)}`, costPrice: item.unitPrice });
-          productId = created?.id;
-        }
-        return {
-          productId: productId ?? 0,
-          productName: parseStr(item.productName) || "Imported item",
-          quantity: parseNumber(item.quantity),
-          unitPrice: parseNumber(item.unitPrice),
-          total: parseNumber(item.quantity) * parseNumber(item.unitPrice),
-        };
-      }));
-
-      const subtotal = saleItems.reduce((sum, item) => sum + item.total, 0);
-      const discount = parseNumber(rawSale.discount);
-      const total = round2(subtotal - discount);
-      const invoiceNumber = parseStr(rawSale.invoiceNumber) || `INV-LEGACY-${Date.now()}-${summary.importedSales + 1}`;
-      const status = parseStr(rawSale.status) || "completed";
-      const saleDate = parseDate(rawSale.saleDate);
-
-      // prevent importing sales into closed financial periods
-      try {
-        const months = await import("../services/months.service.js");
-        if (await months.isDateInClosedPeriod(saleDate)) {
-          throw new months.MonthClosedError(saleDate);
-        }
-      } catch (err) {
-        if (err && (err as Error).name === "MonthClosedError") throw err;
-      }
-
-      const insertedSale = await db.transaction(async (tx) => {
-        const [inserted] = await tx.insert(salesTable).values({
-          invoiceNumber,
-          customerId: customerRow?.id ?? null,
-          customerName: customerName || "Imported Customer",
-          status,
-          subtotal: String(round2(subtotal)),
-          discount: String(round2(discount)),
-          total: String(total),
-          notes: parseStr(rawSale.notes) || null,
-          items: saleItems,
-          saleDate,
-        }).returning();
-
-        if (customerRow?.id && status === "completed") {
-          for (const line of saleItems) {
-            await tx.update(productsTable).set({ currentStock: sql`${productsTable.currentStock} - ${line.quantity}` }).where(eq(productsTable.id, line.productId));
-            await appendLedgerEntry(tx, {
-              customerId: customerRow.id,
-              type: "sale",
-              amount: round2(line.total),
-              saleId: inserted.id,
-              description: `Imported sale — ${invoiceNumber}`,
-              createdByUserId,
-              entryDate: saleDate,
-            });
-          }
-          await appendGeneralLedgerEntry(tx, {
-            date: saleDate,
-            type: "sale",
-            referenceId: inserted.id,
-            partyType: "customer",
-            partyId: customerRow.id,
-            partyName: customerName || "Imported Customer",
-            amount: total,
-            direction: "credit",
-            note: `Imported invoice ${invoiceNumber}`,
-            createdByUserId,
-          });
-
-          // Imported rows are frequently inserted out of chronological order,
-          // so re-chain running balances by entryDate rather than trusting
-          // insertion order.
-          await recomputeCustomerLedgerRunningBalances(tx, customerRow.id);
-        }
-
-        return inserted;
-      });
-
-      if (insertedSale) summary.importedSales += 1;
+      const inserted = await insertSaleRecord(rawSale, createdByUserId);
+      if (inserted) summary.importedSales += 1;
     }
 
     return res.json({ success: true, message: "Legacy ERP data imported successfully", ...summary });
@@ -582,344 +633,337 @@ router.post("/customers", upload.single("file"), async (req, res) => {
 });
 
 
-// ─── AI EXCEL IMPORT (works for ANY sheet layout, ANY tab) ───────────────────
-//
-// Person uploads any Excel/CSV — column names, order, and even which sheet
-// (Sales, Purchases, Customers, Suppliers, Products) can be totally messy or
-// "basic". We:
-//   1. Parse the workbook into raw rows (headers + data), no assumptions.
-//   2. Send the headers + a sample of rows to Groq AI and ask it to (a) figure
-//      out what kind of records this sheet contains, and (b) return a column
-//      mapping from OUR field names -> the sheet's actual header text.
-//   3. Re-read the ENTIRE sheet using that mapping (not just the sample), and
-//      insert rows one by one, in order, into the correct table — creating
-//      missing products/customers/suppliers along the way, and updating
-//      stock + ledgers exactly like the manual entry / legacy-import paths do.
-//   4. Return a clear summary (+ any row-level errors) for the person to see.
+// ─── SMART IMPORT (one Excel/CSV file → AI detects & routes rows into ────────
+// products / customers / suppliers / purchases / sales / expenses, no matter
+// which tab the import was triggered from) ────────────────────────────────────
 
-type ImportKind = "sales" | "purchases" | "customers" | "suppliers" | "products";
+type SmartEntityType = "products" | "customers" | "suppliers" | "purchases" | "sales" | "expenses" | "unknown";
 
-const IMPORT_KIND_FIELDS: Record<ImportKind, string[]> = {
+const CANONICAL_FIELDS: Record<Exclude<SmartEntityType, "unknown">, string[]> = {
+  products: ["name", "sku", "costPrice", "salePrice", "currentStock", "minStock", "unit"],
   customers: ["name", "phone", "email", "address", "city", "type", "openingBalance", "creditLimit"],
   suppliers: ["name", "phone", "email", "address", "city", "contactPerson", "openingBalance"],
-  products: ["name", "sku", "costPrice", "salePrice", "currentStock", "minStock", "unit"],
-  sales: ["invoiceNumber", "customerName", "productName", "sku", "quantity", "unitPrice", "discount", "status", "saleDate", "notes"],
-  purchases: ["poNumber", "supplierName", "productName", "sku", "quantity", "unitCost", "status", "purchaseDate", "notes"],
+  purchases: ["poNumber", "supplierName", "purchaseDate", "status", "notes", "productName", "sku", "quantity", "unitCost"],
+  sales: ["invoiceNumber", "customerName", "saleDate", "status", "notes", "discount", "productName", "sku", "quantity", "unitPrice"],
+  expenses: ["title", "category", "amount", "date", "notes"],
 };
 
-function sheetToRows(buffer: Buffer, filename: string): { headers: string[]; rows: string[][] } {
-  const ext = path.extname(filename).toLowerCase();
+async function loadWorkbookSheets(buffer: Buffer, originalName: string): Promise<Array<{ sheetName: string; headers: string[]; rows: unknown[][] }>> {
+  const ext = path.extname(originalName).toLowerCase();
   const wb = new ExcelJS.Workbook();
   if (ext === ".csv") {
     const ws = wb.addWorksheet("Sheet1");
-    // Basic CSV split that still respects quoted commas.
-    const lines = buffer.toString("utf-8").split(/\r?\n/).filter(l => l.trim().length > 0);
-    for (const line of lines) {
-      const cells: string[] = [];
-      let cur = ""; let inQuotes = false;
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-        if (ch === '"') { inQuotes = !inQuotes; continue; }
-        if (ch === "," && !inQuotes) { cells.push(cur.trim()); cur = ""; continue; }
-        cur += ch;
-      }
-      cells.push(cur.trim());
-      ws.addRow(cells);
-    }
-    return extractRows(ws);
+    const csvRows = buffer.toString("utf-8").split(/\r?\n/).filter(r => r.trim().length > 0);
+    for (const row of csvRows) ws.addRow(row.split(",").map(c => c.trim().replace(/^"|"$/g, "")));
+  } else {
+    await wb.xlsx.load(buffer as any);
   }
-  return { headers: [], rows: [] }; // filled in by caller after async xlsx load
+
+  const sheets: Array<{ sheetName: string; headers: string[]; rows: unknown[][] }> = [];
+  for (const ws of wb.worksheets) {
+    const headerRow = ws.getRow(1);
+    const headers: string[] = [];
+    headerRow.eachCell({ includeEmpty: true }, cell => headers.push(parseStr(cell.value)));
+    if (!headers.some(h => h)) continue;
+
+    const rows: unknown[][] = [];
+    ws.eachRow((row, rn) => {
+      if (rn === 1) return;
+      const cells: unknown[] = [];
+      row.eachCell({ includeEmpty: true }, cell => {
+        const v = cell.value as any;
+        cells.push(v && typeof v === "object" && "text" in v ? v.text : v && typeof v === "object" && "result" in v ? v.result : v);
+      });
+      if (cells.some(c => parseStr(c) !== "")) rows.push(cells);
+    });
+    if (rows.length) sheets.push({ sheetName: ws.name, headers, rows });
+  }
+  return sheets;
 }
 
-function extractRows(ws: ExcelJS.Worksheet): { headers: string[]; rows: string[][] } {
-  const headers: string[] = [];
-  ws.getRow(1).eachCell({ includeEmpty: true }, cell => headers.push(parseStr(cell.value)));
-  const rows: string[][] = [];
-  ws.eachRow((row, rn) => {
-    if (rn === 1) return;
-    const cells: string[] = [];
-    for (let i = 1; i <= headers.length; i++) {
-      const cell = row.getCell(i);
-      let val = cell.value;
-      if (val && typeof val === "object" && "text" in (val as any)) val = (val as any).text;
-      if (val && typeof val === "object" && "result" in (val as any)) val = (val as any).result;
-      cells.push(parseStr(val));
-    }
-    if (cells.some(c => c !== "")) rows.push(cells);
-  });
-  return { headers, rows };
-}
+/** Ask the AI what a sheet represents and how its columns map to our canonical
+ *  fields. We only send headers + a few sample rows (cheap & fast), then apply
+ *  the returned mapping to every row locally — this scales to large sheets
+ *  without hitting AI token/row limits. Falls back to keyword heuristics if
+ *  no AI key is configured or the AI response can't be parsed. */
+async function classifySheet(sheetName: string, headers: string[], sampleRows: unknown[][]): Promise<{ entityType: SmartEntityType; columnMap: Record<string, number> }> {
+  const heuristic = heuristicClassify(sheetName, headers);
 
-async function loadWorkbookRows(buffer: Buffer, filename: string): Promise<{ headers: string[]; rows: string[][] }> {
-  const ext = path.extname(filename).toLowerCase();
-  if (ext === ".csv") return sheetToRows(buffer, filename);
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer as any);
-  const ws = wb.worksheets[0];
-  if (!ws) return { headers: [], rows: [] };
-  return extractRows(ws);
-}
+  if (!getGroqClient()) return heuristic;
 
-// Ask the AI to identify the sheet type + map our canonical fields to the
-// sheet's real headers, using only the header row + a handful of sample rows
-// (keeps the prompt small and fast even for huge sheets).
-async function detectMappingWithAI(headers: string[], sampleRows: string[][], hint?: ImportKind): Promise<{ kind: ImportKind; mapping: Record<string, string | null>; confidence: string }> {
-  const sample = sampleRows.slice(0, 15).map(r => headers.map((h, i) => `${h}: ${r[i] ?? ""}`).join(" | ")).join("\n");
-  const kindList = Object.keys(IMPORT_KIND_FIELDS).join(", ");
-  const fieldsDoc = Object.entries(IMPORT_KIND_FIELDS).map(([k, fields]) => `- ${k}: ${fields.join(", ")}`).join("\n");
+  try {
+    const sample = sampleRows.slice(0, 3).map(r => headers.map((h, i) => `${h}: ${parseStr(r[i])}`).join(" | "));
+    const prompt = `You are analyzing one sheet of a business Excel/CSV file for a Pakistani wholesale ERP (products, customers, suppliers, purchases, sales, expenses).
 
-  const prompt = `You are analyzing an uploaded Excel/CSV sheet for a Pakistani wholesale ERP system (products, customers, suppliers, sales, purchases). The sheet may use messy, abbreviated, Urdu/English mixed, or non-standard column names, and columns may be in any order.
-
-Sheet headers (in order): ${JSON.stringify(headers)}
-
+Sheet name: "${sheetName}"
+Columns (in order, index starting at 0): ${headers.map((h, i) => `${i}:"${h}"`).join(", ")}
 Sample rows:
-${sample}
+${sample.join("\n")}
 
-${hint ? `The person told us this sheet is for: "${hint}". Trust this unless the data clearly contradicts it.` : ""}
+Decide which ONE entity type this sheet's rows represent: "products", "customers", "suppliers", "purchases", "sales", "expenses", or "unknown" if unclear.
+Then map each relevant canonical field to the COLUMN INDEX (number) that holds it, using this field list per type:
+- products: name, sku, costPrice, salePrice, currentStock, minStock, unit
+- customers: name, phone, email, address, city, type, openingBalance, creditLimit
+- suppliers: name, phone, email, address, city, contactPerson, openingBalance
+- purchases: poNumber, supplierName, purchaseDate, status, notes, productName, sku, quantity, unitCost
+- sales: invoiceNumber, customerName, saleDate, status, notes, discount, productName, sku, quantity, unitPrice
+- expenses: title, category, amount, date, notes
 
-Possible sheet types and their canonical fields:
-${fieldsDoc}
+Return ONLY JSON, no explanation, no markdown: {"entityType":"...","columnMap":{"field":columnIndex,...}}
+Only include fields you are confident are present. Omit fields that don't have a matching column.`;
 
-Decide which ONE type (${kindList}) this sheet best matches, then map EVERY canonical field for that type to the EXACT matching header string from the sheet's header list above (copy it exactly, character for character), or null if no column matches.
-
-Notes:
-- For sales/purchases sheets, one row usually = one line item (product + qty + price) possibly repeated under the same invoice/PO number — that's fine, we handle grouping.
-- If the sheet has no explicit invoiceNumber/poNumber column, map it to null; we will auto-generate one per row or group.
-- If quantity/price columns are missing for a sales/purchases sheet but the sheet is clearly just a customer or product list, re-classify accordingly.
-
-Return ONLY valid JSON, no markdown, in this exact shape:
-{"kind":"sales|purchases|customers|suppliers|products","confidence":"high|medium|low","mapping":{"fieldName":"exact header or null", ...}}`;
-
-  const aiResponse = await groqChat([
-    { role: "system", content: "You are a precise data-mapping assistant. You only respond with valid JSON, never prose, never markdown fences." },
-    { role: "user", content: prompt },
-  ]);
-
-  const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("AI could not analyze this sheet's structure. Try a clearer file.");
-  const parsed = JSON.parse(jsonMatch[0]);
-  const kind: ImportKind = IMPORT_KIND_FIELDS[parsed.kind as ImportKind] ? parsed.kind : (hint || "products");
-  const mapping: Record<string, string | null> = {};
-  for (const field of IMPORT_KIND_FIELDS[kind]) {
-    const mapped = parsed.mapping?.[field];
-    mapping[field] = typeof mapped === "string" && headers.includes(mapped) ? mapped : null;
+    const response = await groqChat([
+      { role: "system", content: "You classify spreadsheet data for an ERP importer and reply with strict JSON only." },
+      { role: "user", content: prompt },
+    ]);
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return heuristic;
+    const parsed = JSON.parse(jsonMatch[0]);
+    const entityType: SmartEntityType = ["products", "customers", "suppliers", "purchases", "sales", "expenses"].includes(parsed.entityType) ? parsed.entityType : "unknown";
+    if (entityType === "unknown") return heuristic;
+    const columnMap: Record<string, number> = {};
+    for (const [field, idx] of Object.entries(parsed.columnMap || {})) {
+      if (typeof idx === "number" && idx >= 0 && idx < headers.length) columnMap[field] = idx;
+    }
+    // If AI returned an entity type but almost no usable columns, prefer heuristic.
+    if (Object.keys(columnMap).length === 0) return heuristic;
+    return { entityType, columnMap };
+  } catch {
+    return heuristic;
   }
-  return { kind, mapping, confidence: parsed.confidence || "medium" };
 }
 
-function buildRowGetter(headers: string[], mapping: Record<string, string | null>) {
-  const indexOf: Record<string, number> = {};
-  for (const [field, header] of Object.entries(mapping)) {
-    indexOf[field] = header ? headers.indexOf(header) : -1;
+/** Deterministic fallback classification by header keywords — used when no
+ *  GROQ_API_KEY is configured, or the AI call fails, so smart import always
+ *  works even without AI. */
+function heuristicClassify(sheetName: string, headers: string[]): { entityType: SmartEntityType; columnMap: Record<string, number> } {
+  const norm = headers.map(h => h.toLowerCase().replace(/\s+/g, "_"));
+  const find = (...names: string[]) => { for (const n of names) { const i = norm.indexOf(n); if (i >= 0) return i; } return -1; };
+  const nameHint = sheetName.toLowerCase();
+
+  const has = (i: number) => i >= 0;
+
+  const invoiceIdx = find("invoice_number", "invoice", "invoice_no");
+  const poIdx = find("po_number", "po", "purchase_order", "po_no");
+  const qtyIdx = find("quantity", "qty");
+  const customerIdx = find("customer_name", "customer");
+  const supplierIdx = find("supplier_name", "supplier", "vendor");
+  const amountIdx = find("amount", "total");
+  const titleIdx = find("title", "expense_title", "description");
+  const categoryIdx = find("category", "expense_category");
+
+  if (has(invoiceIdx) || nameHint.includes("sale") || (has(customerIdx) && has(qtyIdx))) {
+    const map: Record<string, number> = {};
+    if (has(invoiceIdx)) map.invoiceNumber = invoiceIdx;
+    if (has(customerIdx)) map.customerName = customerIdx;
+    const dateIdx = find("sale_date", "date"); if (has(dateIdx)) map.saleDate = dateIdx;
+    const statusIdx = find("status"); if (has(statusIdx)) map.status = statusIdx;
+    const notesIdx = find("notes", "remarks"); if (has(notesIdx)) map.notes = notesIdx;
+    const discIdx = find("discount"); if (has(discIdx)) map.discount = discIdx;
+    const pNameIdx = find("product_name", "product", "item"); if (has(pNameIdx)) map.productName = pNameIdx;
+    const skuIdx = find("sku", "code"); if (has(skuIdx)) map.sku = skuIdx;
+    if (has(qtyIdx)) map.quantity = qtyIdx;
+    const priceIdx = find("unit_price", "price", "sale_price", "selling_price"); if (has(priceIdx)) map.unitPrice = priceIdx;
+    return { entityType: "sales", columnMap: map };
   }
-  return (row: string[], field: string): string => {
-    const idx = indexOf[field];
-    return idx >= 0 && idx < row.length ? row[idx] : "";
-  };
+
+  if (has(poIdx) || nameHint.includes("purchase") || (has(supplierIdx) && has(qtyIdx))) {
+    const map: Record<string, number> = {};
+    if (has(poIdx)) map.poNumber = poIdx;
+    if (has(supplierIdx)) map.supplierName = supplierIdx;
+    const dateIdx = find("purchase_date", "date"); if (has(dateIdx)) map.purchaseDate = dateIdx;
+    const statusIdx = find("status"); if (has(statusIdx)) map.status = statusIdx;
+    const notesIdx = find("notes", "remarks"); if (has(notesIdx)) map.notes = notesIdx;
+    const pNameIdx = find("product_name", "product", "item"); if (has(pNameIdx)) map.productName = pNameIdx;
+    const skuIdx = find("sku", "code"); if (has(skuIdx)) map.sku = skuIdx;
+    if (has(qtyIdx)) map.quantity = qtyIdx;
+    const costIdx = find("unit_cost", "cost", "cost_price", "purchase_price"); if (has(costIdx)) map.unitCost = costIdx;
+    return { entityType: "purchases", columnMap: map };
+  }
+
+  if ((has(titleIdx) && has(amountIdx) && has(categoryIdx)) || nameHint.includes("expense")) {
+    const map: Record<string, number> = {};
+    if (has(titleIdx)) map.title = titleIdx;
+    if (has(categoryIdx)) map.category = categoryIdx;
+    if (has(amountIdx)) map.amount = amountIdx;
+    const dateIdx = find("date", "expense_date"); if (has(dateIdx)) map.date = dateIdx;
+    const notesIdx = find("notes", "remarks"); if (has(notesIdx)) map.notes = notesIdx;
+    return { entityType: "expenses", columnMap: map };
+  }
+
+  const skuOrCostIdx = find("sku", "cost_price", "cost", "current_stock", "stock");
+  if (has(skuOrCostIdx) || nameHint.includes("product") || nameHint.includes("inventory") || nameHint.includes("stock")) {
+    const map: Record<string, number> = {};
+    const nIdx = find("name", "product_name", "product", "item"); if (has(nIdx)) map.name = nIdx;
+    const skuIdx = find("sku", "code", "item_code"); if (has(skuIdx)) map.sku = skuIdx;
+    const costIdx = find("cost_price", "cost", "purchase_price", "buying_price"); if (has(costIdx)) map.costPrice = costIdx;
+    const saleIdx = find("sale_price", "selling_price", "price", "mrp"); if (has(saleIdx)) map.salePrice = saleIdx;
+    const stockIdx = find("current_stock", "stock", "quantity", "qty"); if (has(stockIdx)) map.currentStock = stockIdx;
+    const minIdx = find("min_stock", "reorder_level"); if (has(minIdx)) map.minStock = minIdx;
+    const unitIdx = find("unit", "uom"); if (has(unitIdx)) map.unit = unitIdx;
+    return { entityType: "products", columnMap: map };
+  }
+
+  if (nameHint.includes("supplier") || nameHint.includes("vendor")) {
+    const map: Record<string, number> = {};
+    const nIdx = find("name", "supplier_name", "vendor"); if (has(nIdx)) map.name = nIdx;
+    const phoneIdx = find("phone", "mobile", "contact"); if (has(phoneIdx)) map.phone = phoneIdx;
+    const emailIdx = find("email"); if (has(emailIdx)) map.email = emailIdx;
+    const cityIdx = find("city", "location"); if (has(cityIdx)) map.city = cityIdx;
+    const cpIdx = find("contact_person"); if (has(cpIdx)) map.contactPerson = cpIdx;
+    return { entityType: "suppliers", columnMap: map };
+  }
+
+  const nIdx = find("name", "customer_name", "customer", "company");
+  if (has(nIdx)) {
+    const map: Record<string, number> = { name: nIdx };
+    const phoneIdx = find("phone", "mobile", "contact"); if (has(phoneIdx)) map.phone = phoneIdx;
+    const emailIdx = find("email"); if (has(emailIdx)) map.email = emailIdx;
+    const cityIdx = find("city", "location"); if (has(cityIdx)) map.city = cityIdx;
+    const addrIdx = find("address"); if (has(addrIdx)) map.address = addrIdx;
+    return { entityType: "customers", columnMap: map };
+  }
+
+  return { entityType: "unknown", columnMap: {} };
 }
 
-// POST /api/import/ai/excel
-// form fields: file (required), importType (optional hint: sales|purchases|customers|suppliers|products), preview ("true" to only analyze, not write)
-router.post("/ai/excel", upload.single("file"), async (req, res) => {
+function rowToRecord(headers: string[], row: unknown[], columnMap: Record<string, number>): Record<string, unknown> {
+  const rec: Record<string, unknown> = {};
+  for (const [field, idx] of Object.entries(columnMap)) rec[field] = row[idx];
+  return rec;
+}
+
+export const smartImportRouter = Router();
+
+smartImportRouter.post("/", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    if (!getGroqClient()) return res.status(400).json({ error: "GROQ_API_KEY not configured. Please add it in Settings → API Keys." });
-
-    const hint = (req.body?.importType || "") as ImportKind | "";
-    const previewOnly = req.body?.preview === "true";
     const createdByUserId = getUserIdFromRequest(req);
 
-    const { headers, rows } = await loadWorkbookRows(req.file.buffer, req.file.originalname);
-    if (!headers.length || !rows.length) {
-      return res.status(400).json({ error: "Could not read any data from this file. Make sure the first row has column headers." });
-    }
+    const sheets = await loadWorkbookSheets(req.file.buffer, req.file.originalname);
+    if (!sheets.length) return res.status(400).json({ error: "File mein koi data nahi mila" });
 
-    const { kind, mapping, confidence } = await detectMappingWithAI(headers, rows, hint || undefined);
-    const get = buildRowGetter(headers, mapping);
+    const summary = { importedProducts: 0, importedCustomers: 0, importedSuppliers: 0, importedPurchases: 0, importedSales: 0, importedExpenses: 0 };
+    const skippedSheets: string[] = [];
+    const errors: string[] = [];
 
-    if (previewOnly) {
-      return res.json({
-        kind, mapping, confidence,
-        rowCount: rows.length,
-        sample: rows.slice(0, 5).map(r => {
-          const obj: Record<string, string> = {};
-          for (const field of IMPORT_KIND_FIELDS[kind]) obj[field] = get(r, field);
-          return obj;
-        }),
-      });
-    }
+    for (const sheet of sheets) {
+      const { entityType, columnMap } = await classifySheet(sheet.sheetName, sheet.headers, sheet.rows.slice(0, 3));
 
-    const summary = { kind, confidence, totalRows: rows.length, imported: 0, updated: 0, skipped: 0, errors: [] as string[] };
-
-    if (kind === "products") {
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const name = get(row, "name");
-        if (!name) { summary.skipped++; continue; }
-        try {
-          const result = await ensureProduct({
-            name, sku: get(row, "sku"), costPrice: get(row, "costPrice"), salePrice: get(row, "salePrice") || undefined,
-            currentStock: get(row, "currentStock"), minStock: get(row, "minStock"), unit: get(row, "unit"),
-          });
-          if (result) result.created ? summary.imported++ : summary.updated++;
-        } catch (e) { summary.errors.push(`Row ${i + 2}: ${(e as Error).message}`); }
-      }
-    } else if (kind === "customers") {
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const name = get(row, "name");
-        if (!name) { summary.skipped++; continue; }
-        try {
-          const result = await ensureCustomer({
-            name, phone: get(row, "phone"), email: get(row, "email"), address: get(row, "address"),
-            city: get(row, "city"), type: get(row, "type"), openingBalance: get(row, "openingBalance"), creditLimit: get(row, "creditLimit"),
-          });
-          if (result) result.created ? summary.imported++ : summary.updated++;
-        } catch (e) { summary.errors.push(`Row ${i + 2}: ${(e as Error).message}`); }
-      }
-    } else if (kind === "suppliers") {
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const name = get(row, "name");
-        if (!name) { summary.skipped++; continue; }
-        try {
-          const result = await ensureSupplier({
-            name, phone: get(row, "phone"), email: get(row, "email"), address: get(row, "address"),
-            city: get(row, "city"), contactPerson: get(row, "contactPerson"), openingBalance: get(row, "openingBalance"),
-          });
-          if (result) result.created ? summary.imported++ : summary.updated++;
-        } catch (e) { summary.errors.push(`Row ${i + 2}: ${(e as Error).message}`); }
-      }
-    } else if (kind === "sales" || kind === "purchases") {
-      // Group consecutive/all rows sharing the same invoice/PO number into one
-      // transaction with multiple line items; rows with no number each become
-      // their own single-item transaction.
-      const numberField = kind === "sales" ? "invoiceNumber" : "poNumber";
-      const partyField = kind === "sales" ? "customerName" : "supplierName";
-      const groups = new Map<string, { number: string; party: string; date: string; status: string; notes: string; items: { productName: string; sku: string; quantity: number; price: number }[] }>();
-      let autoSeq = 0;
-
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const productName = get(row, "productName");
-        const qty = parseNumber(get(row, "quantity")) || 1;
-        const price = parseNumber(get(row, kind === "sales" ? "unitPrice" : "unitCost"));
-        if (!productName && !get(row, "sku")) { summary.skipped++; continue; }
-
-        let number = get(row, numberField);
-        if (!number) { autoSeq++; number = `__AUTOROW_${i}`; } // each becomes its own group unless sheet gave a real shared number
-        const key = number;
-        if (!groups.has(key)) {
-          groups.set(key, {
-            number: number.startsWith("__AUTOROW_") ? "" : number,
-            party: get(row, partyField),
-            date: get(row, kind === "sales" ? "saleDate" : "purchaseDate"),
-            status: get(row, "status"),
-            notes: get(row, "notes"),
-            items: [],
-          });
-        }
-        groups.get(key)!.items.push({ productName, sku: get(row, "sku"), quantity: qty, price });
+      if (entityType === "unknown" || Object.keys(columnMap).length === 0) {
+        skippedSheets.push(sheet.sheetName);
+        continue;
       }
 
-      let seq = 0;
-      for (const group of groups.values()) {
-        seq++;
-        if (!group.items.length) { summary.skipped++; continue; }
-        try {
-          const partyName = group.party || (kind === "sales" ? "Imported Customer" : "Imported Supplier");
-          const date = parseDate(group.date);
-
+      if (entityType === "products") {
+        for (const row of sheet.rows) {
           try {
-            const months = await import("../services/months.service.js");
-            if (await months.isDateInClosedPeriod(date)) throw new months.MonthClosedError(date);
-          } catch (err) {
-            if (err && (err as Error).name === "MonthClosedError") throw err;
-          }
-
-          const lineItems = await Promise.all(group.items.map(async (item) => {
-            let productId: number | undefined;
-            const skuOrName = item.sku || item.productName;
-            if (skuOrName) {
-              const [existing] = await db.select({ id: productsTable.id }).from(productsTable).where(item.sku ? eq(productsTable.sku, item.sku) : eq(productsTable.name, item.productName));
-              productId = existing?.id;
-            }
-            if (!productId) {
-              const created = await ensureProduct({
-                name: item.productName || `Imported item ${Date.now()}`,
-                sku: item.sku || `IMP-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                costPrice: kind === "purchases" ? item.price : 0,
-              });
-              productId = created?.id;
-            }
-            return { productId: productId ?? 0, productName: item.productName || "Imported item", quantity: item.quantity, price: item.price, total: item.quantity * item.price };
-          }));
-
-          const subtotal = round2(lineItems.reduce((s, l) => s + l.total, 0));
-
-          if (kind === "sales") {
-            const customerRow = partyName ? (await db.select({ id: customersTable.id }).from(customersTable).where(eq(customersTable.name, partyName)).limit(1))[0] ?? (await ensureCustomer({ name: partyName })) : null;
-            const invoiceNumber = group.number || `INV-AI-${Date.now()}-${seq}`;
-            const status = group.status || "completed";
-            const total = subtotal;
-
-            const inserted = await db.transaction(async (tx) => {
-              const [row] = await tx.insert(salesTable).values({
-                invoiceNumber, customerId: customerRow?.id ?? null, customerName: partyName,
-                status, subtotal: String(subtotal), discount: "0", total: String(total),
-                notes: group.notes || null,
-                items: lineItems.map(l => ({ productId: l.productId, productName: l.productName, quantity: l.quantity, unitPrice: l.price, total: l.total })),
-                saleDate: date,
-              }).returning();
-
-              if (customerRow?.id && status === "completed") {
-                for (const line of lineItems) {
-                  await tx.update(productsTable).set({ currentStock: sql`${productsTable.currentStock} - ${line.quantity}` }).where(eq(productsTable.id, line.productId));
-                  await appendLedgerEntry(tx, { customerId: customerRow.id, type: "sale", amount: round2(line.total), saleId: row.id, description: `AI import — ${invoiceNumber}`, createdByUserId, entryDate: date });
-                }
-                await appendGeneralLedgerEntry(tx, { date, type: "sale", referenceId: row.id, partyType: "customer", partyId: customerRow.id, partyName, amount: total, direction: "credit", note: `AI import invoice ${invoiceNumber}`, createdByUserId });
-                await recomputeCustomerLedgerRunningBalances(tx, customerRow.id);
-              }
-              return row;
-            });
-            if (inserted) summary.imported++;
-          } else {
-            const supplierRow = partyName ? (await db.select({ id: suppliersTable.id }).from(suppliersTable).where(eq(suppliersTable.name, partyName)).limit(1))[0] ?? (await ensureSupplier({ name: partyName })) : null;
-            const poNumber = group.number || `PO-AI-${Date.now()}-${seq}`;
-            const status = group.status || "received";
-
-            const inserted = await db.transaction(async (tx) => {
-              const [row] = await tx.insert(purchasesTable).values({
-                poNumber, supplierId: supplierRow?.id ?? null, supplierName: partyName,
-                status, subtotal: String(subtotal), total: String(subtotal),
-                notes: group.notes || null,
-                items: lineItems.map(l => ({ productId: l.productId, productName: l.productName, quantity: l.quantity, unitCost: l.price, total: l.total })),
-                purchaseDate: date,
-              }).returning();
-
-              if (supplierRow?.id) {
-                await appendSupplierLedgerEntry(tx, { supplierId: supplierRow.id, type: "purchase", amount: round2(subtotal), purchaseId: row.id, description: `AI import — ${poNumber}`, createdByUserId, entryDate: date });
-                await appendGeneralLedgerEntry(tx, { date, type: "purchase", referenceId: row.id, partyType: "supplier", partyId: supplierRow.id, partyName, amount: round2(subtotal), direction: "debit", note: `AI import PO ${poNumber}`, createdByUserId });
-              }
-              if (status === "received") {
-                for (const line of lineItems) {
-                  await tx.update(productsTable).set({ currentStock: sql`${productsTable.currentStock} + ${line.quantity}` }).where(eq(productsTable.id, line.productId));
-                }
-              }
-              return row;
-            });
-            if (inserted) summary.imported++;
-          }
-        } catch (e) {
-          summary.errors.push(`${kind === "sales" ? "Invoice" : "PO"} ${group.number || "(auto)"}: ${(e as Error).message}`);
+            const rec = rowToRecord(sheet.headers, row, columnMap);
+            if (!parseStr(rec.name)) continue;
+            const result = await ensureProduct(rec);
+            if (result) summary.importedProducts++;
+          } catch (e) { errors.push(`${sheet.sheetName}: ${(e as Error).message}`); }
+        }
+      } else if (entityType === "customers") {
+        for (const row of sheet.rows) {
+          try {
+            const rec = rowToRecord(sheet.headers, row, columnMap);
+            if (!parseStr(rec.name)) continue;
+            const result = await ensureCustomer(rec);
+            if (result) summary.importedCustomers++;
+          } catch (e) { errors.push(`${sheet.sheetName}: ${(e as Error).message}`); }
+        }
+      } else if (entityType === "suppliers") {
+        for (const row of sheet.rows) {
+          try {
+            const rec = rowToRecord(sheet.headers, row, columnMap);
+            if (!parseStr(rec.name)) continue;
+            const result = await ensureSupplier(rec);
+            if (result) summary.importedSuppliers++;
+          } catch (e) { errors.push(`${sheet.sheetName}: ${(e as Error).message}`); }
+        }
+      } else if (entityType === "expenses") {
+        for (const row of sheet.rows) {
+          try {
+            const rec = rowToRecord(sheet.headers, row, columnMap);
+            if (!parseStr(rec.title) || !parseNumber(rec.amount)) continue;
+            const result = await ensureExpense(rec, createdByUserId);
+            if (result) summary.importedExpenses++;
+          } catch (e) { errors.push(`${sheet.sheetName}: ${(e as Error).message}`); }
+        }
+      } else if (entityType === "purchases") {
+        // Group rows into one purchase per PO number (rows sharing the same
+        // PO become line items of the same purchase); rows without a PO
+        // number each become their own single-line purchase.
+        const groups = new Map<string, Record<string, unknown>[]>();
+        for (const row of sheet.rows) {
+          const rec = rowToRecord(sheet.headers, row, columnMap);
+          if (!parseStr(rec.productName) && !parseStr(rec.sku)) continue;
+          const key = parseStr(rec.poNumber) || `__row_${groups.size}_${Math.random()}`;
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key)!.push(rec);
+        }
+        for (const [poNumber, lines] of groups) {
+          try {
+            const first = lines[0];
+            const rawPurchase: Record<string, unknown> = {
+              poNumber: parseStr(first.poNumber) || undefined,
+              supplierName: first.supplierName,
+              purchaseDate: first.purchaseDate,
+              status: first.status,
+              notes: first.notes,
+              items: lines.map(l => ({ productName: l.productName, sku: l.sku, quantity: l.quantity, unitCost: l.unitCost })),
+            };
+            const result = await insertPurchaseRecord(rawPurchase, createdByUserId);
+            if (result) summary.importedPurchases++;
+          } catch (e) { errors.push(`${sheet.sheetName} (PO ${poNumber}): ${(e as Error).message}`); }
+        }
+      } else if (entityType === "sales") {
+        const groups = new Map<string, Record<string, unknown>[]>();
+        for (const row of sheet.rows) {
+          const rec = rowToRecord(sheet.headers, row, columnMap);
+          if (!parseStr(rec.productName) && !parseStr(rec.sku)) continue;
+          const key = parseStr(rec.invoiceNumber) || `__row_${groups.size}_${Math.random()}`;
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key)!.push(rec);
+        }
+        for (const [invoiceNumber, lines] of groups) {
+          try {
+            const first = lines[0];
+            const rawSale: Record<string, unknown> = {
+              invoiceNumber: parseStr(first.invoiceNumber) || undefined,
+              customerName: first.customerName,
+              saleDate: first.saleDate,
+              status: first.status,
+              notes: first.notes,
+              discount: first.discount,
+              items: lines.map(l => ({ productName: l.productName, sku: l.sku, quantity: l.quantity, unitPrice: l.unitPrice })),
+            };
+            const result = await insertSaleRecord(rawSale, createdByUserId);
+            if (result) summary.importedSales++;
+          } catch (e) { errors.push(`${sheet.sheetName} (Invoice ${invoiceNumber}): ${(e as Error).message}`); }
         }
       }
     }
 
-    return res.json({ ...summary, message: `AI import complete: ${summary.imported} ${kind} imported${summary.updated ? `, ${summary.updated} updated` : ""}${summary.skipped ? `, ${summary.skipped} rows skipped` : ""}.` });
+    const totalImported = summary.importedProducts + summary.importedCustomers + summary.importedSuppliers + summary.importedPurchases + summary.importedSales + summary.importedExpenses;
+
+    return res.json({
+      success: true,
+      message: totalImported > 0
+        ? `${totalImported} records import ho gaye — Products: ${summary.importedProducts}, Customers: ${summary.importedCustomers}, Suppliers: ${summary.importedSuppliers}, Purchases: ${summary.importedPurchases}, Sales: ${summary.importedSales}, Expenses: ${summary.importedExpenses}`
+        : "Koi data import nahi ho saka — file ke columns pehchane nahi ja sake.",
+      ...summary,
+      sheetsProcessed: sheets.length,
+      skippedSheets,
+      errors: errors.slice(0, 10),
+    });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "AI Excel import failed: " + (error as Error).message });
+    console.error("smart import failed", error);
+    if (error && (error as Error).name === "MonthClosedError") {
+      return res.status(409).json({ error: (error as Error).message });
+    }
+    return res.status(500).json({ error: "Smart import failed: " + (error as Error).message });
   }
 });
 

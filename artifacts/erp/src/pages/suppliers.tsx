@@ -9,8 +9,8 @@ import { useGetSuppliers, useCreateSupplier, useUpdateSupplier, useDeleteSupplie
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit, Trash2, UserSquare, ChevronRight, Wallet } from "lucide-react";
 import Confirm from "@/components/ui/confirm";
-import { AiExcelImportButton } from "@/components/ai-excel-import-button";
 import { Link } from "wouter";
+import { SmartImportButton } from "@/components/smart-import-button";
 
 type SuppForm = { name: string; phone: string; email: string; address: string; city: string; };
 const emptyForm: SuppForm = { name: "", phone: "", email: "", address: "", city: "" };
@@ -52,8 +52,8 @@ export default function Suppliers() {
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><UserSquare className="w-6 h-6 text-primary" /> Suppliers</h1>
             <p className="text-muted-foreground text-sm mt-1">{data?.length || 0} suppliers</p>
           </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <AiExcelImportButton importType="suppliers" onComplete={invalidate} />
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <SmartImportButton />
             <Button onClick={openNew} className="bg-primary hover:bg-primary/90 gap-2 w-full sm:w-auto"><Plus className="w-4 h-4" /> Add Supplier</Button>
           </div>
         </div>
